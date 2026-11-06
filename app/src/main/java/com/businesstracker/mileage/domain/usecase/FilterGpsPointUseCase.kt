@@ -7,8 +7,9 @@ import com.businesstracker.mileage.domain.service.BootCountProvider
 import javax.inject.Inject
 
 class FilterGpsPointUseCase @Inject constructor(
-    private val bootCountProvider: BootCountProvider? = null
+    private val bootCountProvider: BootCountProvider
 ) {
+    constructor() : this(object : BootCountProvider { override fun getBootCount(): Int = 0 })
 
     companion object {
         const val MAX_ACCURACY_THRESHOLD_METERS = 35.0f
@@ -43,7 +44,7 @@ class FilterGpsPointUseCase @Inject constructor(
             )
         }
 
-        val effectiveBootCount = currentBootCount ?: bootCountProvider?.getBootCount() ?: 0
+        val effectiveBootCount = currentBootCount ?: bootCountProvider.getBootCount()
 
         val candidateWaypoint = Waypoint(
             latitude = newLocation.latitude,
