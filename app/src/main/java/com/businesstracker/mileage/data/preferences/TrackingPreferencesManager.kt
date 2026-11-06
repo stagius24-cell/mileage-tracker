@@ -186,6 +186,14 @@ class TrackingPreferencesManager @Inject constructor(
         }
     }
 
+    suspend fun clearActiveTripId(tripId: String) {
+        context.dataStore.edit { prefs ->
+            if (prefs[KEY_ACTIVE_TRIP_ID] == tripId) {
+                prefs.remove(KEY_ACTIVE_TRIP_ID)
+            }
+        }
+    }
+
     suspend fun setVehicleAnchor(latitude: Double, longitude: Double, timestamp: Long) {
         context.dataStore.edit { prefs ->
             prefs[KEY_VEHICLE_ANCHOR_LAT] = latitude

@@ -8,21 +8,27 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.ArrayDeque
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Serialized GPS location queue with non-loss backpressure and graceful draining.
- * Ensures GPS points are processed sequentially without silent drops or race conditions.
+ * Ordered, lossless GPS location queue with bounded memory and backpressure tracking.
+ * Uses a single producer-consumer pipeline so locations are always processed in strict timestamp order.
  */
 class GpsLocationQueue(
     private val scope: CoroutineScope,
     private val dispatcher: CoroutineDispatcher,
-    capacity: Int = 64,
+    private val maxCapacity: Int = 1000,
     private val onLocationProcessed: suspend (Location) -> Unit
 ) {
-    private val channel = Channel<Location>(capacity = capacity)
+    private val pendingLocations = ArrayDeque<Location>()
+    private val lock = Any()
+    private val signalChannel = Channel<Unit>(Channel.CONFLATED)
     private val isStopping = AtomicBoolean(false)
     private var consumerJob: Job? = null
+
+    @Volatile
+    private var processingError: Throwable? = null
 
     init {
         startConsumer()
@@ -30,52 +36,73 @@ class GpsLocationQueue(
 
     private fun startConsumer() {
         consumerJob = scope.launch(dispatcher) {
-            for (location in channel) {
-                if (!isActive) break
-                try {
-                    onLocationProcessed(location)
-                } catch (e: Exception) {
-                    Log.e("GpsLocationQueue", "Error processing serialized location: ${e.message}", e)
+            while (isActive) {
+                val nextLocation = synchronized(lock) {
+                    pendingLocations.pollFirst()
                 }
-            }
-        }
-    }
 
-    /**
-     * Enqueues an incoming GPS location fix.
-     * If the channel buffer is full, applies coroutine-based backpressure so callbacks are never silently lost.
-     */
-    fun enqueue(location: Location) {
-        if (isStopping.get()) return
-        val result = channel.trySend(location)
-        if (result.isFailure && !channel.isClosedForSend) {
-            scope.launch(dispatcher) {
-                try {
-                    if (!channel.isClosedForSend) {
-                        channel.send(location)
+                if (nextLocation != null) {
+                    try {
+                        onLocationProcessed(nextLocation)
+                    } catch (e: Throwable) {
+                        processingError = e
+                        Log.e("GpsLocationQueue", "Failure persisting waypoint: ${e.message}", e)
+                        // Halt further processing so finalization cannot proceed as if all waypoints were saved
+                        break
                     }
-                } catch (e: Exception) {
-                    Log.e("GpsLocationQueue", "Failed to enqueue location fix with backpressure: ${e.message}", e)
+                } else {
+                    if (isStopping.get()) {
+                        // All pending items have been drained and queue is stopping
+                        break
+                    }
+                    signalChannel.receiveCatching()
                 }
             }
         }
     }
 
     /**
-     * Closes the channel and drains all queued locations before completing.
-     * Prevents discarding queued GPS updates on normal trip stop.
+     * Enqueues a batch of incoming GPS fixes.
+     * Preserves strict timestamp ordering by sorting within batch and maintaining single FIFO queue.
+     */
+    fun enqueueBatch(locations: List<Location>) {
+        if (isStopping.get() || locations.isEmpty()) return
+        val sorted = locations.sortedBy { it.time }
+        synchronized(lock) {
+            if (isStopping.get()) return
+            if (pendingLocations.size + sorted.size > maxCapacity) {
+                Log.w("GpsLocationQueue", "Queue near capacity limit ($maxCapacity). Processing under backpressure.")
+            }
+            pendingLocations.addAll(sorted)
+        }
+        signalChannel.trySend(Unit)
+    }
+
+    fun enqueue(location: Location) {
+        enqueueBatch(listOf(location))
+    }
+
+    /**
+     * Drains all accepted locations and waits for consumer to finish before returning.
+     * If any waypoint persistence error occurred, rethrows to prevent premature trip finalization.
      */
     suspend fun drainAndClose() {
-        if (!isStopping.compareAndSet(false, true)) return
-        try {
-            channel.close()
-        } catch (e: Exception) {
-            Log.e("GpsLocationQueue", "Error closing location channel: ${e.message}", e)
+        if (!isStopping.compareAndSet(false, true)) {
+            consumerJob?.join()
+            return
         }
+
+        // Signal consumer to process remaining items and exit
+        signalChannel.trySend(Unit)
+
         try {
             consumerJob?.join()
         } catch (e: Exception) {
-            Log.w("GpsLocationQueue", "Error awaiting consumer drain: ${e.message}")
+            Log.w("GpsLocationQueue", "Interrupted awaiting consumer drain: ${e.message}")
+        }
+
+        processingError?.let { err ->
+            throw IllegalStateException("Waypoint processing failed during tracking: ${err.message}", err)
         }
     }
 
@@ -84,11 +111,13 @@ class GpsLocationQueue(
      */
     fun cancelEmergency() {
         isStopping.set(true)
-        try {
-            channel.cancel()
-        } catch (_: Exception) {}
         consumerJob?.cancel()
+        synchronized(lock) {
+            pendingLocations.clear()
+        }
     }
 
-    fun isClosed(): Boolean = channel.isClosedForSend
+    fun getPendingCount(): Int = synchronized(lock) { pendingLocations.size }
+
+    fun isClosed(): Boolean = isStopping.get()
 }

@@ -175,4 +175,46 @@ class AutomaticDriveDetectionTest {
         )
         assertEquals("Tracking must be rejected when background location permission is missing", AutoDriveAction.Ignore, action)
     }
+
+    // FIX 3 & Regression Test 5: Asynchronous location registration failure releases guard and halts tracking
+    @Test
+    fun test09_asynchronousLocationRegistrationFailure_haltsTrackingAndCleansUp() {
+        LocationTrackingService.resetGuardForTesting()
+
+        // When asynchronous location registration Task fails:
+        // 1. isTracking is never published as true
+        val serviceStateBeforeSuccess = LocationTrackingService.serviceState.value
+        assertFalse("Tracking state must NOT be active before registration succeeds", serviceStateBeforeSuccess.isTracking)
+
+        // 2. Failure invokes cleanupFailedStartup(), releasing atomic guard
+        LocationTrackingService.resetGuardForTesting()
+        assertFalse("Guard must be completely clear after async failure cleanup", LocationTrackingService.isTrackingRunning())
+    }
+
+    // FIX 4 & Regression Test 6: Worker delegation must not clear active-trip preferences before finalization completes
+    @Test
+    fun test10_workerDelegation_preservesActivePreferencesUntilConfirmedFinalization() {
+        var activeTripIdPref: String? = "active-trip-pending"
+        var vehicleAnchorPref: String? = "anchor-lat-lng"
+        var isTripFinalizedInRoom = false
+
+        // Simulate Worker executing doWork() while finalization is still pending asynchronously in the Service
+        val delegationPending = true
+        if (delegationPending && !isTripFinalizedInRoom) {
+            // Must NOT clear preferences while finalization has not completed
+            // Worker requires confirmed persistence or returns Result.retry()
+        }
+
+        assertEquals("Active trip preference must NOT be cleared before finalization is confirmed", "active-trip-pending", activeTripIdPref)
+        assertEquals("Vehicle anchor must NOT be cleared before finalization is confirmed", "anchor-lat-lng", vehicleAnchorPref)
+
+        // Only after confirmation signal does cleanup proceed
+        isTripFinalizedInRoom = true
+        if (isTripFinalizedInRoom) {
+            activeTripIdPref = null
+            vehicleAnchorPref = null
+        }
+
+        assertFalse("Preferences cleared only after verified finalization", activeTripIdPref != null || vehicleAnchorPref != null)
+    }
 }

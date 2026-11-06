@@ -218,4 +218,70 @@ class ActiveTripDaoTest {
         val isDisplacementConfirmed = activeTrip.totalDistanceMeters >= 200.0
         assertTrue("Interrupted trip with >= 200m must have displacement confirmed upon recovery", isDisplacementConfirmed)
     }
+
+    // FIX 2 & Regression Test 4: Retrying Trip A after Trip B starts must not delete Trip B
+    @Test
+    fun retryingFinalizationOfTripA_doesNotDeleteNewerTripB() = runBlocking {
+        val tripAId = "trip-a-111"
+        val tripBId = "trip-b-222"
+
+        // 1. Finalize Trip A
+        val tripA = ActiveTripEntity(
+            id = tripAId,
+            startTime = 1000L,
+            startLatitude = 37.3382,
+            startLongitude = -121.8863,
+            lastLatitude = 37.3450,
+            lastLongitude = -121.8863,
+            lastTimestamp = 2000L,
+            totalDistanceMeters = 750.0,
+            trackingMethod = "AUTO_DETECTED",
+            suggestedBusiness = "MySucculentCorner"
+        )
+        activeTripDao.insertActiveTrip(tripA)
+        coordinator.finalizeTrip(tripAId, TrackingMethod.AUTO_DETECTED)
+
+        // Verify Trip A is finalized
+        val tripAInDb = database.tripDao().getTripById(tripAId)
+        assertNotNull("Trip A must be finalized in database", tripAInDb)
+
+        // 2. Start Trip B as the new active trip with waypoints
+        val tripB = ActiveTripEntity(
+            id = tripBId,
+            startTime = 5000L,
+            startLatitude = 37.4000,
+            startLongitude = -122.0000,
+            lastLatitude = 37.4050,
+            lastLongitude = -122.0000,
+            lastTimestamp = 6000L,
+            totalDistanceMeters = 500.0,
+            trackingMethod = "AUTO_DETECTED",
+            suggestedBusiness = "MySucculentCorner"
+        )
+        activeTripDao.insertActiveTrip(tripB)
+        activeTripDao.insertWaypoint(
+            ActiveWaypointEntity(
+                tripId = tripBId,
+                latitude = 37.4000,
+                longitude = -122.0000,
+                altitude = 0.0,
+                timestamp = 5000L,
+                speed = 20.0f,
+                accuracy = 3.0f
+            )
+        )
+
+        // 3. Retry finalization of Trip A (e.g. from delayed retry worker or service duplicate callback)
+        val retryResult = coordinator.finalizeTrip(tripAId, TrackingMethod.AUTO_DETECTED)
+        assertNotNull("Retry finalization of Trip A must return existing trip", retryResult)
+        assertEquals(tripAId, retryResult?.id)
+
+        // 4. Verify Trip B STILL exists and was NOT deleted!
+        val activeTripInDb = activeTripDao.getActiveTrip()
+        assertNotNull("Active Trip B must NOT have been deleted by Trip A's retry finalization", activeTripInDb)
+        assertEquals("Active trip in DB must still be Trip B", tripBId, activeTripInDb?.id)
+
+        val tripBWaypoints = activeTripDao.getWaypointsForTrip(tripBId)
+        assertEquals("Waypoints for Trip B must still be intact", 1, tripBWaypoints.size)
+    }
 }

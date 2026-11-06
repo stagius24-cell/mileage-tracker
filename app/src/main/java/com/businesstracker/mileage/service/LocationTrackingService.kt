@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
@@ -102,12 +103,7 @@ class LocationTrackingService : Service() {
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             if (isPaused || isStopping.get()) return
-            // Sort by fix timestamp to ensure serialized in-order processing
-            val sorted = result.locations.sortedBy { it.time }
-            for (location in sorted) {
-                if (isStopping.get()) break
-                gpsLocationQueue?.enqueue(location)
-            }
+            gpsLocationQueue?.enqueueBatch(result.locations)
         }
     }
 
@@ -213,14 +209,19 @@ class LocationTrackingService : Service() {
                         isDisplacementConfirmed = false
                     }
 
-                    // Register location updates with FusedLocationProviderClient
+                    // Register location updates with FusedLocationProviderClient asynchronously
                     val updatesRegistered = startLocationUpdates()
+                    if (isStopping.get()) {
+                        // Avoid racing startup cleanup against an already-started stop request
+                        return@launch
+                    }
+
                     if (!updatesRegistered) {
                         Log.e("LocationTrackingService", "Location updates could not be started; cleaning up failed startup")
                         if (currentTripId.isNotEmpty()) {
                             try {
                                 activeTripRepository.clearActiveTrip(currentTripId)
-                                preferencesManager.setActiveTripId(null)
+                                preferencesManager.clearActiveTripId(currentTripId)
                             } catch (_: Exception) {}
                         }
                         cleanupFailedStartup()
@@ -257,7 +258,7 @@ class LocationTrackingService : Service() {
     }
 
     @SuppressLint("MissingPermission")
-    private fun startLocationUpdates(): Boolean {
+    private suspend fun startLocationUpdates(): Boolean {
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
             LOCATION_INTERVAL_MILLIS
@@ -271,13 +272,13 @@ class LocationTrackingService : Service() {
                 locationRequest,
                 locationCallback,
                 Looper.getMainLooper()
-            )
+            ).await()
             true
         } catch (e: SecurityException) {
             Log.e("LocationTrackingService", "Location permission missing when requesting updates", e)
             false
         } catch (e: Exception) {
-            Log.e("LocationTrackingService", "Failed to register location updates", e)
+            Log.e("LocationTrackingService", "Failed to register location updates: ${e.message}", e)
             false
         }
     }
@@ -365,7 +366,13 @@ class LocationTrackingService : Service() {
             try {
                 gpsLocationQueue?.drainAndClose()
             } catch (e: Exception) {
-                Log.w("LocationTrackingService", "Error draining GPS queue: ${e.message}")
+                Log.e("LocationTrackingService", "Waypoint persistence failed during tracking; halting finalization: ${e.message}", e)
+                _serviceState.value = TrackingServiceState(isTracking = false)
+                isStartingOrRunning.set(false)
+                isStopping.set(false)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return@launch
             }
 
             // 4. False trip prevention: if movement is under 200m and not confirmed, discard
@@ -373,7 +380,7 @@ class LocationTrackingService : Service() {
             if (!isDisplacementConfirmed && totalDistanceMeters < 200.0 && distanceMiles < 0.12) {
                 if (currentTripId.isNotEmpty()) {
                     tripFinalizationCoordinator.discardFalseTrip(currentTripId)
-                    preferencesManager.setActiveTripId(null)
+                    preferencesManager.clearActiveTripId(currentTripId)
                 }
                 _serviceState.value = TrackingServiceState(isTracking = false)
                 isStartingOrRunning.set(false)
@@ -391,7 +398,7 @@ class LocationTrackingService : Service() {
                         notificationHelper.showTripDetectedNotification(trip.id, trip.totalDistanceMiles)
                     }
                 }
-                preferencesManager.setActiveTripId(null)
+                preferencesManager.clearActiveTripId(currentTripId)
             }
 
             _serviceState.value = TrackingServiceState(isTracking = false)

@@ -38,6 +38,15 @@ interface ActiveTripDao {
     @Query("SELECT * FROM active_trip LIMIT 1")
     fun observeActiveTrip(): Flow<ActiveTripEntity?>
 
+    @Query("DELETE FROM active_trip WHERE id = :tripId")
+    suspend fun deleteActiveTripById(tripId: String): Int
+
+    @Transaction
+    suspend fun clearActiveTripById(tripId: String): Int {
+        deleteWaypointsForTrip(tripId)
+        return deleteActiveTripById(tripId)
+    }
+
     @Query("DELETE FROM active_trip")
     suspend fun clearActiveTrip()
 

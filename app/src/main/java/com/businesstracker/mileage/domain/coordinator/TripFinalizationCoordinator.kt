@@ -52,7 +52,7 @@ class TripFinalizationCoordinator @Inject constructor(
             if (existingTrip != null) {
                 try {
                     activeTripRepository.clearActiveTrip(tripId)
-                    preferencesManager.setActiveTripId(null)
+                    preferencesManager.clearActiveTripId(tripId)
                 } catch (_: Exception) {}
                 return@withLock existingTrip
             }
@@ -78,7 +78,7 @@ class TripFinalizationCoordinator @Inject constructor(
             val totalDistanceMiles = (activeTrip.totalDistanceMeters / METERS_PER_MILE).roundToDecimals(2)
             if (totalDistanceMiles < 0.12 && activeTrip.totalDistanceMeters < 200.0) {
                 activeTripRepository.clearActiveTrip(activeTrip.id)
-                preferencesManager.setActiveTripId(null)
+                preferencesManager.clearActiveTripId(activeTrip.id)
                 return@withLock null
             }
 
@@ -140,7 +140,7 @@ class TripFinalizationCoordinator @Inject constructor(
 
             // 6. Atomic database persistence: inserts trip and clears active trip in single Room transaction
             database.tripDao().persistFinalizedTripAndClearActive(tripEntity)
-            preferencesManager.setActiveTripId(null)
+            preferencesManager.clearActiveTripId(activeTrip.id)
 
             tripEntity
         }
@@ -150,7 +150,7 @@ class TripFinalizationCoordinator @Inject constructor(
         finalizationMutex.withLock {
             try {
                 activeTripRepository.clearActiveTrip(tripId)
-                preferencesManager.setActiveTripId(null)
+                preferencesManager.clearActiveTripId(tripId)
             } catch (e: Exception) {
                 Log.e("TripFinalizationCoordinator", "Error discarding false trip: ${e.message}", e)
             }

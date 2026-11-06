@@ -124,7 +124,10 @@ class ActiveTripRepositoryImpl @Inject constructor(
         }.flowOn(ioDispatcher)
 
     override suspend fun clearActiveTrip(tripId: String) = withContext(ioDispatcher) {
-        activeTripDao.deleteWaypointsForTrip(tripId)
-        activeTripDao.clearActiveTrip()
+        if (tripId.isNotEmpty()) {
+            activeTripDao.clearActiveTripById(tripId)
+        } else {
+            activeTripDao.clearAllActiveData()
+        }
     }
 }

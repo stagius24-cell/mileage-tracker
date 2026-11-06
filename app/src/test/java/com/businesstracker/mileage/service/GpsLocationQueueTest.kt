@@ -10,7 +10,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -36,70 +36,84 @@ class GpsLocationQueueTest {
         }
     }
 
-    // FIX 5 - Requirement 1: Fill or block GPS channel and verify callbacks are not silently lost
+    // FIX 1 & Regression Test 1: GPS queue saturation without dropped or reordered locations
     @Test
-    fun fillGpsQueue_appliesBackpressure_andNeverSilentlyDiscardsFixes() = runBlocking {
-        val processedLocations = Collections.synchronizedList(mutableListOf<Long>())
-        val queueCapacity = 2 // Small buffer to intentionally trigger backpressure
-        val totalLocations = 20
+    fun gpsQueueSaturation_preservesAllLocationsInExactTimestampOrder() = runBlocking {
+        val processedTimestamps = Collections.synchronizedList(mutableListOf<Long>())
+        val totalLocations = 80
 
         val queue = GpsLocationQueue(
             scope = testScope,
             dispatcher = Dispatchers.Default,
-            capacity = queueCapacity
+            maxCapacity = 200
         ) { location ->
-            // Simulate slight processing latency
-            delay(10)
-            processedLocations.add(location.time)
+            delay(5) // Introduce processing latency to saturate pipeline
+            processedTimestamps.add(location.time)
         }
 
-        // Rapidly push locations exceeding capacity
-        for (i in 1..totalLocations) {
-            val loc = createLocation(37.3382, -121.8863, i * 1000L)
-            queue.enqueue(loc)
-        }
+        // Deliver fixes in rapid batches
+        val batch1 = (1..40).map { createLocation(37.3382, -121.8863, it * 1000L) }
+        val batch2 = (41..80).map { createLocation(37.3382, -121.8863, it * 1000L) }
 
-        // Drain queue gracefully
+        queue.enqueueBatch(batch1)
+        queue.enqueueBatch(batch2)
+
         queue.drainAndClose()
 
-        assertEquals(
-            "Every GPS callback must be preserved and processed without silent loss",
-            totalLocations,
-            processedLocations.size
-        )
-        // Verify points were processed in order
+        assertEquals("All enqueued GPS fixes must be processed without loss", totalLocations, processedTimestamps.size)
+
+        // Verify strictly ascending timestamp order
         for (i in 0 until totalLocations) {
-            assertEquals((i + 1) * 1000L, processedLocations[i])
+            assertEquals((i + 1) * 1000L, processedTimestamps[i])
         }
     }
 
-    // FIX 5 - Requirement 2: Verify normal stop drains queued GPS updates before finalization
+    // FIX 1 & Regression Test 2: Queue drain waiting for all pending producer work
     @Test
-    fun normalStop_drainsQueuedGpsLocations_beforeCompleting() = runBlocking {
+    fun queueDrain_waitsForAllPendingProducerWork_beforeReturning() = runBlocking {
         val processedCount = AtomicInteger(0)
-        val itemCount = 15
+        val itemCount = 25
 
         val queue = GpsLocationQueue(
             scope = testScope,
             dispatcher = Dispatchers.Default,
-            capacity = 4
+            maxCapacity = 100
         ) {
-            delay(15)
+            delay(10)
             processedCount.incrementAndGet()
         }
 
-        for (i in 1..itemCount) {
-            queue.enqueue(createLocation(37.0 + i * 0.001, -122.0, i * 1000L))
-        }
+        val locations = (1..itemCount).map { createLocation(37.0 + it * 0.001, -122.0, it * 1000L) }
+        queue.enqueueBatch(locations)
 
-        // drainAndClose must suspend until the consumer finishes all enqueued points
+        // drainAndClose must suspend until all items are fully consumed
         queue.drainAndClose()
 
-        assertEquals(
-            "drainAndClose must ensure 100% of queued fixes are consumed prior to returning",
-            itemCount,
-            processedCount.get()
-        )
+        assertEquals("drainAndClose must ensure 100% of pending items are consumed prior to returning", itemCount, processedCount.get())
         assertTrue("Queue must be closed after drainAndClose", queue.isClosed())
+    }
+
+    // FIX 1 & Regression Test 3: GPS persistence failure prevents premature finalization
+    @Test
+    fun gpsPersistenceFailure_haltsProcessingAndSurfacesErrorOnDrain() = runBlocking {
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            maxCapacity = 100
+        ) { location ->
+            if (location.time >= 5000L) {
+                throw java.sql.SQLException("Simulated SQLite disk/constraint failure")
+            }
+        }
+
+        val locations = (1..10).map { createLocation(37.0, -122.0, it * 1000L) }
+        queue.enqueueBatch(locations)
+
+        try {
+            queue.drainAndClose()
+            fail("drainAndClose must throw when waypoint persistence fails")
+        } catch (e: IllegalStateException) {
+            assertTrue("Exception message must detail persistence failure", e.message?.contains("Waypoint processing failed") == true)
+        }
     }
 }

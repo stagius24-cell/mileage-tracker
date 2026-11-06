@@ -13,11 +13,13 @@ import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
+import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.domain.usecase.FinalizeTripUseCase
-import com.businesstracker.mileage.service.NotificationHelper
 import com.businesstracker.mileage.service.LocationTrackingService
+import com.businesstracker.mileage.service.NotificationHelper
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import kotlinx.coroutines.delay
 import java.util.concurrent.TimeUnit
 
 @HiltWorker
@@ -26,6 +28,7 @@ class TripDebounceWorker @AssistedInject constructor(
     @Assisted workerParams: WorkerParameters,
     private val preferencesManager: TrackingPreferencesManager,
     private val activeTripRepository: ActiveTripRepository,
+    private val tripRepository: TripRepository,
     private val finalizeTripUseCase: FinalizeTripUseCase,
     private val notificationHelper: NotificationHelper
 ) : CoroutineWorker(context, workerParams) {
@@ -71,35 +74,60 @@ class TripDebounceWorker @AssistedInject constructor(
 
             // 3. Coordinate finalization with LocationTrackingService
             val method = TrackingMethod.fromString(activeTrip.trackingMethod)
+            var isFinalized = false
+
             if (LocationTrackingService.isTrackingRunning()) {
-                // Delegate to active service so it stops receiving GPS, drains the queue, and finalizes cleanly
                 val stopIntent = Intent(context, LocationTrackingService::class.java).apply {
                     action = LocationTrackingService.ACTION_STOP
                 }
                 try {
                     context.startService(stopIntent)
                 } catch (e: Exception) {
-                    // In background restrictions if startService fails, finalize directly
-                    val finalizedTrip = finalizeTripUseCase.execute(activeTrip.id, method)
-                    if (finalizedTrip != null && finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
+                    Log.w("TripDebounceWorker", "Could not send stop intent to service: ${e.message}")
+                }
+
+                // Wait for service to confirm finalization
+                var attempts = 0
+                while (attempts < 25) { // Poll up to 5 seconds
+                    delay(200L)
+                    val finalized = tripRepository.getTripById(activeTrip.id)
+                    val activeInDb = activeTripRepository.getActiveTrip()
+                    if (finalized != null || activeInDb == null) {
+                        isFinalized = true
+                        break
+                    }
+                    attempts++
+                }
+            }
+
+            // Fallback recovery if service was not running or did not finalize within timeout
+            if (!isFinalized) {
+                val finalizedTrip = finalizeTripUseCase.execute(activeTrip.id, method)
+                if (finalizedTrip != null) {
+                    isFinalized = true
+                    if (finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
                         notificationHelper.showTripDetectedNotification(
                             finalizedTrip.id,
                             finalizedTrip.totalDistanceMiles
                         )
                     }
-                }
-            } else {
-                // Service was stopped or terminated; finalize directly from persisted Room state
-                val finalizedTrip = finalizeTripUseCase.execute(activeTrip.id, method)
-                if (finalizedTrip != null && finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
-                    notificationHelper.showTripDetectedNotification(
-                        finalizedTrip.id,
-                        finalizedTrip.totalDistanceMiles
-                    )
+                } else {
+                    // Check if trip was discarded as false trip (<200m) or already finalized
+                    val finalized = tripRepository.getTripById(activeTrip.id)
+                    val activeInDb = activeTripRepository.getActiveTrip()
+                    if (finalized != null || activeInDb == null) {
+                        isFinalized = true
+                    }
                 }
             }
 
-            preferencesManager.setActiveTripId(null)
+            if (!isFinalized) {
+                // Return retry so WorkManager can re-attempt finalization safely without data loss
+                return Result.retry()
+            }
+
+            // Only clear preferences after confirmed finalization
+            preferencesManager.clearActiveTripId(activeTrip.id)
             preferencesManager.clearVehicleAnchor()
 
             Result.success()
