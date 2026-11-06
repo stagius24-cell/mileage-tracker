@@ -8,10 +8,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.data.remote.GoogleSheetsSyncService
+import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.transition.ActivityTransitionManager
-import com.businesstracker.mileage.worker.MileageSyncWorker
+import com.businesstracker.mileage.worker.GoogleSheetsSyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -32,7 +35,17 @@ data class SettingsUiState(
     val cfClientId: String = "",
     val cfClientSecret: String = "",
     val cfBearerToken: String = "",
-    val defaultVehicle: String = "Tesla Model Y"
+    val defaultVehicle: String = "Tesla Model Y",
+    // Google Sheets Sync State
+    val isSheetsConnected: Boolean = false,
+    val sheetsSpreadsheetId: String = "",
+    val sheetsSpreadsheetName: String = "Business Mileage Tracker",
+    val sheetsAuthToken: String = "",
+    val sheetsWebhookUrl: String = "",
+    val sheetsLastSyncTime: Long = 0L,
+    val sheetsLastError: String? = null,
+    val pendingTripsCount: Int = 0,
+    val isSyncing: Boolean = false
 )
 
 private data class GeneralPrefs(
@@ -55,12 +68,26 @@ private data class CloudflarePrefs(
     val bearerToken: String
 )
 
+private data class SheetsPrefs(
+    val connected: Boolean,
+    val spreadsheetId: String,
+    val spreadsheetName: String,
+    val authToken: String,
+    val webhookUrl: String,
+    val lastSyncTime: Long,
+    val lastError: String?
+)
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val preferencesManager: TrackingPreferencesManager,
     private val activityTransitionManager: ActivityTransitionManager,
+    private val tripRepository: TripRepository,
+    private val sheetsSyncService: GoogleSheetsSyncService,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    private val _isSyncing = MutableStateFlow(false)
 
     private val generalFlow = combine(
         preferencesManager.isAutoTrackingEnabled,
@@ -92,6 +119,22 @@ class SettingsViewModel @Inject constructor(
         CloudflarePrefs(endpoint, clientId, secret, token)
     }
 
+    private val sheetsFlow = combine(
+        preferencesManager.isSheetsConnected,
+        preferencesManager.sheetsSpreadsheetId,
+        preferencesManager.sheetsSpreadsheetName,
+        preferencesManager.sheetsAuthToken,
+        preferencesManager.sheetsWebhookUrl
+    ) { connected, id, name, token, webhook ->
+        Tuple5(connected, id, name, token, webhook)
+    }.combine(
+        combine(preferencesManager.sheetsLastSyncTime, preferencesManager.sheetsLastError) { time, err ->
+            Pair(time, err)
+        }
+    ) { t5, (time, err) ->
+        SheetsPrefs(t5.v1, t5.v2, t5.v3, t5.v4, t5.v5, time, err)
+    }
+
     private fun hasBackgroundLocationPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ContextCompat.checkSelfPermission(
@@ -117,10 +160,14 @@ class SettingsViewModel @Inject constructor(
     val uiState: StateFlow<SettingsUiState> = combine(
         generalFlow,
         scheduleFlow,
-        cloudflareFlow
-    ) { general, schedule, cf ->
+        cloudflareFlow,
+        sheetsFlow,
+        _isSyncing
+    ) { general, schedule, cf, sheets, isSyncing ->
         val hasBg = hasBackgroundLocationPermission()
         val isReady = general.autoTrackingEnabled && hasRequiredPermissions()
+        val pendingCount = tripRepository.getPendingSyncTrips().count { it.classification != "UNREVIEWED" }
+
         SettingsUiState(
             autoTrackingEnabled = general.autoTrackingEnabled,
             hasBackgroundLocationPermission = hasBg,
@@ -134,7 +181,16 @@ class SettingsViewModel @Inject constructor(
             cfEndpoint = cf.endpoint,
             cfClientId = cf.clientId,
             cfClientSecret = cf.clientSecret,
-            cfBearerToken = cf.bearerToken
+            cfBearerToken = cf.bearerToken,
+            isSheetsConnected = sheets.connected,
+            sheetsSpreadsheetId = sheets.spreadsheetId,
+            sheetsSpreadsheetName = sheets.spreadsheetName,
+            sheetsAuthToken = sheets.authToken,
+            sheetsWebhookUrl = sheets.webhookUrl,
+            sheetsLastSyncTime = sheets.lastSyncTime,
+            sheetsLastError = sheets.lastError,
+            pendingTripsCount = pendingCount,
+            isSyncing = isSyncing
         )
     }.stateIn(
         scope = viewModelScope,
@@ -161,32 +217,21 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun toggleWorkDay(day: String) {
+    fun setWorkDays(days: Set<String>) {
         viewModelScope.launch {
-            val current = uiState.value.workDays.toMutableSet()
-            if (current.contains(day)) {
-                if (current.size > 1) { // keep at least 1 day
-                    current.remove(day)
-                }
-            } else {
-                current.add(day)
-            }
-            // Preserve standard order: MON, TUE, WED, THU, FRI, SAT, SUN
-            val order = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
-            val ordered = order.filter { current.contains(it) }
-            preferencesManager.setWorkDays(ordered.joinToString(","))
+            preferencesManager.setWorkDays(days.joinToString(","))
         }
     }
 
-    fun setWorkHoursStart(start: String) {
+    fun setWorkHoursStart(time: String) {
         viewModelScope.launch {
-            preferencesManager.setWorkHoursStart(start)
+            preferencesManager.setWorkHoursStart(time)
         }
     }
 
-    fun setWorkHoursEnd(end: String) {
+    fun setWorkHoursEnd(time: String) {
         viewModelScope.launch {
-            preferencesManager.setWorkHoursEnd(end)
+            preferencesManager.setWorkHoursEnd(time)
         }
     }
 
@@ -196,37 +241,92 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setCfEndpoint(endpoint: String) {
-        viewModelScope.launch {
-            preferencesManager.setCfEndpoint(endpoint)
-        }
-    }
-
-    fun setCfClientId(clientId: String) {
-        viewModelScope.launch {
-            preferencesManager.setCfClientId(clientId)
-        }
-    }
-
-    fun setCfClientSecret(secret: String) {
-        viewModelScope.launch {
-            preferencesManager.setCfClientSecret(secret)
-        }
-    }
-
-    fun setCfBearerToken(token: String) {
-        viewModelScope.launch {
-            preferencesManager.setCfBearerToken(token)
-        }
-    }
-
     fun setDefaultVehicle(vehicle: String) {
         viewModelScope.launch {
             preferencesManager.setDefaultVehicle(vehicle)
         }
     }
 
-    fun triggerSyncNow() {
-        MileageSyncWorker.enqueueOneTimeSync(context)
+    // Google Sheets Actions
+    fun setSheetsSpreadsheetId(id: String) {
+        viewModelScope.launch {
+            preferencesManager.setSheetsSpreadsheetId(id)
+            if (id.isNotBlank()) preferencesManager.setSheetsConnected(true)
+        }
     }
+
+    fun setSheetsSpreadsheetName(name: String) {
+        viewModelScope.launch {
+            preferencesManager.setSheetsSpreadsheetName(name)
+        }
+    }
+
+    fun setSheetsAuthToken(token: String) {
+        viewModelScope.launch {
+            preferencesManager.setSheetsAuthToken(token)
+            if (token.isNotBlank()) preferencesManager.setSheetsConnected(true)
+        }
+    }
+
+    fun setSheetsWebhookUrl(url: String) {
+        viewModelScope.launch {
+            preferencesManager.setSheetsWebhookUrl(url)
+            if (url.isNotBlank()) preferencesManager.setSheetsConnected(true)
+        }
+    }
+
+    fun connectSheets() {
+        viewModelScope.launch {
+            preferencesManager.setSheetsConnected(true)
+            GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
+            GoogleSheetsSyncWorker.enqueuePeriodicSync(context)
+        }
+    }
+
+    fun disconnectSheets() {
+        viewModelScope.launch {
+            preferencesManager.setSheetsConnected(false)
+            preferencesManager.setSheetsAuthToken("")
+            preferencesManager.setSheetsWebhookUrl("")
+            preferencesManager.setSheetsLastError(null)
+        }
+    }
+
+    fun syncSheetsNow() {
+        if (_isSyncing.value) return
+        _isSyncing.value = true
+        viewModelScope.launch {
+            try {
+                sheetsSyncService.syncPendingTrips()
+            } finally {
+                _isSyncing.value = false
+            }
+        }
+    }
+
+    // Cloudflare D1 Preferences
+    fun setCfEndpoint(endpoint: String) {
+        viewModelScope.launch { preferencesManager.setCfEndpoint(endpoint) }
+    }
+
+    fun setCfClientId(clientId: String) {
+        viewModelScope.launch { preferencesManager.setCfClientId(clientId) }
+    }
+
+    fun setCfClientSecret(secret: String) {
+        viewModelScope.launch { preferencesManager.setCfClientSecret(secret) }
+    }
+
+    fun setCfBearerToken(token: String) {
+        viewModelScope.launch { preferencesManager.setCfBearerToken(token) }
+    }
+
+    fun triggerSyncNow() {
+        com.businesstracker.mileage.worker.MileageSyncWorker.enqueueOneTimeSync(context)
+        syncSheetsNow()
+    }
+
+    private data class Tuple5<A, B, C, D, E>(
+        val v1: A, val v2: B, val v3: C, val v4: D, val v5: E
+    )
 }

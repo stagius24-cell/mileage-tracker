@@ -25,6 +25,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
+import com.businesstracker.mileage.ui.theme.SpeedRed
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -490,6 +500,225 @@ fun SettingsScreen(
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp)
                     )
+                }
+            }
+        }
+
+        // Google Sheets Synchronization Card
+        item {
+            var isSheetsCardExpanded by remember { mutableStateOf(true) }
+            val timeFmt = remember { SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault()) }
+            val lastSyncStr = if (state.sheetsLastSyncTime > 0) timeFmt.format(Date(state.sheetsLastSyncTime)) else "Never"
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { isSheetsCardExpanded = !isSheetsCardExpanded },
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = SucculentPrimary.copy(alpha = 0.15f),
+                                modifier = Modifier.size(38.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.TableChart,
+                                    contentDescription = null,
+                                    tint = SucculentPrimary,
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Google Sheets Sync",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = if (state.isSheetsConnected) SucculentPrimary.copy(alpha = 0.15f) else SlateNeutral.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = if (state.isSheetsConnected) "Connected" else "Not Connected",
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (state.isSheetsConnected) SucculentPrimary else SlateNeutral
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = if (isSheetsCardExpanded) "Tap to collapse settings" else "Tap to configure Google Sheets",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
+                        }
+
+                        val rotationAngle by animateFloatAsState(
+                            targetValue = if (isSheetsCardExpanded) 180f else 0f,
+                            animationSpec = tween(durationMillis = 400),
+                            label = "sheets_expand_rotation"
+                        )
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (isSheetsCardExpanded) "Collapse" else "Expand",
+                            modifier = Modifier
+                                .size(28.dp)
+                                .rotate(rotationAngle),
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = isSheetsCardExpanded,
+                        enter = expandVertically(animationSpec = tween(400)) + fadeIn(animationSpec = tween(400)),
+                        exit = shrinkVertically(animationSpec = tween(400)) + fadeOut(animationSpec = tween(400))
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "Dedicated 16-Column Mileage Format",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SucculentPrimary
+                                    )
+                                    Text(
+                                        text = "Syncs: Trip ID, Date, Start/End Time, Addresses, Miles, Business Miles, Classification, Entity, Purpose, Rate, Deduction, Notes, Tracking Method, Last Updated.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                    Text(
+                                        text = "Duplicate-Proof: Matches Trip ID in Column A and updates existing records idempotently.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+
+                            // Status Details
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text("Last Sync", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
+                                    Text(lastSyncStr, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("Pending Uploads", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
+                                    Text("${state.pendingTripsCount} drives", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+
+                            if (!state.sheetsLastError.isNullOrBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = SpeedRed.copy(alpha = 0.1f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Error, contentDescription = null, tint = SpeedRed, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(text = state.sheetsLastError ?: "", color = SpeedRed, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = state.sheetsSpreadsheetId,
+                                onValueChange = { viewModel.setSheetsSpreadsheetId(it) },
+                                label = { Text("Google Spreadsheet ID") },
+                                placeholder = { Text("e.g. 1BxiMVs0XRA5nFMdKvBdBZjgmUUq...") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
+                            OutlinedTextField(
+                                value = state.sheetsAuthToken,
+                                onValueChange = { viewModel.setSheetsAuthToken(it) },
+                                label = { Text("Google OAuth Access Token (Bearer)") },
+                                placeholder = { Text("Paste OAuth 2.0 access token") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
+                            OutlinedTextField(
+                                value = state.sheetsWebhookUrl,
+                                onValueChange = { viewModel.setSheetsWebhookUrl(it) },
+                                label = { Text("Or Apps Script Webhook URL (Zero-GCP setup)") },
+                                placeholder = { Text("https://script.google.com/macros/s/...") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Button(
+                                    onClick = { viewModel.syncSheetsNow() },
+                                    enabled = !state.isSyncing,
+                                    modifier = Modifier.weight(1f).height(48.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                                ) {
+                                    if (state.isSyncing) {
+                                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text("Syncing...", fontWeight = FontWeight.Bold, color = Color.White)
+                                    } else {
+                                        Icon(Icons.Default.Sync, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Sync Sheets Now", fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                }
+
+                                if (state.isSheetsConnected) {
+                                    OutlinedButton(
+                                        onClick = { viewModel.disconnectSheets() },
+                                        modifier = Modifier.height(48.dp),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text("Disconnect", color = SpeedRed)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
