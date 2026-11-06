@@ -11,7 +11,7 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class LocationTrackingServiceThreadTest {
 
-    @Test
+    @Test(timeout = 10000)
     fun handlerThread_startsAndProvidesLooperSafely() {
         val thread = HandlerThread("TestGpsLocationHandlerThread").apply { start() }
         assertTrue("Thread must be alive after starting", thread.isAlive)
@@ -23,7 +23,7 @@ class LocationTrackingServiceThreadTest {
         assertFalse("Thread must not be alive after quitSafely()", thread.isAlive)
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun handlerThread_multipleCycles_doNotLeakThreads() {
         val threads = mutableListOf<HandlerThread>()
         for (i in 1..5) {
