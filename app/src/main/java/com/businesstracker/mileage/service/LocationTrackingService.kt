@@ -13,12 +13,14 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import com.businesstracker.mileage.data.local.GpsInboxDao
+import com.businesstracker.mileage.data.local.TripLifecycleDao
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.coordinator.TripFinalizationCoordinator
 import com.businesstracker.mileage.domain.model.FilterResult
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.Waypoint
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
+import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.FinalizeTripUseCase
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -93,7 +95,7 @@ class LocationTrackingService : Service() {
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
     @Inject lateinit var gpsInboxDao: GpsInboxDao
     @Inject lateinit var drainPendingGpsFixesUseCase: DrainPendingGpsFixesUseCase
-    @Inject lateinit var tripLifecycleDao: com.businesstracker.mileage.data.local.TripLifecycleDao
+    @Inject lateinit var tripLifecycleDao: TripLifecycleDao
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
