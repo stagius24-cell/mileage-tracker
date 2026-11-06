@@ -71,7 +71,11 @@ data class ReportsUiState(
     val averageDistance: Double = 0.0,
     val entityBreakdown: List<EntityBreakdown> = emptyList(),
     val purposeBreakdown: List<PurposeBreakdown> = emptyList(),
-    val isExporting: Boolean = false
+    val isExporting: Boolean = false,
+    val ytdLoggedDeduction: Double = 0.0,
+    val ytdPotentialDeduction: Double = 0.0,
+    val ytdBusinessMiles: Double = 0.0,
+    val ytdTotalMiles: Double = 0.0
 )
 
 @HiltViewModel
@@ -235,7 +239,11 @@ class ReportsExportViewModel @Inject constructor(
             averageDistance = averageDist,
             entityBreakdown = entityBreakdowns,
             purposeBreakdown = purposeBreakdowns,
-            isExporting = dateArgs.exporting
+            isExporting = dateArgs.exporting,
+            ytdLoggedDeduction = totalDeduction,
+            ytdPotentialDeduction = totalDeduction + round(uMiles * 0.760),
+            ytdBusinessMiles = bMiles,
+            ytdTotalMiles = totalMiles
         )
     }.stateIn(
         scope = viewModelScope,
@@ -260,13 +268,17 @@ class ReportsExportViewModel @Inject constructor(
         _customEndDate.value = end
     }
 
-    fun exportToCsv(onFileReady: (Intent) -> Unit) {
+    fun exportToCsv(monthIso: String? = null, onFileReady: (Intent) -> Unit) {
         viewModelScope.launch {
             val state = uiState.value
-            val tripsToExport = state.filteredTrips
+            val tripsToExport = if (monthIso != null) {
+                state.filteredTrips.filter { it.date.startsWith(monthIso) }
+            } else {
+                state.filteredTrips
+            }
 
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val suffix = "${state.selectedYear}_${state.selectedBusinessEntity}"
+            val suffix = monthIso ?: "${state.selectedYear}_${state.selectedBusinessEntity}"
             val csvFile = File(exportDir, "BusinessMileage_${suffix}_${System.currentTimeMillis()}.csv")
 
             FileWriter(csvFile).use { writer ->

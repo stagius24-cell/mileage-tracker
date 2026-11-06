@@ -67,54 +67,80 @@ class DashboardViewModel @Inject constructor(
 
     val serviceState: StateFlow<TrackingServiceState> = LocationTrackingService.serviceState
 
-    val uiState: StateFlow<DashboardUiState> = combine(
+    private data class TripFilterState(
+        val unreviewed: List<TripEntity>,
+        val allTrips: List<TripEntity>,
+        val timeFilter: TimeFilter,
+        val monthPrefix: String
+    )
+
+    private data class CustomRangeAndActionState(
+        val customStart: String,
+        val customEnd: String,
+        val processingIds: Set<String>,
+        val lastClassified: TripEntity?
+    )
+
+    private val tripFilterFlow = combine(
         tripRepository.getUnclassifiedTrips(),
         tripRepository.getAllTrips(),
         _timeFilter,
+        _selectedMonthPrefix
+    ) { unreviewed, allTrips, filter, monthPrefix ->
+        TripFilterState(unreviewed, allTrips, filter, monthPrefix)
+    }
+
+    private val actionFlow = combine(
         _customStartDate,
         _customEndDate,
-        _selectedMonthPrefix,
         _processingTripIds,
         _lastClassifiedTrip
-    ) { unreviewed, allTrips, filter, customStart, customEnd, monthPrefix, processingIds, lastClassified ->
+    ) { customStart, customEnd, processingIds, lastClassified ->
+        CustomRangeAndActionState(customStart, customEnd, processingIds, lastClassified)
+    }
 
-        val effectiveFilter = if (filter == TimeFilter.CUSTOM && customStart.isBlank() && customEnd.isBlank()) {
+    val uiState: StateFlow<DashboardUiState> = combine(
+        tripFilterFlow,
+        actionFlow
+    ) { tripState, actionState ->
+
+        val effectiveFilter = if (tripState.timeFilter == TimeFilter.CUSTOM && actionState.customStart.isBlank() && actionState.customEnd.isBlank()) {
             TimeFilter.THIS_MONTH
         } else {
-            filter
+            tripState.timeFilter
         }
 
         val summary = summaryUseCase.execute(
-            trips = allTrips,
+            trips = tripState.allTrips,
             timeFilter = effectiveFilter,
-            customStartDate = customStart.ifBlank { null },
-            customEndDate = customEnd.ifBlank { null },
+            customStartDate = if (actionState.customStart.isNotBlank()) actionState.customStart else null,
+            customEndDate = if (actionState.customEnd.isNotBlank()) actionState.customEnd else null,
             referenceDate = now
         )
 
         val monthDate = try {
-            LocalDate.parse("$monthPrefix-01")
+            LocalDate.parse("${tripState.monthPrefix}-01")
         } catch (_: Exception) {
             now
         }
         val monthDisplayName = monthDate.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
 
-        val availableMonths = allTrips.mapNotNull {
+        val availableMonths = tripState.allTrips.mapNotNull {
             if (it.date.length >= 7) it.date.substring(0, 7) else null
         }.distinct().sortedDescending().ifEmpty { listOf(currentMonthIso) }
 
         DashboardUiState(
-            unreviewedTrips = unreviewed,
-            timeFilter = filter,
-            customStartDate = customStart,
-            customEndDate = customEnd,
+            unreviewedTrips = tripState.unreviewed,
+            timeFilter = tripState.timeFilter,
+            customStartDate = actionState.customStart,
+            customEndDate = actionState.customEnd,
             selectedMonthName = monthDisplayName,
             availableMonths = availableMonths,
             summary = summary,
             currentRate = currentRate,
-            lastClassifiedTrip = lastClassified,
-            isUndoAvailable = lastClassified != null,
-            processingTripIds = processingIds
+            lastClassifiedTrip = actionState.lastClassified,
+            isUndoAvailable = actionState.lastClassified != null,
+            processingTripIds = actionState.processingIds
         )
     }.stateIn(
         scope = viewModelScope,

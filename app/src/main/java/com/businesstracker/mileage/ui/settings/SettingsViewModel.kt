@@ -223,6 +223,23 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun toggleWorkDay(day: String) {
+        viewModelScope.launch {
+            val current = uiState.value.workDays.toMutableSet()
+            if (current.contains(day)) {
+                if (current.size > 1) { // keep at least 1 day
+                    current.remove(day)
+                }
+            } else {
+                current.add(day)
+            }
+            // Preserve standard order: MON, TUE, WED, THU, FRI, SAT, SUN
+            val order = listOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN")
+            val ordered = order.filter { current.contains(it) }
+            preferencesManager.setWorkDays(ordered.joinToString(","))
+        }
+    }
+
     fun setWorkHoursStart(time: String) {
         viewModelScope.launch {
             preferencesManager.setWorkHoursStart(time)

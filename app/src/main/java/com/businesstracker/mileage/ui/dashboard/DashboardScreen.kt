@@ -33,7 +33,9 @@ import androidx.compose.material.icons.filled.GpsNotFixed
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.foundation.lazy.LazyRow
