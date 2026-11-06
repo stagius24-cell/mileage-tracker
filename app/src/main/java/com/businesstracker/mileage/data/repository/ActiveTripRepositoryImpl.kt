@@ -123,7 +123,7 @@ class ActiveTripRepositoryImpl @Inject constructor(
             }
         }.flowOn(ioDispatcher)
 
-    override suspend fun clearActiveTrip(tripId: String) = withContext(ioDispatcher) {
+    override suspend fun clearActiveTrip(tripId: String): Unit = withContext(ioDispatcher) {
         if (tripId.isNotEmpty()) {
             activeTripDao.clearActiveTripById(tripId)
         } else {

@@ -168,7 +168,7 @@ class LocationTrackingService : Service() {
             gpsLocationQueue = GpsLocationQueue(
                 scope = serviceScope,
                 dispatcher = ioDispatcher,
-                capacity = 64
+                maxCapacity = 1000
             ) { location ->
                 handleLocationSerialized(location)
             }
