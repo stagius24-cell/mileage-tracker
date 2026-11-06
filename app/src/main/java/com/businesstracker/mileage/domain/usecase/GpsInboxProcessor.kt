@@ -28,7 +28,8 @@ class GpsInboxProcessor @Inject constructor(
             val lastLatitude: Double,
             val lastLongitude: Double,
             val speedMph: Double,
-            val isDisplacementConfirmed: Boolean
+            val isDisplacementConfirmed: Boolean,
+            val waypoint: Waypoint? = null
         ) : ProcessResult()
 
         data class AlreadyConsumed(
@@ -37,7 +38,8 @@ class GpsInboxProcessor @Inject constructor(
             val totalDistanceMeters: Double,
             val lastLatitude: Double,
             val lastLongitude: Double,
-            val isDisplacementConfirmed: Boolean
+            val isDisplacementConfirmed: Boolean,
+            val waypoint: Waypoint? = null
         ) : ProcessResult()
 
         data class Rejected(
@@ -108,13 +110,28 @@ class GpsInboxProcessor @Inject constructor(
         // Idempotency check: if this fix was already recorded, acknowledge inbox without incrementing mileage
         if (activeTripDao.countWaypointsForFix(tripId, fix.id) > 0) {
             gpsInboxDao.deleteFixById(fix.id)
+            val lastWaypointEntity = activeTripDao.getLastWaypointForTrip(tripId)
+            val lastWaypoint = lastWaypointEntity?.let {
+                Waypoint(
+                    latitude = it.latitude,
+                    longitude = it.longitude,
+                    altitude = it.altitude,
+                    accuracy = it.accuracy,
+                    speed = it.speed,
+                    timestamp = it.timestamp,
+                    sequenceNumber = it.sequenceNumber,
+                    elapsedRealtimeNanos = it.elapsedRealtimeNanos,
+                    bootCount = it.bootCount
+                )
+            }
             return@withTransaction ProcessResult.AlreadyConsumed(
                 fixId = fix.id,
                 tripId = tripId,
                 totalDistanceMeters = activeTrip.totalDistanceMeters,
                 lastLatitude = activeTrip.lastLatitude,
                 lastLongitude = activeTrip.lastLongitude,
-                isDisplacementConfirmed = activeTrip.totalDistanceMeters >= 200.0
+                isDisplacementConfirmed = activeTrip.totalDistanceMeters >= 200.0,
+                waypoint = lastWaypoint
             )
         }
 
@@ -178,10 +195,26 @@ class GpsInboxProcessor @Inject constructor(
                 // 7. Acknowledge/delete exact inbox record in same transaction
                 gpsInboxDao.deleteFixById(fix.id)
 
+                val anchorLat: Double
+                val anchorLng: Double
+                if (activeTrip.startLatitude != 0.0 || activeTrip.startLongitude != 0.0) {
+                    anchorLat = activeTrip.startLatitude
+                    anchorLng = activeTrip.startLongitude
+                } else {
+                    val firstWp = activeTripDao.getWaypointsForTrip(tripId).firstOrNull()
+                    if (firstWp != null) {
+                        anchorLat = firstWp.latitude
+                        anchorLng = firstWp.longitude
+                    } else {
+                        anchorLat = fix.latitude
+                        anchorLng = fix.longitude
+                    }
+                }
+
                 val distanceResults = FloatArray(1)
                 Location.distanceBetween(
-                    activeTrip.startLatitude,
-                    activeTrip.startLongitude,
+                    anchorLat,
+                    anchorLng,
                     fix.latitude,
                     fix.longitude,
                     distanceResults
@@ -196,7 +229,8 @@ class GpsInboxProcessor @Inject constructor(
                     lastLatitude = fix.latitude,
                     lastLongitude = fix.longitude,
                     speedMph = filterResult.speedMph,
-                    isDisplacementConfirmed = isConfirmed
+                    isDisplacementConfirmed = isConfirmed,
+                    waypoint = filterResult.waypoint
                 )
             }
             is FilterResult.Rejected -> {

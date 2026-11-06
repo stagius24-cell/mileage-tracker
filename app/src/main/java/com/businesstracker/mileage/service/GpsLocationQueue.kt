@@ -9,6 +9,7 @@ import com.businesstracker.mileage.data.local.TripSequenceDao
 import com.businesstracker.mileage.data.local.entity.GpsInboxEntity
 import com.businesstracker.mileage.domain.service.BootCountProvider
 import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
+import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -48,6 +49,7 @@ class GpsLocationQueue(
     initialSequence: Long = 0L,
     private val database: ExpenseTrackerDatabase? = null,
     private val bootCountProvider: BootCountProvider? = null,
+    private val onFixProcessed: ((GpsInboxProcessor.ProcessResult) -> Unit)? = null,
     private val onLocationProcessed: (suspend (Location) -> Unit)? = null
 ) {
     private data class AdmittedBatch(
@@ -114,7 +116,8 @@ class GpsLocationQueue(
                     try {
                         val processed = drainPendingGpsFixesUseCase.drain(
                             tripId = currentTripId,
-                            batchLimit = batchFetchLimit
+                            batchLimit = batchFetchLimit,
+                            onFixProcessed = onFixProcessed
                         )
                         if (isStopping.get()) {
                             val count = gpsInboxDao.getPendingCount(currentTripId)

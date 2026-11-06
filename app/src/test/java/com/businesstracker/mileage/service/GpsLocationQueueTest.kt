@@ -808,4 +808,59 @@ class GpsLocationQueueTest {
         val seqAfter = tripSequenceDao.getLastSequenceNumber(tripId)
         assertEquals("advanceSequence must write to trip_sequence table even when inbox record already exists with sequence 5", 5L, seqAfter)
     }
+
+    // REGRESSION TEST: Forwarding onFixProcessed through GpsLocationQueue with drainPendingGpsFixesUseCase
+    @Test
+    fun queueProcessing_withDrainUseCase_forwardsFixResultToOnFixProcessed() = runBlocking {
+        val tripId = "trip-forward-callback"
+        database.activeTripDao().insertActiveTrip(
+            com.businesstracker.mileage.data.local.entity.ActiveTripEntity(
+                id = tripId,
+                startTime = 1000L,
+                startLatitude = 37.3382,
+                startLongitude = -121.8863,
+                lastLatitude = 37.3382,
+                lastLongitude = -121.8863,
+                lastTimestamp = 1000L,
+                totalDistanceMeters = 0.0,
+                trackingMethod = "AUTO_DETECTED"
+            )
+        )
+
+        val processor = com.businesstracker.mileage.domain.usecase.GpsInboxProcessor(
+            database = database,
+            activeTripDao = database.activeTripDao(),
+            gpsInboxDao = database.gpsInboxDao(),
+            filterGpsPointUseCase = com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase(object : com.businesstracker.mileage.domain.service.BootCountProvider {
+                override fun getBootCount(): Int = 1
+            })
+        )
+        val drainUseCase = com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase(
+            gpsInboxDao = database.gpsInboxDao(),
+            gpsInboxProcessor = processor
+        )
+
+        val processedResults = java.util.Collections.synchronizedList(mutableListOf<com.businesstracker.mileage.domain.usecase.GpsInboxProcessor.ProcessResult>())
+
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = database.gpsInboxDao(),
+            tripIdProvider = { tripId },
+            batchFetchLimit = 10,
+            drainPendingGpsFixesUseCase = drainUseCase,
+            tripSequenceDao = database.tripSequenceDao(),
+            database = database,
+            onFixProcessed = { result ->
+                processedResults.add(result)
+            }
+        )
+
+        val loc = createLocation(37.3400, -121.8863, 10_000L)
+        queue.enqueueBatchSync(listOf(loc))
+        queue.drainAndClose()
+
+        assertEquals("onFixProcessed must be called for the enqueued fix", 1, processedResults.size)
+        assertTrue(processedResults[0] is com.businesstracker.mileage.domain.usecase.GpsInboxProcessor.ProcessResult.Accepted)
+    }
 }
