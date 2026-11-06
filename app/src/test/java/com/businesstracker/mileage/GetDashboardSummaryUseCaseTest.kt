@@ -144,6 +144,51 @@ class GetDashboardSummaryUseCaseTest {
     }
 
     @Test
+    fun execute_thisMonthAndThisYear_aggregatesCorrectly() {
+        val trips = listOf(
+            createTrip("1", "2026-11-02", 15.0, TripClassification.BUSINESS), // Nov 2026 (this month + this year)
+            createTrip("2", "2026-10-15", 25.0, TripClassification.BUSINESS), // Oct 2026 (this year, not this month)
+            createTrip("3", "2025-11-02", 50.0, TripClassification.BUSINESS)  // Nov 2025 (different year)
+        )
+
+        val monthSummary = useCase.execute(
+            trips = trips,
+            timeFilter = TimeFilter.THIS_MONTH,
+            referenceDate = fixedReferenceDate
+        )
+        assertEquals(15.0, monthSummary.totalMiles, 0.01)
+        assertEquals(1, monthSummary.totalTripsCount)
+
+        val yearSummary = useCase.execute(
+            trips = trips,
+            timeFilter = TimeFilter.THIS_YEAR,
+            referenceDate = fixedReferenceDate
+        )
+        assertEquals(40.0, yearSummary.totalMiles, 0.01)
+        assertEquals(2, yearSummary.totalTripsCount)
+    }
+
+    @Test
+    fun execute_customRangeSingleDay_aggregatesExactDay() {
+        val trips = listOf(
+            createTrip("1", "2026-11-05", 10.0, TripClassification.BUSINESS),
+            createTrip("2", "2026-11-06", 20.0, TripClassification.BUSINESS),
+            createTrip("3", "2026-11-07", 30.0, TripClassification.BUSINESS)
+        )
+
+        val summary = useCase.execute(
+            trips = trips,
+            timeFilter = TimeFilter.CUSTOM,
+            customStartDate = "2026-11-06",
+            customEndDate = "2026-11-06",
+            referenceDate = fixedReferenceDate
+        )
+
+        assertEquals(20.0, summary.totalMiles, 0.01)
+        assertEquals(1, summary.totalTripsCount)
+    }
+
+    @Test
     fun execute_emptyList_returnsZeroesWithoutCrashing() {
         val summary = useCase.execute(
             trips = emptyList(),

@@ -199,4 +199,62 @@ class TripReviewClassificationTest {
         assertNotNull(revertedTrip)
         assertEquals(TripClassification.UNREVIEWED.value, revertedTrip!!.classification)
     }
+
+    @Test
+    fun classification_preservesGpsWaypointsAndCoordinatesStrictly() = runTest {
+        val testTrip = TripEntity(
+            id = "trip_gps_test",
+            date = "2026-11-06",
+            startTime = 1000L,
+            endTime = 2000L,
+            startAddress = "100 Pine St",
+            endAddress = "200 Oak Ave",
+            startLatitude = 37.7749,
+            startLongitude = -122.4194,
+            endLatitude = 37.7849,
+            endLongitude = -122.4094,
+            totalDistanceMiles = 15.5,
+            businessMiles = 0.0,
+            businessEntity = "Personal",
+            purpose = "Unclassified",
+            trackingMethod = "AUTO_DETECTED",
+            classification = TripClassification.UNREVIEWED.value,
+            applicableRate = 0.760,
+            calculatedDeduction = 0.0,
+            notes = "Initial note",
+            waypointsJson = "[{\"latitude\":37.7749,\"longitude\":-122.4194}]",
+            syncStatus = "PENDING",
+            syncedAt = null
+        )
+
+        tripsFlow.value = listOf(testTrip)
+
+        val context = RuntimeEnvironment.getApplication()
+        val viewModel = DashboardViewModel(
+            tripRepository = fakeRepo,
+            rateUseCase = CalculateMileageRateUseCase(),
+            summaryUseCase = GetDashboardSummaryUseCase(),
+            appContext = context
+        )
+        advanceUntilIdle()
+
+        viewModel.classifyTripAsBusiness("trip_gps_test", BusinessEntity.MY_SUCCULENT_CORNER.displayName, "Plant Styling")
+        advanceUntilIdle()
+
+        val updated = fakeRepo.getTripById("trip_gps_test")
+        assertNotNull(updated)
+        // All core GPS metadata strictly preserved!
+        assertEquals("100 Pine St", updated!!.startAddress)
+        assertEquals("200 Oak Ave", updated.endAddress)
+        assertEquals(37.7749, updated.startLatitude!!, 0.0001)
+        assertEquals(-122.4194, updated.startLongitude!!, 0.0001)
+        assertEquals(37.7849, updated.endLatitude!!, 0.0001)
+        assertEquals(-122.4094, updated.endLongitude!!, 0.0001)
+        assertEquals(15.5, updated.totalDistanceMiles, 0.001)
+        assertEquals("[{\"latitude\":37.7749,\"longitude\":-122.4194}]", updated.waypointsJson)
+        // Only classification, business miles, and deduction updated
+        assertEquals("BUSINESS", updated.classification)
+        assertEquals(15.5, updated.businessMiles, 0.001)
+        assertEquals(11.78, updated.calculatedDeduction, 0.01) // 15.5 * 0.760
+    }
 }

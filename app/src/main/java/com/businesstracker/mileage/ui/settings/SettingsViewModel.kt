@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.data.remote.GoogleSheetsSyncService
+import com.businesstracker.mileage.data.security.SecureStorageManager
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.worker.GoogleSheetsSyncWorker
@@ -36,11 +37,11 @@ data class SettingsUiState(
     val cfClientSecret: String = "",
     val cfBearerToken: String = "",
     val defaultVehicle: String = "Tesla Model Y",
-    // Google Sheets Sync State
+    // Google Sheets Sync State - No raw tokens exposed in UI state
     val isSheetsConnected: Boolean = false,
+    val hasOAuthCredential: Boolean = false,
     val sheetsSpreadsheetId: String = "",
     val sheetsSpreadsheetName: String = "Business Mileage Tracker",
-    val sheetsAuthToken: String = "",
     val sheetsWebhookUrl: String = "",
     val sheetsLastSyncTime: Long = 0L,
     val sheetsLastError: String? = null,
@@ -69,10 +70,8 @@ private data class CloudflarePrefs(
 )
 
 private data class SheetsPrefs(
-    val connected: Boolean,
     val spreadsheetId: String,
     val spreadsheetName: String,
-    val authToken: String,
     val webhookUrl: String,
     val lastSyncTime: Long,
     val lastError: String?
@@ -84,6 +83,7 @@ class SettingsViewModel @Inject constructor(
     private val activityTransitionManager: ActivityTransitionManager,
     private val tripRepository: TripRepository,
     private val sheetsSyncService: GoogleSheetsSyncService,
+    private val secureStorageManager: SecureStorageManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -120,19 +120,13 @@ class SettingsViewModel @Inject constructor(
     }
 
     private val sheetsFlow = combine(
-        preferencesManager.isSheetsConnected,
         preferencesManager.sheetsSpreadsheetId,
         preferencesManager.sheetsSpreadsheetName,
-        preferencesManager.sheetsAuthToken,
-        preferencesManager.sheetsWebhookUrl
-    ) { connected, id, name, token, webhook ->
-        Tuple5(connected, id, name, token, webhook)
-    }.combine(
-        combine(preferencesManager.sheetsLastSyncTime, preferencesManager.sheetsLastError) { time, err ->
-            Pair(time, err)
-        }
-    ) { t5, (time, err) ->
-        SheetsPrefs(t5.v1, t5.v2, t5.v3, t5.v4, t5.v5, time, err)
+        preferencesManager.sheetsWebhookUrl,
+        preferencesManager.sheetsLastSyncTime,
+        preferencesManager.sheetsLastError
+    ) { id, name, webhook, time, err ->
+        SheetsPrefs(id, name, webhook, time, err)
     }
 
     private fun hasBackgroundLocationPermission(): Boolean {
@@ -162,11 +156,15 @@ class SettingsViewModel @Inject constructor(
         scheduleFlow,
         cloudflareFlow,
         sheetsFlow,
+        tripRepository.getAllTrips(),
         _isSyncing
-    ) { general, schedule, cf, sheets, isSyncing ->
+    ) { general, schedule, cf, sheets, allTrips, isSyncing ->
         val hasBg = hasBackgroundLocationPermission()
         val isReady = general.autoTrackingEnabled && hasRequiredPermissions()
-        val pendingCount = tripRepository.getPendingSyncTrips().count { it.classification != "UNREVIEWED" }
+        val pendingCount = allTrips.count { it.syncStatus == "PENDING" && it.classification != "UNREVIEWED" }
+
+        val hasOAuth = secureStorageManager.hasOAuthToken()
+        val isConnected = (hasOAuth && sheets.spreadsheetId.isNotBlank()) || sheets.webhookUrl.isNotBlank()
 
         SettingsUiState(
             autoTrackingEnabled = general.autoTrackingEnabled,
@@ -182,10 +180,10 @@ class SettingsViewModel @Inject constructor(
             cfClientId = cf.clientId,
             cfClientSecret = cf.clientSecret,
             cfBearerToken = cf.bearerToken,
-            isSheetsConnected = sheets.connected,
+            isSheetsConnected = isConnected,
+            hasOAuthCredential = hasOAuth,
             sheetsSpreadsheetId = sheets.spreadsheetId,
             sheetsSpreadsheetName = sheets.spreadsheetName,
-            sheetsAuthToken = sheets.authToken,
             sheetsWebhookUrl = sheets.webhookUrl,
             sheetsLastSyncTime = sheets.lastSyncTime,
             sheetsLastError = sheets.lastError,
@@ -194,7 +192,7 @@ class SettingsViewModel @Inject constructor(
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
+        started = SharingStarted.Eagerly,
         initialValue = SettingsUiState()
     )
 
@@ -267,43 +265,57 @@ class SettingsViewModel @Inject constructor(
     // Google Sheets Actions
     fun setSheetsSpreadsheetId(id: String) {
         viewModelScope.launch {
-            preferencesManager.setSheetsSpreadsheetId(id)
-            if (id.isNotBlank()) preferencesManager.setSheetsConnected(true)
+            preferencesManager.setSheetsSpreadsheetId(id.trim())
+            val hasOAuth = secureStorageManager.hasOAuthToken()
+            val isConn = (hasOAuth && id.isNotBlank()) || uiState.value.sheetsWebhookUrl.isNotBlank()
+            preferencesManager.setSheetsConnected(isConn)
         }
     }
 
     fun setSheetsSpreadsheetName(name: String) {
         viewModelScope.launch {
-            preferencesManager.setSheetsSpreadsheetName(name)
+            preferencesManager.setSheetsSpreadsheetName(name.trim())
         }
     }
 
-    fun setSheetsAuthToken(token: String) {
+    /**
+     * Stores OAuth token securely into hardware-backed Android Keystore.
+     */
+    fun saveOAuthToken(token: String) {
         viewModelScope.launch {
-            preferencesManager.setSheetsAuthToken(token)
-            if (token.isNotBlank()) preferencesManager.setSheetsConnected(true)
+            secureStorageManager.saveOAuthToken(token.trim())
+            val id = uiState.value.sheetsSpreadsheetId
+            val isConn = token.isNotBlank() && id.isNotBlank()
+            preferencesManager.setSheetsConnected(isConn)
+            if (isConn) {
+                preferencesManager.setSheetsLastError(null)
+                GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
+                GoogleSheetsSyncWorker.enqueuePeriodicSync(context)
+            }
         }
     }
 
     fun setSheetsWebhookUrl(url: String) {
         viewModelScope.launch {
-            preferencesManager.setSheetsWebhookUrl(url)
-            if (url.isNotBlank()) preferencesManager.setSheetsConnected(true)
-        }
-    }
-
-    fun connectSheets() {
-        viewModelScope.launch {
-            preferencesManager.setSheetsConnected(true)
-            GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
-            GoogleSheetsSyncWorker.enqueuePeriodicSync(context)
+            val trimmed = url.trim()
+            preferencesManager.setSheetsWebhookUrl(trimmed)
+            val hasOAuth = secureStorageManager.hasOAuthToken()
+            val isConn = (hasOAuth && uiState.value.sheetsSpreadsheetId.isNotBlank()) || trimmed.isNotBlank()
+            preferencesManager.setSheetsConnected(isConn)
+            if (trimmed.isNotBlank() && !trimmed.startsWith("https://", ignoreCase = true)) {
+                preferencesManager.setSheetsLastError("Webhook URL must use secure HTTPS")
+            } else {
+                preferencesManager.setSheetsLastError(null)
+            }
         }
     }
 
     fun disconnectSheets() {
         viewModelScope.launch {
-            preferencesManager.setSheetsConnected(false)
+            secureStorageManager.clearAllCredentials()
             preferencesManager.setSheetsAuthToken("")
+            preferencesManager.setSheetsConnected(false)
+            preferencesManager.setSheetsSpreadsheetId("")
             preferencesManager.setSheetsWebhookUrl("")
             preferencesManager.setSheetsLastError(null)
         }
@@ -342,8 +354,4 @@ class SettingsViewModel @Inject constructor(
         com.businesstracker.mileage.worker.MileageSyncWorker.enqueueOneTimeSync(context)
         syncSheetsNow()
     }
-
-    private data class Tuple5<A, B, C, D, E>(
-        val v1: A, val v2: B, val v3: C, val v4: D, val v5: E
-    )
 }

@@ -75,8 +75,14 @@ class GoogleSheetsSyncWorker @AssistedInject constructor(
         return when (val result = sheetsSyncService.syncPendingTrips()) {
             is SheetsSyncResult.Success -> Result.success()
             is SheetsSyncResult.NotConfigured -> Result.success()
+            is SheetsSyncResult.PartialSuccess -> Result.retry()
             is SheetsSyncResult.NetworkError -> Result.retry()
+            is SheetsSyncResult.RateLimited -> Result.retry()
+            is SheetsSyncResult.ServerError -> Result.retry()
             is SheetsSyncResult.TokenExpired -> Result.failure()
+            is SheetsSyncResult.AccessDenied -> Result.failure()
+            is SheetsSyncResult.NotFound -> Result.failure()
+            is SheetsSyncResult.InvalidConfiguration -> Result.failure()
             is SheetsSyncResult.HttpError -> {
                 if (result.statusCode in 500..599) Result.retry() else Result.failure()
             }

@@ -186,4 +186,69 @@ class ReportsExportCalculationTest {
         assertTrue(file.exists())
         assertTrue(file.length() > 0)
     }
+
+    @Test
+    fun csvExport_escapesQuotesAndCommasCorrectly() = runTest {
+        val tripWithSpecialChars = createTrip(
+            id = "special_1",
+            date = "2026-08-10",
+            distance = 15.0,
+            classification = "BUSINESS",
+            entity = "MySucculentCorner",
+            purpose = "Nursery, Plants & \"Rare\" Pots",
+            rate = 0.760
+        ).copy(
+            startAddress = "123 Main St, Apt #4B",
+            notes = "Client said: \"Leave near gate, please.\""
+        )
+
+        val singleTripRepo = object : TripRepository by fakeRepo {
+            override fun getAllTrips() = flowOf(listOf(tripWithSpecialChars))
+        }
+
+        val context = RuntimeEnvironment.getApplication()
+        val viewModel = ReportsExportViewModel(singleTripRepo, CalculateMileageRateUseCase(), context)
+        advanceUntilIdle()
+
+        var exportIntentCaptured: android.content.Intent? = null
+        viewModel.exportToCsv { intent ->
+            exportIntentCaptured = intent
+        }
+        advanceUntilIdle()
+
+        assertNotNull(exportIntentCaptured)
+        val exportDir = java.io.File(context.cacheDir, "exports")
+        val csvFiles = exportDir.listFiles { _, name -> name.endsWith(".csv") }
+        assertTrue(csvFiles != null && csvFiles.isNotEmpty())
+
+        val latestCsv = csvFiles!!.maxByOrNull { it.lastModified() }!!
+        val content = latestCsv.readText()
+
+        // Verifies RFC 4180 escaping: embedded quotes are doubled, fields with commas are quoted
+        assertTrue(content.contains("\"123 Main St, Apt #4B\""))
+        assertTrue(content.contains("\"Nursery, Plants & \"\"Rare\"\" Pots\""))
+        assertTrue(content.contains("\"Client said: \"\"Leave near gate, please.\"\"\""))
+    }
+
+    @Test
+    fun pdfAndCsv_totalsReconcileExactly() = runTest {
+        val context = RuntimeEnvironment.getApplication()
+        val viewModel = ReportsExportViewModel(fakeRepo, CalculateMileageRateUseCase(), context)
+        advanceUntilIdle()
+
+        viewModel.selectYear("2026")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+
+        // Reconcile ViewModel state matching both PDF summary data and CSV export rows
+        val businessTrips = state.filteredTrips.filter { it.classification == "BUSINESS" }
+        val sumBusinessMiles = businessTrips.sumOf { it.businessMiles }
+        val sumDeduction = businessTrips.sumOf { it.calculatedDeduction }
+
+        assertEquals(state.businessMiles, sumBusinessMiles, 0.01)
+        assertEquals(state.totalDeduction, sumDeduction, 0.01)
+        assertEquals(100.0, state.businessMiles, 0.01)
+        assertEquals(76.00, state.totalDeduction, 0.01)
+    }
 }

@@ -54,6 +54,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -554,16 +555,27 @@ fun SettingsScreen(
                                         fontWeight = FontWeight.Bold
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
+                                    val isExpired = state.sheetsLastError?.contains("expired", ignoreCase = true) == true || state.sheetsLastError?.contains("reconnect", ignoreCase = true) == true
+                                    val statusText = when {
+                                        isExpired -> "Auth Expired"
+                                        state.isSheetsConnected -> "Connected"
+                                        else -> "Not Connected"
+                                    }
+                                    val statusColor = when {
+                                        isExpired -> SpeedRed
+                                        state.isSheetsConnected -> SucculentPrimary
+                                        else -> SlateNeutral
+                                    }
                                     Surface(
                                         shape = RoundedCornerShape(6.dp),
-                                        color = if (state.isSheetsConnected) SucculentPrimary.copy(alpha = 0.15f) else SlateNeutral.copy(alpha = 0.15f)
+                                        color = statusColor.copy(alpha = 0.15f)
                                     ) {
                                         Text(
-                                            text = if (state.isSheetsConnected) "Connected" else "Not Connected",
+                                            text = statusText,
                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (state.isSheetsConnected) SucculentPrimary else SlateNeutral
+                                            color = statusColor
                                         )
                                     }
                                 }
@@ -655,6 +667,93 @@ fun SettingsScreen(
                                 }
                             }
 
+                            // Secure OAuth 2.0 Credential Status Card
+                            var showTokenInputDialog by remember { mutableStateOf(false) }
+                            var inputTokenText by remember { mutableStateOf("") }
+
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (state.hasOAuthCredential) SucculentPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (state.hasOAuthCredential) Icons.Default.CheckCircle else Icons.Default.Lock,
+                                            contentDescription = null,
+                                            tint = if (state.hasOAuthCredential) SucculentPrimary else SlateNeutral,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = if (state.hasOAuthCredential) "Google Account Authenticated" else "Google OAuth 2.0 Authorization",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = if (state.hasOAuthCredential) "Tokens encrypted in Android Keystore" else "Scope: sheets.googleapis.com",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = SlateNeutral
+                                            )
+                                        }
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { showTokenInputDialog = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                    ) {
+                                        Text(if (state.hasOAuthCredential) "Update" else "Connect", style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
+
+                            if (showTokenInputDialog) {
+                                androidx.compose.material3.AlertDialog(
+                                    onDismissRequest = { showTokenInputDialog = false },
+                                    title = { Text("Secure OAuth Authorization") },
+                                    text = {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Text("Authorize Google Sheets API. The access token is encrypted in Android Keystore and never stored in plain text.")
+                                            OutlinedTextField(
+                                                value = inputTokenText,
+                                                onValueChange = { inputTokenText = it },
+                                                label = { Text("OAuth Access Token") },
+                                                placeholder = { Text("ya29....") },
+                                                singleLine = true,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+                                    },
+                                    confirmButton = {
+                                        Button(
+                                            onClick = {
+                                                if (inputTokenText.isNotBlank()) {
+                                                    viewModel.saveOAuthToken(inputTokenText.trim())
+                                                }
+                                                inputTokenText = ""
+                                                showTokenInputDialog = false
+                                            }
+                                        ) {
+                                            Text("Save Securely")
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { showTokenInputDialog = false }) {
+                                            Text("Cancel")
+                                        }
+                                    }
+                                )
+                            }
+
                             OutlinedTextField(
                                 value = state.sheetsSpreadsheetId,
                                 onValueChange = { viewModel.setSheetsSpreadsheetId(it) },
@@ -666,19 +765,9 @@ fun SettingsScreen(
                             )
 
                             OutlinedTextField(
-                                value = state.sheetsAuthToken,
-                                onValueChange = { viewModel.setSheetsAuthToken(it) },
-                                label = { Text("Google OAuth Access Token (Bearer)") },
-                                placeholder = { Text("Paste OAuth 2.0 access token") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            OutlinedTextField(
                                 value = state.sheetsWebhookUrl,
                                 onValueChange = { viewModel.setSheetsWebhookUrl(it) },
-                                label = { Text("Or Apps Script Webhook URL (Zero-GCP setup)") },
+                                label = { Text("Or Apps Script Webhook URL (HTTPS only)") },
                                 placeholder = { Text("https://script.google.com/macros/s/...") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
