@@ -12,24 +12,34 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
+import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.ui.navigation.MileageBottomBar
 import com.businesstracker.mileage.ui.navigation.MileageNavHost
 import com.businesstracker.mileage.ui.theme.BusinessMileageTrackerTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    @Inject lateinit var activityTransitionManager: ActivityTransitionManager
+    @Inject lateinit var preferencesManager: TrackingPreferencesManager
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ ->
-        // Permissions evaluated
+        checkAndRegisterTransitions()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         requestRequiredPermissions()
+        checkAndRegisterTransitions()
 
         setContent {
             BusinessMileageTrackerTheme {
@@ -47,6 +57,33 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        checkAndRegisterTransitions()
+    }
+
+    private fun checkAndRegisterTransitions() {
+        lifecycleScope.launch {
+            try {
+                val autoTrackEnabled = preferencesManager.isAutoTrackingEnabled.first()
+                if (autoTrackEnabled && hasActivityRecognitionPermission()) {
+                    activityTransitionManager.registerTransitions()
+                }
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun hasActivityRecognitionPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACTIVITY_RECOGNITION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
         }
     }
 

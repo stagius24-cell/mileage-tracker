@@ -46,7 +46,13 @@ class FinalizeTripUseCase @Inject constructor(
         // Calculate distances
         val totalDistanceMiles = (activeTrip.totalDistanceMeters / METERS_PER_MILE).roundToDecimals(2)
 
-        // For unreviewed auto-detected trips, default businessMiles to 0 or total until user classifies
+        // Prevent false trips: discard stationary jitter or movements under 200 meters (0.12 miles)
+        if (totalDistanceMiles < 0.12 && activeTrip.totalDistanceMeters < 200.0) {
+            activeTripRepository.clearActiveTrip(tripId)
+            return@withContext null
+        }
+
+        // For unreviewed auto-detected trips, default businessMiles to 0 until user classifies
         val businessMiles = 0.0
         val applicableRate = rateCalculator.getApplicableRate(dateString)
         val calculatedDeduction = rateCalculator.calculateDeduction(businessMiles, applicableRate)

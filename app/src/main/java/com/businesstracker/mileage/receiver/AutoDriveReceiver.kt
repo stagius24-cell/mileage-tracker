@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.location.Location
 import androidx.core.content.ContextCompat
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.model.TrackingMethod
@@ -13,14 +12,12 @@ import com.businesstracker.mileage.worker.TripDebounceWorker
 import com.google.android.gms.location.ActivityTransition
 import com.google.android.gms.location.ActivityTransitionResult
 import com.google.android.gms.location.DetectedActivity
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
@@ -35,7 +32,6 @@ class AutoDriveReceiver : BroadcastReceiver() {
     }
 
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
-    @Inject lateinit var fusedLocationClient: FusedLocationProviderClient
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
     private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -75,78 +71,48 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
     @SuppressLint("MissingPermission")
     private suspend fun handleVehicleEnter(context: Context) {
-        // 1. Vehicle motion detected: Cancel any active 4-minute debounce timer
+        // 1. Mark in-vehicle state as active and cancel any active 4-minute debounce timer
+        preferencesManager.setInVehicleState(true)
         TripDebounceWorker.cancelDebounce(context)
 
-        // 2. Check if already tracking in foreground
-        if (LocationTrackingService.serviceState.value.isTracking) {
+        // 2. Check if auto tracking is enabled by user
+        val isAutoTrackEnabled = preferencesManager.isAutoTrackingEnabled.first()
+        if (!isAutoTrackEnabled) return
+
+        // 3. Prevent duplicate trips: ensure no tracking service is already running
+        if (LocationTrackingService.serviceState.value.isTracking) return
+        if (preferencesManager.activeTripId.first() != null) return
+
+        // 4. Evaluate work schedule & outside behavior
+        val isWithinSchedule = preferencesManager.isWithinWorkSchedule()
+        val outsideBehavior = preferencesManager.getOutsideScheduleBehavior()
+
+        if (!isWithinSchedule && outsideBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) {
+            // Conserve battery outside work hours: skip tracking completely
             return
         }
 
-        // 3. Acquire current location to evaluate displacement > 200m
-        try {
-            val cts = CancellationTokenSource()
-            fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
-                .addOnSuccessListener { location ->
-                    if (location == null) return@addOnSuccessListener
-                    receiverScope.launch(ioDispatcher) {
-                        evaluateStartDisplacement(context, location)
-                    }
-                }
-        } catch (_: SecurityException) {
-            // Permissions not granted
+        val suggestedBusiness = if (isWithinSchedule) "MySucculentCorner" else "Personal"
+        val tripId = UUID.randomUUID().toString()
+
+        // 5. Start Foreground LocationTrackingService with location type (starts without opening app)
+        val serviceIntent = Intent(context, LocationTrackingService::class.java).apply {
+            action = LocationTrackingService.ACTION_START
+            putExtra(LocationTrackingService.EXTRA_TRIP_ID, tripId)
+            putExtra(LocationTrackingService.EXTRA_TRACKING_METHOD, TrackingMethod.AUTO_DETECTED.value)
+            putExtra(LocationTrackingService.EXTRA_SUGGESTED_BUSINESS, suggestedBusiness)
         }
+
+        ContextCompat.startForegroundService(context, serviceIntent)
     }
 
-    private suspend fun evaluateStartDisplacement(context: Context, currentLocation: Location) {
-        // Query stored anchor
-        var anchorLat: Double? = null
-        var anchorLng: Double? = null
+    private suspend fun handleVehicleExit(context: Context) {
+        // 1. Mark in-vehicle state as false
+        preferencesManager.setInVehicleState(false)
 
-        preferencesManager.activeTripId // access data if needed
-
-        // We check if anchor exists
-        val distanceResults = FloatArray(1)
-
-        // Read current state
-        val isInVehicle = preferencesManager.isInVehicle()
-
-        if (!isInVehicle) {
-            // Set first anchor
-            preferencesManager.setVehicleAnchor(
-                currentLocation.latitude,
-                currentLocation.longitude,
-                currentLocation.time
-            )
-        } else {
-            // Anchor exists: measure distance
-            // If movement > 200m, evaluate schedule and start LocationTrackingService
-            val isWithinSchedule = preferencesManager.isWithinWorkSchedule()
-            val outsideBehavior = preferencesManager.getOutsideScheduleBehavior()
-
-            if (!isWithinSchedule && outsideBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) {
-                // Conserve battery outside work hours: skip tracking
-                preferencesManager.clearVehicleAnchor()
-                return
-            }
-
-            val suggestedBusiness = if (isWithinSchedule) "MySucculentCorner" else "Personal"
-
-            val serviceIntent = Intent(context, LocationTrackingService::class.java).apply {
-                action = LocationTrackingService.ACTION_START
-                putExtra(LocationTrackingService.EXTRA_TRIP_ID, UUID.randomUUID().toString())
-                putExtra(LocationTrackingService.EXTRA_TRACKING_METHOD, TrackingMethod.AUTO_DETECTED.value)
-                putExtra(LocationTrackingService.EXTRA_SUGGESTED_BUSINESS, suggestedBusiness)
-            }
-
-            ContextCompat.startForegroundService(context, serviceIntent)
-            preferencesManager.clearVehicleAnchor()
+        // 2. If a trip is currently active, initiate the 4-minute debounce timer via WorkManager
+        if (LocationTrackingService.serviceState.value.isTracking) {
+            TripDebounceWorker.scheduleDebounce(context)
         }
-    }
-
-    private fun handleVehicleExit(context: Context) {
-        // Stop Debounce Buffer:
-        // Do NOT kill tracking immediately. Initiate 4-minute debounce timer via WorkManager.
-        TripDebounceWorker.scheduleDebounce(context)
     }
 }

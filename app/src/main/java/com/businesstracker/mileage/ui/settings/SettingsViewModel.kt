@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.worker.MileageSyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -51,6 +52,7 @@ private data class CloudflarePrefs(
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val preferencesManager: TrackingPreferencesManager,
+    private val activityTransitionManager: ActivityTransitionManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -111,6 +113,13 @@ class SettingsViewModel @Inject constructor(
     fun setAutoTrackingEnabled(enabled: Boolean) {
         viewModelScope.launch {
             preferencesManager.setAutoTrackingEnabled(enabled)
+            try {
+                if (enabled) {
+                    activityTransitionManager.registerTransitions()
+                } else {
+                    activityTransitionManager.unregisterTransitions()
+                }
+            } catch (_: Exception) {}
         }
     }
 

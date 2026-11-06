@@ -61,8 +61,7 @@
         <receiver
             android:name=".receiver.AutoDriveReceiver"
             android:enabled="true"
-            android:exported="true"
-            android:permission="com.google.android.gms.permission.ACTIVITY_RECOGNITION">
+            android:exported="true">
             <intent-filter>
                 <action android:name="com.businesstracker.mileage.ACTION_ACTIVITY_TRANSITION" />
             </intent-filter>
