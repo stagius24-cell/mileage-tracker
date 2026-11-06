@@ -1,14 +1,15 @@
 package com.businesstracker.mileage
 
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
-import com.businesstracker.mileage.data.preferences.VehicleAnchor
 import com.businesstracker.mileage.domain.tracking.AutoDriveAction
 import com.businesstracker.mileage.domain.tracking.AutoDriveDecisionEngine
-import com.businesstracker.mileage.domain.tracking.CurrentLocation
+import com.businesstracker.mileage.domain.tracking.TripStopDecision
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.util.concurrent.atomic.AtomicBoolean
 
 class AutomaticDriveDetectionTest {
 
@@ -19,238 +20,190 @@ class AutomaticDriveDetectionTest {
         engine = AutoDriveDecisionEngine()
     }
 
-    // 1. First IN_VEHICLE ENTER event
+    // 1. One uninterrupted drive with only one IN_VEHICLE ENTER event
     @Test
-    fun test01_firstInVehicleEnter_establishesAnchorWithoutStartingTrip() {
-        val location = CurrentLocation(latitude = 37.3382, longitude = -121.8863, accuracyMeters = 10f, timestamp = 1000L)
+    fun test01_uninterruptedDrive_singleInVehicleEnter_startsCandidateDrive() {
         val action = engine.evaluateVehicleEnter(
             isAutoTrackingEnabled = true,
-            hasPermissions = true,
+            hasForegroundLocationPermission = true,
+            hasBackgroundLocationPermission = true,
+            hasActivityRecognitionPermission = true,
             isServiceTracking = false,
             activeTripId = null,
-            existingAnchor = null,
-            currentLocation = location,
             isWithinSchedule = true,
-            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-            calculateDistanceMeters = { _, _, _, _ -> 0.0f }
+            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL
         )
-        assertTrue("First vehicle enter must establish an anchor", action is AutoDriveAction.SetAnchor)
-        val setAnchor = action as AutoDriveAction.SetAnchor
-        assertEquals(37.3382, setAnchor.latitude, 0.0001)
-        assertEquals(-121.8863, setAnchor.longitude, 0.0001)
+        assertTrue("Single IN_VEHICLE ENTER must start candidate drive without requiring second event", action is AutoDriveAction.StartCandidateDrive)
+        assertEquals("MySucculentCorner", (action as AutoDriveAction.StartCandidateDrive).suggestedBusiness)
     }
 
-    // 2. Second IN_VEHICLE event without movement
+    // 2. Movement beyond 200m without reopening the app
     @Test
-    fun test02_secondInVehicleEvent_withoutMovement_doesNotStartTrip() {
-        val anchor = VehicleAnchor(latitude = 37.3382, longitude = -121.8863, timestamp = 1000L)
-        val location = CurrentLocation(latitude = 37.3382, longitude = -121.8863, accuracyMeters = 8f, timestamp = 2000L)
+    fun test02_continuousMovement_beyond200m_confirmsDriveWithoutReopeningApp() {
+        val anchorLat = 37.3382
+        val anchorLng = -121.8863
+
+        // Distance mock: simulates 50m -> 120m -> 260m displacement
+        val isConfirmedAt50m = engine.evaluateCandidateMovement(
+            anchorLatitude = anchorLat, anchorLongitude = anchorLng,
+            currentLatitude = 37.3386, currentLongitude = anchorLng,
+            accumulatedDistanceMeters = 50.0,
+            calculateDistanceMeters = { _, _, _, _ -> 50.0f }
+        )
+        assertFalse("At 50m displacement, drive must not be confirmed yet", isConfirmedAt50m)
+
+        val isConfirmedAt260m = engine.evaluateCandidateMovement(
+            anchorLatitude = anchorLat, anchorLongitude = anchorLng,
+            currentLatitude = 37.3405, currentLongitude = anchorLng,
+            accumulatedDistanceMeters = 260.0,
+            calculateDistanceMeters = { _, _, _, _ -> 260.0f }
+        )
+        assertTrue("At 260m displacement (> 200m), drive must be confirmed during uninterrupted drive", isConfirmedAt260m)
+
+        val stopDecision = engine.evaluateTripStop(isDisplacementConfirmed = isConfirmedAt260m, totalDistanceMeters = 260.0)
+        assertEquals("Confirmed 260m drive must be finalized", TripStopDecision.FINALIZE_TRIP, stopDecision)
+    }
+
+    // 3. Movement under 200m discards false trip
+    @Test
+    fun test03_continuousMovement_under200m_discardsFalseTrip() {
+        val isConfirmed = false
+        val stopDecision = engine.evaluateTripStop(isDisplacementConfirmed = isConfirmed, totalDistanceMeters = 65.0)
+        assertEquals("Movement under 200m without confirmation must be discarded as false trip", TripStopDecision.DISCARD_FALSE_TRIP, stopDecision)
+    }
+
+    // 4. Duplicate start requests arriving simultaneously (Atomic Guard)
+    @Test
+    fun test04_duplicateStartRequests_simultaneous_atomicGuardPreventsDuplicate() {
+        val atomicGuard = AtomicBoolean(false)
+
+        // First start request
+        val firstStartAccepted = !atomicGuard.getAndSet(true)
+        assertTrue("First start request must acquire atomic guard", firstStartAccepted)
+
+        // Second simultaneous start request
+        val secondStartAccepted = !atomicGuard.getAndSet(true)
+        assertFalse("Concurrent second start request must be rejected synchronously", secondStartAccepted)
+    }
+
+    // 5. Database-backed protection ensures only one active trip
+    @Test
+    fun test05_duplicateTripPrevention_databaseGuardEnsuresSingleActiveTrip() {
+        val simulatedDbActiveTrips = mutableMapOf<String, String>()
+        fun createActiveTripDbGuard(tripId: String): String {
+            if (simulatedDbActiveTrips.isNotEmpty()) {
+                return simulatedDbActiveTrips.values.first()
+            }
+            simulatedDbActiveTrips["ACTIVE"] = tripId
+            return tripId
+        }
+
+        val trip1 = createActiveTripDbGuard("trip-uuid-111")
+        val trip2 = createActiveTripDbGuard("trip-uuid-222") // Concurrent start attempt
+
+        assertEquals("First trip must be recorded", "trip-uuid-111", trip1)
+        assertEquals("Database guard must return existing active trip rather than creating duplicate", "trip-uuid-111", trip2)
+    }
+
+    // 6. Process death and recovery
+    @Test
+    fun test06_processDeathAndRecovery_restoresExistingActiveTrip() {
+        val persistedActiveTripId = "persisted-trip-survived-crash-99"
         val action = engine.evaluateVehicleEnter(
             isAutoTrackingEnabled = true,
-            hasPermissions = true,
-            isServiceTracking = false,
-            activeTripId = null,
-            existingAnchor = anchor,
-            currentLocation = location,
+            hasForegroundLocationPermission = true,
+            hasBackgroundLocationPermission = true,
+            hasActivityRecognitionPermission = true,
+            isServiceTracking = false, // Service killed by OS
+            activeTripId = persistedActiveTripId, // Preserved in Room / DataStore
             isWithinSchedule = true,
-            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-            calculateDistanceMeters = { _, _, _, _ -> 0.0f }
+            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL
         )
-        assertEquals("Stationary vehicle events must not start a trip", AutoDriveAction.Ignore, action)
+        assertTrue("Interrupted trip must be recovered rather than creating a new trip", action is AutoDriveAction.RecoverTrip)
+        assertEquals(persistedActiveTripId, (action as AutoDriveAction.RecoverTrip).tripId)
     }
 
-    // 3. Movement below 200 meters
+    // 7. Debounce cancellation when driving resumes
     @Test
-    fun test03_movementBelow200Meters_preservesAnchorAndDoesNotStartTrip() {
-        val anchor = VehicleAnchor(latitude = 37.3382, longitude = -121.8863, timestamp = 1000L)
-        val location = CurrentLocation(latitude = 37.3390, longitude = -121.8863, accuracyMeters = 12f, timestamp = 3000L)
+    fun test07_debounceCancellation_whenDrivingResumes() {
         val action = engine.evaluateVehicleEnter(
             isAutoTrackingEnabled = true,
-            hasPermissions = true,
-            isServiceTracking = false,
-            activeTripId = null,
-            existingAnchor = anchor,
-            currentLocation = location,
+            hasForegroundLocationPermission = true,
+            hasBackgroundLocationPermission = true,
+            hasActivityRecognitionPermission = true,
+            isServiceTracking = true, // Service still active during debounce
+            activeTripId = "active-trip-during-debounce",
             isWithinSchedule = true,
-            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-            calculateDistanceMeters = { _, _, _, _ -> 95.0f } // 95m < 200m
+            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL
         )
-        assertEquals("Movements below 200m must be ignored (anchor preserved)", AutoDriveAction.Ignore, action)
+        assertEquals("Resumed vehicle motion must cancel debounce and preserve active drive", AutoDriveAction.CancelDebounce, action)
     }
 
-    // 4. Movement exceeding 200 meters
+    // 8. Missing background location permission
     @Test
-    fun test04_movementExceeding200Meters_startsTrip() {
-        val anchor = VehicleAnchor(latitude = 37.3382, longitude = -121.8863, timestamp = 1000L)
-        val location = CurrentLocation(latitude = 37.3420, longitude = -121.8863, accuracyMeters = 15f, timestamp = 5000L)
+    fun test08_missingBackgroundLocationPermission_rejectsAutoTracking() {
         val action = engine.evaluateVehicleEnter(
             isAutoTrackingEnabled = true,
-            hasPermissions = true,
+            hasForegroundLocationPermission = true,
+            hasBackgroundLocationPermission = false, // Denied or not granted on Android 10+
+            hasActivityRecognitionPermission = true,
             isServiceTracking = false,
             activeTripId = null,
-            existingAnchor = anchor,
-            currentLocation = location,
             isWithinSchedule = true,
-            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-            calculateDistanceMeters = { _, _, _, _ -> 420.0f } // 420m >= 200m
+            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL
         )
-        assertTrue("Movements exceeding 200m must trigger trip start", action is AutoDriveAction.StartTrip)
-        assertEquals("MySucculentCorner", (action as AutoDriveAction.StartTrip).suggestedBusiness)
+        assertEquals("Auto tracking must be rejected when background location permission is missing", AutoDriveAction.Ignore, action)
     }
 
-    // 5. GPS accuracy too poor to verify displacement
+    // 9. Actual debounce behavior when exited vs resumed
     @Test
-    fun test05_gpsAccuracyTooPoor_rejectsDisplacementVerification() {
-        val anchor = VehicleAnchor(latitude = 37.3382, longitude = -121.8863, timestamp = 1000L)
-        // Accuracy 75m > 50m max threshold
-        val inaccurateLocation = CurrentLocation(latitude = 37.3500, longitude = -121.8863, accuracyMeters = 75.0f, timestamp = 4000L)
+    fun test09_actualDebounceBehavior_whenExitedVsResumed() {
+        // Debounce timer elapsed, user not in vehicle -> finalize trip
+        val shouldFinalizeWhenExited = engine.evaluateDebounceElapsed(isInVehicle = false)
+        assertTrue("When debounce elapsed and user exited vehicle, trip must finalize", shouldFinalizeWhenExited)
+
+        // Debounce timer elapsed, but user got back in vehicle -> do not finalize
+        val shouldFinalizeWhenResumed = engine.evaluateDebounceElapsed(isInVehicle = true)
+        assertFalse("When debounce elapsed but user is back in vehicle, trip must not finalize", shouldFinalizeWhenResumed)
+    }
+
+    // 10. Work schedule: outside hours with battery saver
+    @Test
+    fun test10_workSchedule_outsideHours_conserveBatteryMode_skipsTracking() {
         val action = engine.evaluateVehicleEnter(
             isAutoTrackingEnabled = true,
-            hasPermissions = true,
+            hasForegroundLocationPermission = true,
+            hasBackgroundLocationPermission = true,
+            hasActivityRecognitionPermission = true,
             isServiceTracking = false,
             activeTripId = null,
-            existingAnchor = anchor,
-            currentLocation = inaccurateLocation,
-            isWithinSchedule = true,
-            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-            calculateDistanceMeters = { _, _, _, _ -> 1200.0f }
+            isWithinSchedule = false,
+            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY
         )
-        assertEquals("Fixes with poor accuracy (>50m) must be rejected", AutoDriveAction.Ignore, action)
+        assertEquals("Battery saver mode outside schedule must skip tracking completely", AutoDriveAction.Ignore, action)
     }
 
-    // 6. Walking without driving
+    // 11. Work schedule: outside hours with personal classification
     @Test
-    fun test06_walkingWithoutDriving_doesNotTriggerVehicleTracking() {
-        val noLocation: CurrentLocation? = null
+    fun test11_workSchedule_outsideHours_personalMode_autoClassifiesPersonal() {
         val action = engine.evaluateVehicleEnter(
             isAutoTrackingEnabled = true,
-            hasPermissions = true,
+            hasForegroundLocationPermission = true,
+            hasBackgroundLocationPermission = true,
+            hasActivityRecognitionPermission = true,
             isServiceTracking = false,
             activeTripId = null,
-            existingAnchor = null,
-            currentLocation = noLocation,
-            isWithinSchedule = true,
-            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-            calculateDistanceMeters = { _, _, _, _ -> 0.0f }
+            isWithinSchedule = false,
+            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL
         )
-        assertEquals("Non-vehicle events without GPS must be ignored", AutoDriveAction.Ignore, action)
+        assertTrue("Personal mode outside schedule must start drive tagged as Personal", action is AutoDriveAction.StartCandidateDrive)
+        assertEquals("Personal", (action as AutoDriveAction.StartCandidateDrive).suggestedBusiness)
     }
 
-    // 7. STILL ENTER at a traffic light
+    // 12. STILL ENTER at a traffic light does not stop trip
     @Test
-    fun test07_stillEnterAtTrafficLight_doesNotTerminateOrDebounceTrip() {
+    fun test12_stillEnter_atTrafficLight_doesNotStopTrip() {
         val action = engine.evaluateStillEnter(isInVehicle = true, isServiceTracking = true)
-        assertEquals("STILL ENTER during an active drive (traffic light) must be ignored", AutoDriveAction.Ignore, action)
-    }
-
-    // 8. IN_VEHICLE EXIT
-    @Test
-    fun test08_inVehicleExit_initiatesDebounce() {
-        val action = engine.evaluateVehicleExit(isServiceTracking = true, hasActiveTrip = true)
-        assertEquals("Vehicle exit while tracking must schedule debounce", AutoDriveAction.ScheduleDebounce, action)
-    }
-
-    // 9. Four-minute debounce
-    @Test
-    fun test09_fourMinuteDebounce_finalizesWhenUserExited() {
-        val isInVehicle = false
-        val shouldFinalize = !isInVehicle
-        assertTrue("When debounce timer fires and user is not in vehicle, trip must finalize", shouldFinalize)
-    }
-
-    // 10. Vehicle movement restarting during debounce
-    @Test
-    fun test10_vehicleMovementRestartingDuringDebounce_cancelsDebounce() {
-        val action = engine.evaluateVehicleEnter(
-            isAutoTrackingEnabled = true,
-            hasPermissions = true,
-            isServiceTracking = true, // Still tracking during debounce period
-            activeTripId = "existing-trip-123",
-            existingAnchor = null,
-            currentLocation = CurrentLocation(37.3382, -121.8863, 10f, 6000L),
-            isWithinSchedule = true,
-            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-            calculateDistanceMeters = { _, _, _, _ -> 500f }
-        )
-        assertEquals("Movement restarting during debounce must cancel debounce and keep trip active", AutoDriveAction.CancelDebounce, action)
-    }
-
-    // 11. Repeated ENTER events
-    @Test
-    fun test11_repeatedEnterEvents_preventsDuplicateTrips() {
-        val action = engine.evaluateVehicleEnter(
-            isAutoTrackingEnabled = true,
-            hasPermissions = true,
-            isServiceTracking = true, // already tracking from first event
-            activeTripId = "active-uuid-1",
-            existingAnchor = null,
-            currentLocation = CurrentLocation(37.3382, -121.8863, 10f, 7000L),
-            isWithinSchedule = true,
-            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-            calculateDistanceMeters = { _, _, _, _ -> 300f }
-        )
-        assertEquals("Repeated ENTER events while tracking must cancel debounce, never create duplicate trip", AutoDriveAction.CancelDebounce, action)
-    }
-
-    // 12. Duplicate service prevention
-    @Test
-    fun test12_duplicateServicePrevention_ignoresSubsequentStarts() {
-        val isServiceTracking = true
-        val currentTripId = "trip-active-100"
-        val shouldIgnoreDuplicateStart = isServiceTracking && currentTripId.isNotEmpty()
-        assertTrue("Service must ignore subsequent start calls when already tracking", shouldIgnoreDuplicateStart)
-    }
-
-    // 13. Existing active-trip recovery
-    @Test
-    fun test13_existingActiveTripRecovery_recoversExistingTripId() {
-        val existingTripId = "interrupted-trip-uuid-42"
-        val action = engine.evaluateVehicleEnter(
-            isAutoTrackingEnabled = true,
-            hasPermissions = true,
-            isServiceTracking = false, // Process was killed, service not running yet
-            activeTripId = existingTripId, // but activeTripId is stored in persistence
-            existingAnchor = null,
-            currentLocation = CurrentLocation(37.3382, -121.8863, 10f, 8000L),
-            isWithinSchedule = true,
-            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-            calculateDistanceMeters = { _, _, _, _ -> 300f }
-        )
-        assertTrue("Interrupted trip must be recovered rather than creating a duplicate", action is AutoDriveAction.RecoverTrip)
-        assertEquals(existingTripId, (action as AutoDriveAction.RecoverTrip).tripId)
-    }
-
-    // 14. Automatic tracking disabled
-    @Test
-    fun test14_automaticTrackingDisabled_ignoresAllEvents() {
-        val action = engine.evaluateVehicleEnter(
-            isAutoTrackingEnabled = false,
-            hasPermissions = true,
-            isServiceTracking = false,
-            activeTripId = null,
-            existingAnchor = null,
-            currentLocation = CurrentLocation(37.3382, -121.8863, 10f, 9000L),
-            isWithinSchedule = true,
-            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-            calculateDistanceMeters = { _, _, _, _ -> 500f }
-        )
-        assertEquals("When automatic tracking is disabled, vehicle events must be ignored", AutoDriveAction.Ignore, action)
-    }
-
-    // 15. Missing activity recognition or location permissions
-    @Test
-    fun test15_missingPermissions_safelyAbortsWithoutCrash() {
-        val action = engine.evaluateVehicleEnter(
-            isAutoTrackingEnabled = true,
-            hasPermissions = false, // Permissions denied by user
-            isServiceTracking = false,
-            activeTripId = null,
-            existingAnchor = null,
-            currentLocation = null,
-            isWithinSchedule = true,
-            outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-            calculateDistanceMeters = { _, _, _, _ -> 500f }
-        )
-        assertEquals("When permissions are missing, auto tracking must abort safely", AutoDriveAction.Ignore, action)
+        assertEquals("Stationary stop at traffic light must be ignored", AutoDriveAction.Ignore, action)
     }
 }

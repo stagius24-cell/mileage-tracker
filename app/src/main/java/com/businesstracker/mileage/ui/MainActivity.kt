@@ -109,7 +109,15 @@ class MainActivity : ComponentActivity() {
         } else {
             true
         }
-        return hasFine && hasActivity
+        val hasBackground = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+        return hasFine && hasActivity && hasBackground
     }
 
     private fun hasActivityRecognitionPermission(): Boolean {

@@ -1,17 +1,20 @@
 package com.businesstracker.mileage.domain.tracking
 
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
-import com.businesstracker.mileage.data.preferences.VehicleAnchor
 import javax.inject.Inject
 import javax.inject.Singleton
 
 sealed interface AutoDriveAction {
-    data class SetAnchor(val latitude: Double, val longitude: Double, val timestamp: Long) : AutoDriveAction
-    data class StartTrip(val suggestedBusiness: String) : AutoDriveAction
+    data class StartCandidateDrive(val suggestedBusiness: String) : AutoDriveAction
     data class RecoverTrip(val tripId: String) : AutoDriveAction
     object CancelDebounce : AutoDriveAction
     object ScheduleDebounce : AutoDriveAction
     object Ignore : AutoDriveAction
+}
+
+enum class TripStopDecision {
+    FINALIZE_TRIP,
+    DISCARD_FALSE_TRIP
 }
 
 data class CurrentLocation(
@@ -27,29 +30,32 @@ class AutoDriveDecisionEngine @Inject constructor() {
     companion object {
         const val MIN_DISPLACEMENT_METERS = 200.0f
         const val MAX_ACCURACY_THRESHOLD_METERS = 50.0f
-        const val ANCHOR_MAX_AGE_MS = 30 * 60 * 1000L // 30 minutes
     }
 
     /**
      * Evaluates an IN_VEHICLE ENTER activity transition event.
+     * Operates reliably on a SINGLE transition event without requiring subsequent ENTER broadcasts.
      */
     fun evaluateVehicleEnter(
         isAutoTrackingEnabled: Boolean,
-        hasPermissions: Boolean,
+        hasForegroundLocationPermission: Boolean,
+        hasBackgroundLocationPermission: Boolean,
+        hasActivityRecognitionPermission: Boolean,
         isServiceTracking: Boolean,
         activeTripId: String?,
-        existingAnchor: VehicleAnchor?,
-        currentLocation: CurrentLocation?,
         isWithinSchedule: Boolean,
-        outsideScheduleBehavior: String,
-        calculateDistanceMeters: (Double, Double, Double, Double) -> Float
+        outsideScheduleBehavior: String
     ): AutoDriveAction {
-        // 1. Respect user settings & required permissions
-        if (!isAutoTrackingEnabled || !hasPermissions) {
+        // 1. Strict permission & setting enforcement
+        val hasAllPermissions = hasForegroundLocationPermission &&
+                hasBackgroundLocationPermission &&
+                hasActivityRecognitionPermission
+
+        if (!isAutoTrackingEnabled || !hasAllPermissions) {
             return AutoDriveAction.Ignore
         }
 
-        // 2. Prevent duplicate service & trips if already tracking
+        // 2. Prevent duplicate starts if already tracking
         if (isServiceTracking) {
             return AutoDriveAction.CancelDebounce
         }
@@ -59,48 +65,50 @@ class AutoDriveDecisionEngine @Inject constructor() {
             return AutoDriveAction.RecoverTrip(activeTripId)
         }
 
-        // 4. Require valid GPS fix
-        if (currentLocation == null) {
+        // 4. Work schedule evaluation
+        if (!isWithinSchedule && outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) {
             return AutoDriveAction.Ignore
         }
 
-        // 5. GPS Accuracy check: Reject poor fixes to avoid GPS drift false trips
-        if (currentLocation.accuracyMeters > MAX_ACCURACY_THRESHOLD_METERS) {
-            return AutoDriveAction.Ignore
+        val suggestedBusiness = if (isWithinSchedule) "MySucculentCorner" else "Personal"
+
+        // 5. Start candidate drive tracking session immediately from the single ENTER event
+        return AutoDriveAction.StartCandidateDrive(suggestedBusiness)
+    }
+
+    /**
+     * Evaluates continuous GPS updates during an uninterrupted drive to confirm 200m movement.
+     */
+    fun evaluateCandidateMovement(
+        anchorLatitude: Double,
+        anchorLongitude: Double,
+        currentLatitude: Double,
+        currentLongitude: Double,
+        accumulatedDistanceMeters: Double,
+        calculateDistanceMeters: (Double, Double, Double, Double) -> Float
+    ): Boolean {
+        if (accumulatedDistanceMeters >= MIN_DISPLACEMENT_METERS) {
+            return true
         }
-
-        // 6. Anchor evaluation
-        val isAnchorExpired = existingAnchor != null &&
-                (currentLocation.timestamp - existingAnchor.timestamp) > ANCHOR_MAX_AGE_MS
-
-        if (existingAnchor == null || isAnchorExpired) {
-            // First IN_VEHICLE event or expired anchor: establish initial vehicle anchor
-            return AutoDriveAction.SetAnchor(
-                latitude = currentLocation.latitude,
-                longitude = currentLocation.longitude,
-                timestamp = currentLocation.timestamp
-            )
-        }
-
-        // 7. Calculate actual displacement from anchor
-        val displacementMeters = calculateDistanceMeters(
-            existingAnchor.latitude,
-            existingAnchor.longitude,
-            currentLocation.latitude,
-            currentLocation.longitude
+        val distanceResults = calculateDistanceMeters(
+            anchorLatitude, anchorLongitude,
+            currentLatitude, currentLongitude
         )
+        return distanceResults >= MIN_DISPLACEMENT_METERS
+    }
 
-        return if (displacementMeters >= MIN_DISPLACEMENT_METERS) {
-            // Meaningful movement confirmed >= 200m
-            if (!isWithinSchedule && outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) {
-                AutoDriveAction.Ignore
-            } else {
-                val suggestedBusiness = if (isWithinSchedule) "MySucculentCorner" else "Personal"
-                AutoDriveAction.StartTrip(suggestedBusiness)
-            }
+    /**
+     * Evaluates whether a stopping drive has met the displacement threshold or was a false trip.
+     */
+    fun evaluateTripStop(
+        isDisplacementConfirmed: Boolean,
+        totalDistanceMeters: Double
+    ): TripStopDecision {
+        val totalDistanceMiles = totalDistanceMeters / 1609.344
+        return if (isDisplacementConfirmed || totalDistanceMeters >= MIN_DISPLACEMENT_METERS || totalDistanceMiles >= 0.12) {
+            TripStopDecision.FINALIZE_TRIP
         } else {
-            // Movement below 200m: maintain anchor, do not start trip
-            AutoDriveAction.Ignore
+            TripStopDecision.DISCARD_FALSE_TRIP
         }
     }
 
@@ -126,7 +134,14 @@ class AutoDriveDecisionEngine @Inject constructor() {
         isInVehicle: Boolean,
         isServiceTracking: Boolean
     ): AutoDriveAction {
-        // If in-vehicle or tracking, STILL is just a temporary stop (e.g. red light). Do not end trip.
         return AutoDriveAction.Ignore
+    }
+
+    /**
+     * Evaluates 4-minute debounce elapsed timer.
+     */
+    fun evaluateDebounceElapsed(isInVehicle: Boolean): Boolean {
+        // True if trip should finalize; false if vehicle resumed motion
+        return !isInVehicle
     }
 }

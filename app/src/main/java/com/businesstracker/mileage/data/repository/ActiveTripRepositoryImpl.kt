@@ -32,7 +32,13 @@ class ActiveTripRepositoryImpl @Inject constructor(
         longitude: Double,
         trackingMethod: String,
         suggestedBusiness: String
-    ) = withContext(ioDispatcher) {
+    ): ActiveTripEntity = withContext(ioDispatcher) {
+        // Database-backed guard: ensure only one active trip can exist
+        val existing = activeTripDao.getActiveTrip()
+        if (existing != null) {
+            return@withContext existing
+        }
+
         val now = System.currentTimeMillis()
         val activeTrip = ActiveTripEntity(
             id = tripId,
@@ -49,17 +55,20 @@ class ActiveTripRepositoryImpl @Inject constructor(
             suggestedBusiness = suggestedBusiness
         )
         activeTripDao.insertActiveTrip(activeTrip)
-        activeTripDao.insertWaypoint(
-            ActiveWaypointEntity(
-                tripId = tripId,
-                latitude = latitude,
-                longitude = longitude,
-                altitude = 0.0,
-                accuracy = 10f,
-                speed = 0f,
-                timestamp = now
+        if (latitude != 0.0 || longitude != 0.0) {
+            activeTripDao.insertWaypoint(
+                ActiveWaypointEntity(
+                    tripId = tripId,
+                    latitude = latitude,
+                    longitude = longitude,
+                    altitude = 0.0,
+                    accuracy = 10f,
+                    speed = 0f,
+                    timestamp = now
+                )
             )
-        )
+        }
+        activeTrip
     }
 
     override suspend fun recordWaypoint(tripId: String, waypoint: Waypoint) = withContext(ioDispatcher) {

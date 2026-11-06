@@ -118,6 +118,68 @@ fun SettingsScreen(
                         )
                     }
 
+                    // Background Location Permission Warning (if permission missing on Android 10+)
+                    if (state.autoTrackingEnabled && !state.hasBackgroundLocationPermission) {
+                        val localContext = androidx.compose.ui.platform.LocalContext.current
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Security,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.error,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Background Location Required",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "To detect drives automatically when your phone is in your pocket or vehicle, set Location to 'Allow all the time'.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Button(
+                                    onClick = {
+                                        val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                            data = android.net.Uri.fromParts("package", localContext.packageName, null)
+                                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        localContext.startActivity(intent)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                                ) {
+                                    Text("Open Location Settings", color = Color.White)
+                                }
+                            }
+                        }
+                    } else if (state.autoTrackingEnabled && state.isAutoTrackingReady) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(SucculentPrimary)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Auto Drive Detection Ready • Active in Background",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SucculentPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
                     // Work Schedule & Day-of-Week Filters (Visible when Auto Tracking is ON)
                     AnimatedVisibility(
                         visible = state.autoTrackingEnabled,

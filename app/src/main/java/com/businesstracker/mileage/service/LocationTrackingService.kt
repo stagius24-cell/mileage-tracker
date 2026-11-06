@@ -59,6 +59,9 @@ class LocationTrackingService : Service() {
 
         private val _serviceState = MutableStateFlow(TrackingServiceState())
         val serviceState: StateFlow<TrackingServiceState> = _serviceState.asStateFlow()
+
+        // Atomic guard ensuring single-session initialization and preventing race conditions
+        private val isStartingOrRunning = java.util.concurrent.atomic.AtomicBoolean(false)
     }
 
     @Inject lateinit var fusedLocationClient: FusedLocationProviderClient
@@ -78,6 +81,8 @@ class LocationTrackingService : Service() {
     private var tripStartTime: Long = 0L
     private var totalDistanceMeters: Double = 0.0
     private var lastAcceptedWaypoint: Waypoint? = null
+    private var anchorWaypoint: Waypoint? = null
+    private var isDisplacementConfirmed: Boolean = false
     private var isPaused: Boolean = false
     private var waypointCount: Int = 0
 
@@ -115,8 +120,8 @@ class LocationTrackingService : Service() {
         method: TrackingMethod,
         suggestedBusiness: String
     ) {
-        if (_serviceState.value.isTracking && currentTripId.isNotEmpty()) {
-            // Prevent duplicate service starts for the same running trip
+        if (isStartingOrRunning.getAndSet(true)) {
+            // Atomic guard: synchronous race-free check preventing duplicate starts
             return
         }
 
@@ -145,37 +150,38 @@ class LocationTrackingService : Service() {
         )
 
         serviceScope.launch(ioDispatcher) {
-            // Interruption Recovery: Check if active trip already exists in Room
-            val existingTrip = activeTripRepository.getActiveTrip()
+            // Database-backed guard ensures only one active trip exists
+            val activeTrip = activeTripRepository.createActiveTrip(
+                tripId = currentTripId,
+                latitude = 0.0,
+                longitude = 0.0,
+                trackingMethod = trackingMethod.value,
+                suggestedBusiness = suggestedBusiness
+            )
+            currentTripId = activeTrip.id
+            preferencesManager.setActiveTripId(currentTripId)
+
+            val existingTrip = if (activeTrip.totalDistanceMeters > 0.0 || activeTrip.id != tripId) activeTrip else null
+
             if (existingTrip != null) {
                 // Resume in-progress trip after process termination or system recovery
-                currentTripId = existingTrip.id
-                preferencesManager.setActiveTripId(currentTripId)
                 tripStartTime = existingTrip.startTime
                 totalDistanceMeters = existingTrip.totalDistanceMeters
+                if (totalDistanceMeters >= 200.0) {
+                    isDisplacementConfirmed = true
+                }
                 val recoveredWaypoints = activeTripRepository.getWaypoints(currentTripId)
                 waypointCount = recoveredWaypoints.size
-                lastAcceptedWaypoint = recoveredWaypoints.lastOrNull() ?: Waypoint(
-                    latitude = existingTrip.lastLatitude,
-                    longitude = existingTrip.lastLongitude,
-                    timestamp = existingTrip.lastTimestamp
-                )
+                lastAcceptedWaypoint = recoveredWaypoints.lastOrNull()
+                anchorWaypoint = recoveredWaypoints.firstOrNull()
             } else {
                 // New tracking session
-                preferencesManager.setActiveTripId(currentTripId)
-                tripStartTime = System.currentTimeMillis()
+                tripStartTime = activeTrip.startTime
                 totalDistanceMeters = 0.0
                 waypointCount = 0
                 lastAcceptedWaypoint = null
-
-                // Acquire initial fast fix or wait for first callback
-                activeTripRepository.createActiveTrip(
-                    tripId = currentTripId,
-                    latitude = 0.0,
-                    longitude = 0.0,
-                    trackingMethod = trackingMethod.value,
-                    suggestedBusiness = suggestedBusiness
-                )
+                anchorWaypoint = null
+                isDisplacementConfirmed = false
             }
 
             startLocationUpdates()
@@ -213,6 +219,26 @@ class LocationTrackingService : Service() {
                     totalDistanceMeters += filterResult.deltaDistanceMeters
                     lastAcceptedWaypoint = acceptedWaypoint
                     waypointCount++
+
+                    if (anchorWaypoint == null) {
+                        anchorWaypoint = acceptedWaypoint
+                    }
+
+                    // Continuous drive displacement verification:
+                    // Verifies movement >= 200m during an uninterrupted drive
+                    if (!isDisplacementConfirmed) {
+                        val distanceResults = FloatArray(1)
+                        Location.distanceBetween(
+                            anchorWaypoint!!.latitude,
+                            anchorWaypoint!!.longitude,
+                            acceptedWaypoint.latitude,
+                            acceptedWaypoint.longitude,
+                            distanceResults
+                        )
+                        if (distanceResults[0] >= 200.0f || totalDistanceMeters >= 200.0) {
+                            isDisplacementConfirmed = true
+                        }
+                    }
 
                     // Interruption Recovery: Persist waypoint and progress directly to Room
                     activeTripRepository.recordWaypoint(currentTripId, acceptedWaypoint)
@@ -257,6 +283,20 @@ class LocationTrackingService : Service() {
 
             tickerJob?.cancel()
 
+            // False trip prevention: if movement is under 200m and not confirmed, discard without polluting DB
+            val distanceMiles = totalDistanceMeters / 1609.344
+            if (!isDisplacementConfirmed && totalDistanceMeters < 200.0 && distanceMiles < 0.12) {
+                if (currentTripId.isNotEmpty()) {
+                    activeTripRepository.clearActiveTrip(currentTripId)
+                    preferencesManager.setActiveTripId(null)
+                }
+                _serviceState.value = TrackingServiceState(isTracking = false)
+                isStartingOrRunning.set(false)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf()
+                return@launch
+            }
+
             // Finalize trip and persist to Room database
             if (currentTripId.isNotEmpty()) {
                 val finalizedTrip = finalizeTripUseCase.execute(currentTripId, trackingMethod)
@@ -269,9 +309,16 @@ class LocationTrackingService : Service() {
             }
 
             _serviceState.value = TrackingServiceState(isTracking = false)
+            isStartingOrRunning.set(false)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        isStartingOrRunning.set(false)
+        releaseWakeLock()
     }
 
     private fun startDurationTicker() {

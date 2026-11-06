@@ -37,12 +37,25 @@ class ActivityTransitionManager @Inject constructor(
 
     @SuppressLint("MissingPermission")
     suspend fun registerTransitions(): Boolean {
+        // Enforce required permissions before registering background transitions
+        val fineGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!fineGranted) return false
+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+            val activityGranted = androidx.core.content.ContextCompat.checkSelfPermission(
                 context,
                 android.Manifest.permission.ACTIVITY_RECOGNITION
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            if (!granted) return false
+            if (!activityGranted) return false
+
+            val bgLocationGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!bgLocationGranted) return false
         }
 
         val transitions = listOf(

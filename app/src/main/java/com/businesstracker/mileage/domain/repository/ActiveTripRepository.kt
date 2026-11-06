@@ -13,7 +13,7 @@ interface ActiveTripRepository {
         longitude: Double,
         trackingMethod: String,
         suggestedBusiness: String
-    )
+    ): ActiveTripEntity
     suspend fun recordWaypoint(tripId: String, waypoint: Waypoint)
     suspend fun updateTripProgress(
         tripId: String,

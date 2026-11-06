@@ -6,22 +6,17 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.location.Location
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.tracking.AutoDriveAction
 import com.businesstracker.mileage.domain.tracking.AutoDriveDecisionEngine
-import com.businesstracker.mileage.domain.tracking.CurrentLocation
 import com.businesstracker.mileage.service.LocationTrackingService
 import com.businesstracker.mileage.worker.TripDebounceWorker
 import com.google.android.gms.location.ActivityTransition
 import com.google.android.gms.location.ActivityTransitionResult
 import com.google.android.gms.location.DetectedActivity
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.Priority
-import com.google.android.gms.tasks.CancellationTokenSource
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -29,7 +24,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import javax.inject.Inject
 
@@ -43,7 +37,6 @@ class AutoDriveReceiver : BroadcastReceiver() {
     }
 
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
-    @Inject lateinit var fusedLocationClient: FusedLocationProviderClient
     @Inject lateinit var decisionEngine: AutoDriveDecisionEngine
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
@@ -57,7 +50,6 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
         receiverScope.launch(ioDispatcher) {
             try {
-                // Process transition events in chronological order
                 val sortedEvents = result.transitionEvents.sortedBy { it.elapsedRealTimeNanos }
                 for (event in sortedEvents) {
                     when (event.activityType) {
@@ -86,17 +78,23 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
     @SuppressLint("MissingPermission")
     private suspend fun handleVehicleEnter(context: Context) {
-        // 1. Update in-vehicle state independently from anchor or trip state
+        // 1. Update in-vehicle state independently
         preferencesManager.setInVehicleState(true)
 
-        // 2. Permission evaluation
+        // 2. Strict permission verification (Foreground, Background, Activity Recognition)
         val hasFine = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
         val hasCoarse = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
-        val hasLocation = hasFine || hasCoarse
+        val hasForegroundLocation = hasFine || hasCoarse
+
+        val hasBackgroundLocation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else true
 
         val hasActivity = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ContextCompat.checkSelfPermission(
@@ -104,33 +102,21 @@ class AutoDriveReceiver : BroadcastReceiver() {
             ) == PackageManager.PERMISSION_GRANTED
         } else true
 
-        val hasPermissions = hasLocation && hasActivity
         val isAutoTrackingEnabled = preferencesManager.isAutoTrackingEnabled.first()
         val isTracking = LocationTrackingService.serviceState.value.isTracking
         val activeTripId = preferencesManager.activeTripId.first()
-        val existingAnchor = preferencesManager.getVehicleAnchor()
-
-        val currentLocation: CurrentLocation? = if (hasLocation) {
-            getCurrentLocation()
-        } else null
-
         val isWithinSchedule = preferencesManager.isWithinWorkSchedule()
         val outsideBehavior = preferencesManager.getOutsideScheduleBehavior()
 
         val action = decisionEngine.evaluateVehicleEnter(
             isAutoTrackingEnabled = isAutoTrackingEnabled,
-            hasPermissions = hasPermissions,
+            hasForegroundLocationPermission = hasForegroundLocation,
+            hasBackgroundLocationPermission = hasBackgroundLocation,
+            hasActivityRecognitionPermission = hasActivity,
             isServiceTracking = isTracking,
             activeTripId = activeTripId,
-            existingAnchor = existingAnchor,
-            currentLocation = currentLocation,
             isWithinSchedule = isWithinSchedule,
-            outsideScheduleBehavior = outsideBehavior,
-            calculateDistanceMeters = { lat1, lon1, lat2, lon2 ->
-                val results = FloatArray(1)
-                Location.distanceBetween(lat1, lon1, lat2, lon2, results)
-                results[0]
-            }
+            outsideScheduleBehavior = outsideBehavior
         )
 
         when (action) {
@@ -141,13 +127,8 @@ class AutoDriveReceiver : BroadcastReceiver() {
                 TripDebounceWorker.cancelDebounce(context)
                 startTrackingService(context, action.tripId, "MySucculentCorner")
             }
-            is AutoDriveAction.SetAnchor -> {
+            is AutoDriveAction.StartCandidateDrive -> {
                 TripDebounceWorker.cancelDebounce(context)
-                preferencesManager.setVehicleAnchor(action.latitude, action.longitude, action.timestamp)
-            }
-            is AutoDriveAction.StartTrip -> {
-                TripDebounceWorker.cancelDebounce(context)
-                preferencesManager.clearVehicleAnchor()
                 val newTripId = UUID.randomUUID().toString()
                 startTrackingService(context, newTripId, action.suggestedBusiness)
             }
@@ -155,13 +136,12 @@ class AutoDriveReceiver : BroadcastReceiver() {
                 TripDebounceWorker.scheduleDebounce(context)
             }
             is AutoDriveAction.Ignore -> {
-                // Movement below threshold, invalid accuracy, or tracking disabled
+                // Tracking disabled, permissions missing, or battery saver outside schedule
             }
         }
     }
 
     private suspend fun handleVehicleExit(context: Context) {
-        // Mark in-vehicle state as false
         preferencesManager.setInVehicleState(false)
 
         val isTracking = LocationTrackingService.serviceState.value.isTracking
@@ -182,26 +162,6 @@ class AutoDriveReceiver : BroadcastReceiver() {
         val isTracking = LocationTrackingService.serviceState.value.isTracking
 
         decisionEngine.evaluateStillEnter(isInVehicle, isTracking)
-        // Does not terminate or debounce active drive (user is stationary at red light or in traffic)
-    }
-
-    @SuppressLint("MissingPermission")
-    private suspend fun getCurrentLocation(): CurrentLocation? {
-        return try {
-            val cts = CancellationTokenSource()
-            val location = fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token).await()
-                ?: fusedLocationClient.lastLocation.await()
-            if (location != null) {
-                CurrentLocation(
-                    latitude = location.latitude,
-                    longitude = location.longitude,
-                    accuracyMeters = if (location.hasAccuracy()) location.accuracy else 999.0f,
-                    timestamp = location.time
-                )
-            } else null
-        } catch (_: Exception) {
-            null
-        }
     }
 
     private fun startTrackingService(context: Context, tripId: String, suggestedBusiness: String) {

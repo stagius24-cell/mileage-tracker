@@ -1,6 +1,10 @@
 package com.businesstracker.mileage.ui.settings
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
@@ -17,6 +21,8 @@ import javax.inject.Inject
 
 data class SettingsUiState(
     val autoTrackingEnabled: Boolean = true,
+    val hasBackgroundLocationPermission: Boolean = true,
+    val isAutoTrackingReady: Boolean = true,
     val scheduleFilteringEnabled: Boolean = true,
     val workDays: Set<String> = setOf("MON", "TUE", "WED", "THU", "FRI"),
     val workHoursStart: String = "08:00",
@@ -86,13 +92,39 @@ class SettingsViewModel @Inject constructor(
         CloudflarePrefs(endpoint, clientId, secret, token)
     }
 
+    private fun hasBackgroundLocationPermission(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
+
+    private fun hasRequiredPermissions(): Boolean {
+        val hasFine = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasActivity = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.ACTIVITY_RECOGNITION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else true
+        return hasFine && hasActivity && hasBackgroundLocationPermission()
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         generalFlow,
         scheduleFlow,
         cloudflareFlow
     ) { general, schedule, cf ->
+        val hasBg = hasBackgroundLocationPermission()
+        val isReady = general.autoTrackingEnabled && hasRequiredPermissions()
         SettingsUiState(
             autoTrackingEnabled = general.autoTrackingEnabled,
+            hasBackgroundLocationPermission = hasBg,
+            isAutoTrackingReady = isReady,
             scheduleFilteringEnabled = schedule.filteringEnabled,
             workDays = schedule.workDays,
             workHoursStart = schedule.startTime,
