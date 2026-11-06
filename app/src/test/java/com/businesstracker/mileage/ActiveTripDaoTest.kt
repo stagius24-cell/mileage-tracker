@@ -18,7 +18,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(manifest = Config.NONE)
 class ActiveTripDaoTest {
 
     private lateinit var database: ExpenseTrackerDatabase

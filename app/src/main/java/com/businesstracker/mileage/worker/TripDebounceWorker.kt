@@ -14,7 +14,7 @@ import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
 import com.businesstracker.mileage.domain.usecase.FinalizeTripUseCase
-import com.businesstracker.mileage.notification.NotificationHelper
+import com.businesstracker.mileage.service.NotificationHelper
 import com.businesstracker.mileage.service.LocationTrackingService
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
