@@ -522,9 +522,18 @@ open class GoogleSheetsSyncService @Inject constructor(
     }
 
     internal suspend fun syncViaWebhook(webhookUrl: String, trips: List<TripEntity>): SheetsSyncResult {
-        // Enforce HTTPS validation using OkHttp HttpUrl
+        // Enforce HTTPS validation using OkHttp HttpUrl and strict host presence
         val parsedUrl = webhookUrl.toHttpUrlOrNull()
-        if (parsedUrl == null || !parsedUrl.isHttps || parsedUrl.host.isBlank()) {
+        val schemeEnd = webhookUrl.indexOf("://")
+        val rawHost = if (schemeEnd != -1) {
+            webhookUrl.substring(schemeEnd + 3)
+                .substringBefore('/')
+                .substringBefore('?')
+                .substringBefore('#')
+                .substringBefore(':')
+        } else ""
+
+        if (parsedUrl == null || !parsedUrl.isHttps || parsedUrl.host.isBlank() || rawHost.isBlank()) {
             val err = "Invalid Webhook URL: must be a valid URL using HTTPS protocol."
             preferencesManager.setSheetsLastError(err)
             return SheetsSyncResult.InvalidConfiguration(err)

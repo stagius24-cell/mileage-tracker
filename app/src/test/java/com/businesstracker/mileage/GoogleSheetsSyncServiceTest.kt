@@ -559,7 +559,12 @@ class GoogleSheetsSyncServiceTest {
         val service = createService()
 
         configureWebhook("https:///path/only")
-        val result = service.syncPendingTrips()
+        var result = service.syncPendingTrips()
+        assertTrue(result is SheetsSyncResult.InvalidConfiguration)
+        assertEquals(0, markedSyncedTripIds.size)
+
+        configureWebhook("https://:8080/path")
+        result = service.syncPendingTrips()
         assertTrue(result is SheetsSyncResult.InvalidConfiguration)
         assertEquals(0, markedSyncedTripIds.size)
     }
