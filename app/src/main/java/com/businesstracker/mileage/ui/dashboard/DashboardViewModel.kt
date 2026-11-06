@@ -144,7 +144,7 @@ class DashboardViewModel @Inject constructor(
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
+        started = SharingStarted.Eagerly,
         initialValue = DashboardUiState(
             selectedMonthName = now.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
         )
