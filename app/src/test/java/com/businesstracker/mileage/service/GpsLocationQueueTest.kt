@@ -192,29 +192,43 @@ class GpsLocationQueueTest {
         val tripId = "trip-global-ordering"
         val processedTimestamps = Collections.synchronizedList(mutableListOf<Long>())
 
+        // Multiple overlapping batches arriving in interleaved fashion
+        val batch1 = listOf(1000L, 4000L, 7000L).map {
+            com.businesstracker.mileage.data.local.entity.GpsInboxEntity(
+                tripId = tripId, latitude = 37.0, longitude = -122.0, timestamp = it
+            )
+        }
+        val batch2 = listOf(2000L, 5000L, 8000L).map {
+            com.businesstracker.mileage.data.local.entity.GpsInboxEntity(
+                tripId = tripId, latitude = 37.0, longitude = -122.0, timestamp = it
+            )
+        }
+        val batch3 = listOf(500L, 3000L, 6000L).map {
+            com.businesstracker.mileage.data.local.entity.GpsInboxEntity(
+                tripId = tripId, latitude = 37.0, longitude = -122.0, timestamp = it
+            )
+        }
+
+        // Insert interleaved batches into persistent Room inbox
+        gpsInboxDao.insertFixes(batch1)
+        gpsInboxDao.insertFixes(batch2)
+        gpsInboxDao.insertFixes(batch3)
+
+        // Queue with small batchFetchLimit (3) forces multiple limited-batch queries across batches
         val queue = GpsLocationQueue(
             scope = testScope,
             dispatcher = Dispatchers.Default,
             gpsInboxDao = gpsInboxDao,
             tripIdProvider = { tripId },
-            batchFetchLimit = 20
+            batchFetchLimit = 3
         ) { loc ->
             processedTimestamps.add(loc.time)
         }
 
-        // Multiple overlapping batches arriving in interleaved fashion
-        val batch1 = listOf(1000L, 4000L, 7000L).map { createLocation(37.0, -122.0, it) }
-        val batch2 = listOf(2000L, 5000L, 8000L).map { createLocation(37.0, -122.0, it) }
-        val batch3 = listOf(500L, 3000L, 6000L).map { createLocation(37.0, -122.0, it) }
-
-        queue.enqueueBatchSync(batch1)
-        queue.enqueueBatchSync(batch2)
-        queue.enqueueBatchSync(batch3)
-
         queue.drainAndClose()
 
         val expected = listOf(500L, 1000L, 2000L, 3000L, 4000L, 5000L, 6000L, 7000L, 8000L)
-        assertEquals("Queue must process items in strictly ascending global timestamp order", expected, processedTimestamps.toList())
+        assertEquals("Queue must process items in strictly ascending global timestamp order across batches", expected, processedTimestamps.toList())
     }
 
     // BLOCKER 1 & 2: 1,000+ fixes processed with strictly bounded memory (batchFetchLimit)
