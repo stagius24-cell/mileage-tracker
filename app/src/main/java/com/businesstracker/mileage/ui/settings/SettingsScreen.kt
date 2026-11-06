@@ -8,8 +8,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -27,6 +29,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -52,8 +56,11 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 
 @Composable
@@ -71,39 +78,317 @@ fun SettingsScreen(
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // Automatic Drive Detection Setting
+        // Automatic Drive Detection & Work Hours Schedule Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(20.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Automatic Drive Detection",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Low-power Activity Recognition automatically detects drives and notifies you to review.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    // Master Auto Tracking Switch
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Automatic Drive Detection",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Low-power Activity Recognition automatically detects drives and notifies you to review.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+
+                        Switch(
+                            checked = state.autoTrackingEnabled,
+                            onCheckedChange = { viewModel.setAutoTrackingEnabled(it) },
+                            colors = SwitchDefaults.colors(checkedThumbColor = SucculentPrimary)
                         )
                     }
 
-                    Switch(
-                        checked = state.autoTrackingEnabled,
-                        onCheckedChange = { viewModel.setAutoTrackingEnabled(it) },
-                        colors = SwitchDefaults.colors(checkedThumbColor = SucculentPrimary)
-                    )
+                    // Work Schedule & Day-of-Week Filters (Visible when Auto Tracking is ON)
+                    AnimatedVisibility(
+                        visible = state.autoTrackingEnabled,
+                        enter = expandVertically(tween(300)) + fadeIn(tween(300)),
+                        exit = shrinkVertically(tween(300)) + fadeOut(tween(300))
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                            // Schedule Filter Toggle Row
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Schedule,
+                                        contentDescription = null,
+                                        tint = SucculentPrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column {
+                                        Text(
+                                            text = "Work Hours & Days Filter",
+                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
+                                        )
+                                        Text(
+                                            text = "Customize business drive tracking schedule",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                        )
+                                    }
+                                }
+
+                                Switch(
+                                    checked = state.scheduleFilteringEnabled,
+                                    onCheckedChange = { viewModel.setScheduleFilteringEnabled(it) },
+                                    colors = SwitchDefaults.colors(checkedThumbColor = SucculentPrimary)
+                                )
+                            }
+
+                            if (state.scheduleFilteringEnabled) {
+                                // 1. Days of Week Selector
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = "ACTIVE WORK DAYS",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            letterSpacing = 1.sp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = SlateNeutral
+                                    )
+
+                                    val days = listOf(
+                                        "MON" to "Mon",
+                                        "TUE" to "Tue",
+                                        "WED" to "Wed",
+                                        "THU" to "Thu",
+                                        "FRI" to "Fri",
+                                        "SAT" to "Sat",
+                                        "SUN" to "Sun"
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        days.forEach { (code, label) ->
+                                            val isSelected = state.workDays.contains(code)
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(40.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        if (isSelected) SucculentPrimary else MaterialTheme.colorScheme.surfaceVariant
+                                                    )
+                                                    .clickable { viewModel.toggleWorkDay(code) },
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Text(
+                                                    text = label,
+                                                    style = MaterialTheme.typography.labelSmall.copy(
+                                                        fontSize = 11.sp,
+                                                        fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium
+                                                    ),
+                                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 2. Work Hours Range
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = "WORK HOURS WINDOW",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            letterSpacing = 1.sp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = SlateNeutral
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedTextField(
+                                            value = state.workHoursStart,
+                                            onValueChange = { viewModel.setWorkHoursStart(it) },
+                                            label = { Text("Start Time") },
+                                            placeholder = { Text("08:00") },
+                                            modifier = Modifier.weight(1f),
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+
+                                        Text(
+                                            text = "to",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = SlateNeutral
+                                        )
+
+                                        OutlinedTextField(
+                                            value = state.workHoursEnd,
+                                            onValueChange = { viewModel.setWorkHoursEnd(it) },
+                                            label = { Text("End Time") },
+                                            placeholder = { Text("18:00") },
+                                            modifier = Modifier.weight(1f),
+                                            singleLine = true,
+                                            shape = RoundedCornerShape(12.dp)
+                                        )
+                                    }
+                                }
+
+                                // 3. Outside Schedule Behavior Selector
+                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Text(
+                                        text = "OUTSIDE SCHEDULE BEHAVIOR",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            letterSpacing = 1.sp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = SlateNeutral
+                                    )
+
+                                    val isClassifyPersonal = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL
+                                    val isConserveBattery = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY
+
+                                    // Option A: Auto-Classify as Personal
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .border(
+                                                width = if (isClassifyPersonal) 2.dp else 1.dp,
+                                                color = if (isClassifyPersonal) SucculentPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                                shape = RoundedCornerShape(12.dp)
+                                            )
+                                            .clickable {
+                                                viewModel.setOutsideScheduleBehavior(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL)
+                                            },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (isClassifyPersonal) SucculentPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(14.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(20.dp)
+                                                    .clip(CircleShape)
+                                                    .border(
+                                                        2.dp,
+                                                        if (isClassifyPersonal) SucculentPrimary else SlateNeutral,
+                                                        CircleShape
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (isClassifyPersonal) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(10.dp)
+                                                            .clip(CircleShape)
+                                                            .background(SucculentPrimary)
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(
+                                                    text = "Auto-classify as Personal Drive",
+                                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                                                )
+                                                Text(
+                                                    text = "Logs drive and automatically marks as Personal without tax deduction.",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Option B: Turn Off to Conserve Battery
+                                    Surface(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(12.dp))
+                                            .border(
+                                                width = if (isConserveBattery) 2.dp else 1.dp,
+                                                color = if (isConserveBattery) SucculentPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                                shape = RoundedCornerShape(12.dp)
+                                            )
+                                            .clickable {
+                                                viewModel.setOutsideScheduleBehavior(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY)
+                                            },
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (isConserveBattery) SucculentPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(14.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(20.dp)
+                                                    .clip(CircleShape)
+                                                    .border(
+                                                        2.dp,
+                                                        if (isConserveBattery) SucculentPrimary else SlateNeutral,
+                                                        CircleShape
+                                                    ),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                if (isConserveBattery) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(10.dp)
+                                                            .clip(CircleShape)
+                                                            .background(SucculentPrimary)
+                                                    )
+                                                }
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(
+                                                    text = "Turn Off Tracking (Conserve Battery)",
+                                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
+                                                )
+                                                Text(
+                                                    text = "Stops GPS & Activity Detection outside work schedule to save battery.",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

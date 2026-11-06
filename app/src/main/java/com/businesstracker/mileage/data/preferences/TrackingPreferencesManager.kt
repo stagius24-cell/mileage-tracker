@@ -39,6 +39,19 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_DEFAULT_VEHICLE = stringPreferencesKey("default_vehicle")
         private val KEY_CUSTOM_CATEGORIES = stringPreferencesKey("custom_categories")
 
+        // Work Schedule & Auto-Classification Keys
+        private val KEY_SCHEDULE_FILTERING_ENABLED = booleanPreferencesKey("schedule_filtering_enabled")
+        private val KEY_WORK_DAYS = stringPreferencesKey("work_days")
+        private val KEY_WORK_HOURS_START = stringPreferencesKey("work_hours_start")
+        private val KEY_WORK_HOURS_END = stringPreferencesKey("work_hours_end")
+        private val KEY_OUTSIDE_SCHEDULE_BEHAVIOR = stringPreferencesKey("outside_schedule_behavior")
+
+        const val BEHAVIOR_CLASSIFY_PERSONAL = "CLASSIFY_PERSONAL"
+        const val BEHAVIOR_CONSERVE_BATTERY = "CONSERVE_BATTERY"
+        const val DEFAULT_WORK_DAYS = "MON,TUE,WED,THU,FRI"
+        const val DEFAULT_WORK_START = "08:00"
+        const val DEFAULT_WORK_END = "18:00"
+
         const val DEFAULT_CF_ENDPOINT = "https://app.mysucculentcorner.com/api/expense/mileage"
     }
 
@@ -50,6 +63,97 @@ class TrackingPreferencesManager @Inject constructor(
         context.dataStore.edit { prefs ->
             prefs[KEY_AUTO_TRACKING_ENABLED] = enabled
         }
+    }
+
+    // Work Schedule & Drive Filtering
+    val isScheduleFilteringEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SCHEDULE_FILTERING_ENABLED] ?: true
+    }
+
+    suspend fun setScheduleFilteringEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SCHEDULE_FILTERING_ENABLED] = enabled
+        }
+    }
+
+    val workDays: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_WORK_DAYS] ?: DEFAULT_WORK_DAYS
+    }
+
+    suspend fun setWorkDays(days: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_WORK_DAYS] = days
+        }
+    }
+
+    val workHoursStart: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_WORK_HOURS_START] ?: DEFAULT_WORK_START
+    }
+
+    suspend fun setWorkHoursStart(time: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_WORK_HOURS_START] = time
+        }
+    }
+
+    val workHoursEnd: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_WORK_HOURS_END] ?: DEFAULT_WORK_END
+    }
+
+    suspend fun setWorkHoursEnd(time: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_WORK_HOURS_END] = time
+        }
+    }
+
+    val outsideScheduleBehavior: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_OUTSIDE_SCHEDULE_BEHAVIOR] ?: BEHAVIOR_CLASSIFY_PERSONAL
+    }
+
+    suspend fun setOutsideScheduleBehavior(behavior: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_OUTSIDE_SCHEDULE_BEHAVIOR] = behavior
+        }
+    }
+
+    suspend fun isWithinWorkSchedule(): Boolean {
+        val prefs = context.dataStore.data.first()
+        val filteringEnabled = prefs[KEY_SCHEDULE_FILTERING_ENABLED] ?: true
+        if (!filteringEnabled) return true
+
+        val now = java.time.LocalDateTime.now()
+        val dayCode = when (now.dayOfWeek) {
+            java.time.DayOfWeek.MONDAY -> "MON"
+            java.time.DayOfWeek.TUESDAY -> "TUE"
+            java.time.DayOfWeek.WEDNESDAY -> "WED"
+            java.time.DayOfWeek.THURSDAY -> "THU"
+            java.time.DayOfWeek.FRIDAY -> "FRI"
+            java.time.DayOfWeek.SATURDAY -> "SAT"
+            java.time.DayOfWeek.SUNDAY -> "SUN"
+        }
+
+        val activeDays = (prefs[KEY_WORK_DAYS] ?: DEFAULT_WORK_DAYS)
+            .split(",")
+            .map { it.trim().uppercase() }
+
+        if (dayCode !in activeDays) return false
+
+        val startStr = prefs[KEY_WORK_HOURS_START] ?: DEFAULT_WORK_START
+        val endStr = prefs[KEY_WORK_HOURS_END] ?: DEFAULT_WORK_END
+
+        return try {
+            val startTime = java.time.LocalTime.parse(startStr)
+            val endTime = java.time.LocalTime.parse(endStr)
+            val curTime = now.toLocalTime()
+            !curTime.isBefore(startTime) && !curTime.isAfter(endTime)
+        } catch (_: Exception) {
+            true
+        }
+    }
+
+    suspend fun getOutsideScheduleBehavior(): String {
+        val prefs = context.dataStore.data.first()
+        return prefs[KEY_OUTSIDE_SCHEDULE_BEHAVIOR] ?: BEHAVIOR_CLASSIFY_PERSONAL
     }
 
     val defaultBusinessEntity: Flow<String> = context.dataStore.data.map { prefs ->

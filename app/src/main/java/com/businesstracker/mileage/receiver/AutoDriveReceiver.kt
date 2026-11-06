@@ -120,12 +120,23 @@ class AutoDriveReceiver : BroadcastReceiver() {
             )
         } else {
             // Anchor exists: measure distance
-            // If movement > 200m, start LocationTrackingService
+            // If movement > 200m, evaluate schedule and start LocationTrackingService
+            val isWithinSchedule = preferencesManager.isWithinWorkSchedule()
+            val outsideBehavior = preferencesManager.getOutsideScheduleBehavior()
+
+            if (!isWithinSchedule && outsideBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) {
+                // Conserve battery outside work hours: skip tracking
+                preferencesManager.clearVehicleAnchor()
+                return
+            }
+
+            val suggestedBusiness = if (isWithinSchedule) "MySucculentCorner" else "Personal"
+
             val serviceIntent = Intent(context, LocationTrackingService::class.java).apply {
                 action = LocationTrackingService.ACTION_START
                 putExtra(LocationTrackingService.EXTRA_TRIP_ID, UUID.randomUUID().toString())
                 putExtra(LocationTrackingService.EXTRA_TRACKING_METHOD, TrackingMethod.AUTO_DETECTED.value)
-                putExtra(LocationTrackingService.EXTRA_SUGGESTED_BUSINESS, "MySucculentCorner")
+                putExtra(LocationTrackingService.EXTRA_SUGGESTED_BUSINESS, suggestedBusiness)
             }
 
             ContextCompat.startForegroundService(context, serviceIntent)

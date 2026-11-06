@@ -255,7 +255,9 @@ class LocationTrackingService : Service() {
             if (currentTripId.isNotEmpty()) {
                 val finalizedTrip = finalizeTripUseCase.execute(currentTripId, trackingMethod)
                 finalizedTrip?.let { trip ->
-                    notificationHelper.showTripDetectedNotification(trip.id, trip.totalDistanceMiles)
+                    if (trip.classification == com.businesstracker.mileage.domain.model.TripClassification.UNREVIEWED.value) {
+                        notificationHelper.showTripDetectedNotification(trip.id, trip.totalDistanceMiles)
+                    }
                 }
                 preferencesManager.setActiveTripId(null)
             }

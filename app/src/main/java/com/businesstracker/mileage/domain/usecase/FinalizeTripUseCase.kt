@@ -54,10 +54,21 @@ class FinalizeTripUseCase @Inject constructor(
         // Serialize waypoints JSON
         val waypointsJson = gson.toJson(waypoints)
 
-        // Default business entity
-        val businessEntity = activeTrip.suggestedBusiness.ifEmpty {
-            BusinessEntity.MY_SUCCULENT_CORNER.displayName
+        // Determine if drive was tagged as Personal (outside work hours auto-classification)
+        val isPersonalDrive = activeTrip.suggestedBusiness.equals("Personal", ignoreCase = true)
+        val businessEntity = if (isPersonalDrive) {
+            BusinessEntity.PERSONAL.displayName
+        } else {
+            activeTrip.suggestedBusiness.ifEmpty {
+                BusinessEntity.MY_SUCCULENT_CORNER.displayName
+            }
         }
+        val classification = if (isPersonalDrive) {
+            TripClassification.PERSONAL.value
+        } else {
+            TripClassification.UNREVIEWED.value
+        }
+        val purpose = if (isPersonalDrive) "Personal Drive" else TripPurpose.NURSERY_PICKUP
 
         val tripEntity = TripEntity(
             id = tripId,
@@ -73,9 +84,9 @@ class FinalizeTripUseCase @Inject constructor(
             totalDistanceMiles = totalDistanceMiles,
             businessMiles = businessMiles,
             businessEntity = businessEntity,
-            purpose = TripPurpose.NURSERY_PICKUP,
+            purpose = purpose,
             trackingMethod = trackingMethod.value,
-            classification = TripClassification.UNREVIEWED.value,
+            classification = classification,
             applicableRate = applicableRate,
             calculatedDeduction = calculatedDeduction,
             notes = null,
