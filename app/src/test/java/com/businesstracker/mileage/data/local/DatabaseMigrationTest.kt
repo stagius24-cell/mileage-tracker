@@ -325,5 +325,4 @@ class DatabaseMigrationTest {
         cursor.close()
         db.close()
     }
-    }
 }
