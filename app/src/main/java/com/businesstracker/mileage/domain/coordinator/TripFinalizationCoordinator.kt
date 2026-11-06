@@ -108,7 +108,8 @@ class TripFinalizationCoordinator @Inject constructor(
                     speed = entity.speed,
                     timestamp = entity.timestamp,
                     sequenceNumber = entity.sequenceNumber,
-                    elapsedRealtimeNanos = entity.elapsedRealtimeNanos
+                    elapsedRealtimeNanos = entity.elapsedRealtimeNanos,
+                    bootCount = entity.bootCount
                 )
             }
 

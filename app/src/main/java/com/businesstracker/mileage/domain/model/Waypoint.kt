@@ -8,5 +8,6 @@ data class Waypoint(
     val speed: Float = 0.0f,
     val timestamp: Long = System.currentTimeMillis(),
     val sequenceNumber: Long = 0L,
-    val elapsedRealtimeNanos: Long = 0L
+    val elapsedRealtimeNanos: Long = 0L,
+    val bootCount: Int = 0
 )

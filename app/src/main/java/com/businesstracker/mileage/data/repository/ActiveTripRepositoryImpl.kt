@@ -79,7 +79,8 @@ class ActiveTripRepositoryImpl @Inject constructor(
                 altitude = waypoint.altitude,
                 accuracy = waypoint.accuracy,
                 speed = waypoint.speed,
-                timestamp = waypoint.timestamp
+                timestamp = waypoint.timestamp,
+                bootCount = waypoint.bootCount
             )
         )
         Unit
@@ -109,7 +110,8 @@ class ActiveTripRepositoryImpl @Inject constructor(
                 speed = it.speed,
                 timestamp = it.timestamp,
                 sequenceNumber = it.sequenceNumber,
-                elapsedRealtimeNanos = it.elapsedRealtimeNanos
+                elapsedRealtimeNanos = it.elapsedRealtimeNanos,
+                bootCount = it.bootCount
             )
         }
     }
@@ -125,7 +127,8 @@ class ActiveTripRepositoryImpl @Inject constructor(
                     speed = it.speed,
                     timestamp = it.timestamp,
                     sequenceNumber = it.sequenceNumber,
-                    elapsedRealtimeNanos = it.elapsedRealtimeNanos
+                    elapsedRealtimeNanos = it.elapsedRealtimeNanos,
+                    bootCount = it.bootCount
                 )
             }
         }.flowOn(ioDispatcher)

@@ -12,6 +12,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.ServiceCompat
+import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.GpsInboxDao
 import com.businesstracker.mileage.data.local.TripLifecycleDao
 import com.businesstracker.mileage.data.local.TripSequenceDao
@@ -21,6 +22,7 @@ import com.businesstracker.mileage.domain.model.FilterResult
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.Waypoint
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
+import com.businesstracker.mileage.domain.service.BootCountProvider
 import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.FinalizeTripUseCase
@@ -98,6 +100,8 @@ class LocationTrackingService : Service() {
     @Inject lateinit var drainPendingGpsFixesUseCase: DrainPendingGpsFixesUseCase
     @Inject lateinit var tripLifecycleDao: TripLifecycleDao
     @Inject lateinit var tripSequenceDao: TripSequenceDao
+    @Inject lateinit var database: ExpenseTrackerDatabase
+    @Inject lateinit var bootCountProvider: BootCountProvider
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -188,7 +192,9 @@ class LocationTrackingService : Service() {
                 tripIdProvider = { currentTripId },
                 batchFetchLimit = 100,
                 drainPendingGpsFixesUseCase = drainPendingGpsFixesUseCase,
-                tripSequenceDao = tripSequenceDao
+                tripSequenceDao = tripSequenceDao,
+                database = database,
+                bootCountProvider = bootCountProvider
             ) { location ->
                 handleLocationSerialized(location)
             }
@@ -206,7 +212,8 @@ class LocationTrackingService : Service() {
                     currentTripId = activeTrip.id
                     preferencesManager.setActiveTripId(currentTripId)
 
-                    val initialSeq = tripSequenceDao.getLastSequenceNumber(currentTripId) ?: 0L
+                    // Crash-safe sequence reconciliation across trip_sequence, gps_inbox, and active_waypoints
+                    val initialSeq = tripSequenceDao.getReconciledMaxSequence(currentTripId)
                     gpsLocationQueue?.admissionBarrier?.initializeSequence(initialSeq)
 
                     // Track authoritative lifecycle in Room

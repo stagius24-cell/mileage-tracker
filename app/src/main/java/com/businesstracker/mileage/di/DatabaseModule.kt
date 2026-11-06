@@ -35,7 +35,11 @@ object DatabaseModule {
             ExpenseTrackerDatabase.MIGRATION_1_3,
             ExpenseTrackerDatabase.MIGRATION_3_4,
             ExpenseTrackerDatabase.MIGRATION_2_4,
-            ExpenseTrackerDatabase.MIGRATION_1_4
+            ExpenseTrackerDatabase.MIGRATION_1_4,
+            ExpenseTrackerDatabase.MIGRATION_4_5,
+            ExpenseTrackerDatabase.MIGRATION_3_5,
+            ExpenseTrackerDatabase.MIGRATION_2_5,
+            ExpenseTrackerDatabase.MIGRATION_1_5
         )
         .build()
     }

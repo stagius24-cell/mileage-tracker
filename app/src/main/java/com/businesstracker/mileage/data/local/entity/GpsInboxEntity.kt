@@ -47,5 +47,8 @@ data class GpsInboxEntity(
     val speed: Float = 0f,
 
     @ColumnInfo(name = "timestamp")
-    val timestamp: Long
+    val timestamp: Long,
+
+    @ColumnInfo(name = "bootCount", defaultValue = "0")
+    val bootCount: Int = 0
 )

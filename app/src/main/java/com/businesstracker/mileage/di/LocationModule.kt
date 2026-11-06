@@ -1,6 +1,8 @@
 package com.businesstracker.mileage.di
 
 import android.content.Context
+import com.businesstracker.mileage.data.device.AndroidBootCountProvider
+import com.businesstracker.mileage.domain.service.BootCountProvider
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.gson.Gson
@@ -22,6 +24,14 @@ object LocationModule {
         @ApplicationContext context: Context
     ): FusedLocationProviderClient {
         return LocationServices.getFusedLocationProviderClient(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideBootCountProvider(
+        @ApplicationContext context: Context
+    ): BootCountProvider {
+        return AndroidBootCountProvider(context)
     }
 
     @Provides

@@ -219,4 +219,111 @@ class DatabaseMigrationTest {
         cursor.close()
         db.close()
     }
+
+    @Test
+    fun migrate4To5_preservesExistingData_andAddsBootCountColumns() {
+        var db = helper.createDatabase(TEST_DB, 4).apply {
+            execSQL("""
+                INSERT INTO active_trip (id, startTime, startLatitude, startLongitude, lastLatitude, lastLongitude, lastTimestamp, totalDistanceMeters, trackingMethod, isPaused, pausedDurationMillis, suggestedBusiness)
+                VALUES ('active-v4', 1000, 37.33, -121.88, 37.35, -121.89, 2000, 3200.0, 'AUTO_DETECTED', 0, 0, 'MySucculentCorner')
+            """.trimIndent())
+            execSQL("""
+                INSERT INTO active_waypoints (id, tripId, sourceFixId, sequenceNumber, elapsedRealtimeNanos, latitude, longitude, altitude, accuracy, speed, timestamp)
+                VALUES (1, 'active-v4', 10, 5, 5000000000, 37.33, -121.88, 10.0, 5.0, 15.0, 1000)
+            """.trimIndent())
+            execSQL("""
+                INSERT INTO gps_inbox (id, tripId, sequenceNumber, elapsedRealtimeNanos, latitude, longitude, altitude, accuracy, speed, timestamp)
+                VALUES (101, 'active-v4', 6, 6000000000, 37.34, -121.89, 10.0, 5.0, 15.0, 2000)
+            """.trimIndent())
+            close()
+        }
+
+        // Migrate to v5
+        db = helper.runMigrationsAndValidate(TEST_DB, 5, true, ExpenseTrackerDatabase.MIGRATION_4_5)
+
+        // Verify existing active trip, waypoint, and inbox preserved
+        val tripCursor = db.query("SELECT id, totalDistanceMeters FROM active_trip WHERE id = 'active-v4'")
+        assertTrue(tripCursor.moveToFirst())
+        assertEquals("active-v4", tripCursor.getString(0))
+        assertEquals(3200.0, tripCursor.getDouble(1), 0.001)
+        tripCursor.close()
+
+        val wpCursor = db.query("SELECT id, sequenceNumber, elapsedRealtimeNanos, bootCount FROM active_waypoints WHERE id = 1")
+        assertTrue(wpCursor.moveToFirst())
+        assertEquals(1L, wpCursor.getLong(0))
+        assertEquals(5L, wpCursor.getLong(1))
+        assertEquals(5000000000L, wpCursor.getLong(2))
+        assertEquals(0, wpCursor.getInt(3)) // Default bootCount is 0 for legacy records
+        wpCursor.close()
+
+        val inboxCursor = db.query("SELECT id, sequenceNumber, bootCount FROM gps_inbox WHERE id = 101")
+        assertTrue(inboxCursor.moveToFirst())
+        assertEquals(101L, inboxCursor.getLong(0))
+        assertEquals(6L, inboxCursor.getLong(1))
+        assertEquals(0, inboxCursor.getInt(2))
+        inboxCursor.close()
+
+        db.close()
+    }
+
+    @Test
+    fun migrate3To5_compositeMigration_preservesAllData() {
+        var db = helper.createDatabase(TEST_DB, 3).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v3-to-v5', '2026-11-06', 1000, 2000, 37.33, -121.88, 37.35, -121.89, 9.0, 9.0, 'MySucculentCorner', 'Delivery', 'AUTO_DETECTED', 'BUSINESS', 0.67, 6.03, '[]', 'PENDING')
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 5, true, ExpenseTrackerDatabase.MIGRATION_3_5)
+
+        val cursor = db.query("SELECT id, totalDistanceMiles FROM trips WHERE id = 'trip-v3-to-v5'")
+        assertTrue(cursor.moveToFirst())
+        assertEquals("trip-v3-to-v5", cursor.getString(0))
+        assertEquals(9.0, cursor.getDouble(1), 0.001)
+        cursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate2To5_compositeMigration_preservesAllData() {
+        var db = helper.createDatabase(TEST_DB, 2).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v2-to-v5', '2026-11-06', 1000, 2000, 37.33, -121.88, 37.35, -121.89, 11.5, 11.5, 'MySucculentCorner', 'Client Visit', 'AUTO_DETECTED', 'BUSINESS', 0.67, 7.705, '[]', 'PENDING')
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 5, true, ExpenseTrackerDatabase.MIGRATION_2_5)
+
+        val cursor = db.query("SELECT id, totalDistanceMiles FROM trips WHERE id = 'trip-v2-to-v5'")
+        assertTrue(cursor.moveToFirst())
+        assertEquals("trip-v2-to-v5", cursor.getString(0))
+        assertEquals(11.5, cursor.getDouble(1), 0.001)
+        cursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate1To5_compositeMigration_preservesAllData() {
+        var db = helper.createDatabase(TEST_DB, 1).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v1-to-v5', '2026-11-06', 1000, 2000, 37.33, -121.88, 37.35, -121.89, 18.0, 18.0, 'MySucculentCorner', 'Delivery', 'AUTO_DETECTED', 'BUSINESS', 0.67, 12.06, '[]', 'PENDING')
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 5, true, ExpenseTrackerDatabase.MIGRATION_1_5)
+
+        val cursor = db.query("SELECT id, totalDistanceMiles FROM trips WHERE id = 'trip-v1-to-v5'")
+        assertTrue(cursor.moveToFirst())
+        assertEquals("trip-v1-to-v5", cursor.getString(0))
+        assertEquals(18.0, cursor.getDouble(1), 0.001)
+        cursor.close()
+        db.close()
+    }
+    }
 }

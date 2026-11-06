@@ -489,4 +489,61 @@ class GpsInboxProcessorTransactionTest {
         assertEquals(0, database.gpsInboxDao().getPendingCount(tripId))
         assertEquals(2, database.activeTripDao().getWaypointsForTrip(tripId).size)
     }
+
+    @Test
+    fun rebootDetection_bootCountMismatch_withIncreasingElapsedTime_rebaselinesSafely() = runBlocking {
+        val tripId = "trip-reboot-bootcount-mismatch"
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = 10000L,
+                startLatitude = 37.3382,
+                startLongitude = -121.8863,
+                lastLatitude = 37.3382,
+                lastLongitude = -121.8863,
+                lastTimestamp = 10000L,
+                totalDistanceMeters = 0.0,
+                trackingMethod = "AUTO_DETECTED"
+            )
+        )
+
+        // Previous boot (bootCount = 1): 50 hours of elapsed uptime
+        val fiftyHoursNanos = 50L * 3600L * 1_000_000_000L
+        database.activeTripDao().insertWaypoint(
+            com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity(
+                tripId = tripId,
+                sequenceNumber = 1L,
+                elapsedRealtimeNanos = fiftyHoursNanos,
+                latitude = 37.3382,
+                longitude = -121.8863,
+                accuracy = 5f,
+                speed = 15f,
+                timestamp = 10000L,
+                bootCount = 1
+            )
+        )
+
+        // Device reboots to bootCount = 2, and new boot has already reached 60 hours (> 50 hours!)
+        val sixtyHoursNanos = 60L * 3600L * 1_000_000_000L
+        val fixId = database.gpsInboxDao().insertFix(
+            GpsInboxEntity(
+                tripId = tripId,
+                sequenceNumber = 2L,
+                elapsedRealtimeNanos = sixtyHoursNanos,
+                latitude = 37.3400,
+                longitude = -121.8863,
+                accuracy = 5f,
+                speed = 15f,
+                timestamp = 20000L,
+                bootCount = 2
+            )
+        )
+
+        val result = processor.processFixTransaction(fixId)
+        assertTrue("Fix across reboot with increasing elapsed time must be accepted via bootCount mismatch detection", result is GpsInboxProcessor.ProcessResult.Accepted)
+        assertEquals(0, database.gpsInboxDao().getPendingCount(tripId))
+        val waypoints = database.activeTripDao().getWaypointsForTrip(tripId)
+        assertEquals(2, waypoints.size)
+        assertEquals("New waypoint must record bootCount = 2", 2, waypoints.last().bootCount)
+    }
 }

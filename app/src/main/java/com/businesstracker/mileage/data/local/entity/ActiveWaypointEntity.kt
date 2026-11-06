@@ -56,5 +56,8 @@ data class ActiveWaypointEntity(
     val speed: Float,
 
     @ColumnInfo(name = "timestamp")
-    val timestamp: Long
+    val timestamp: Long,
+
+    @ColumnInfo(name = "bootCount", defaultValue = "0")
+    val bootCount: Int = 0
 )

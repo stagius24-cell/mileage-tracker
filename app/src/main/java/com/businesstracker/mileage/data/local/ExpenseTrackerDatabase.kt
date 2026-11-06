@@ -20,7 +20,7 @@ import com.businesstracker.mileage.data.local.entity.TripSequenceEntity
         TripLifecycleEntity::class,
         TripSequenceEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class ExpenseTrackerDatabase : RoomDatabase() {
@@ -115,6 +115,37 @@ abstract class ExpenseTrackerDatabase : RoomDatabase() {
                 MIGRATION_1_2.migrate(db)
                 MIGRATION_2_3.migrate(db)
                 MIGRATION_3_4.migrate(db)
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `gps_inbox` ADD COLUMN `bootCount` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `active_waypoints` ADD COLUMN `bootCount` INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val MIGRATION_3_5 = object : Migration(3, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_3_4.migrate(db)
+                MIGRATION_4_5.migrate(db)
+            }
+        }
+
+        val MIGRATION_2_5 = object : Migration(2, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_2_3.migrate(db)
+                MIGRATION_3_4.migrate(db)
+                MIGRATION_4_5.migrate(db)
+            }
+        }
+
+        val MIGRATION_1_5 = object : Migration(1, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_1_2.migrate(db)
+                MIGRATION_2_3.migrate(db)
+                MIGRATION_3_4.migrate(db)
+                MIGRATION_4_5.migrate(db)
             }
         }
     }

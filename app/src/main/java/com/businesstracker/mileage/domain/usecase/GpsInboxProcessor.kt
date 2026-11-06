@@ -129,7 +129,8 @@ class GpsInboxProcessor @Inject constructor(
                 speed = it.speed,
                 timestamp = it.timestamp,
                 sequenceNumber = it.sequenceNumber,
-                elapsedRealtimeNanos = it.elapsedRealtimeNanos
+                elapsedRealtimeNanos = it.elapsedRealtimeNanos,
+                bootCount = it.bootCount
             )
         }
 
@@ -144,7 +145,7 @@ class GpsInboxProcessor @Inject constructor(
         }
 
         // 4. Execute existing FilterGpsPointUseCase using correct persisted state
-        val filterResult = filterGpsPointUseCase.filter(location, lastWaypoint)
+        val filterResult = filterGpsPointUseCase.filter(location, lastWaypoint, currentBootCount = fix.bootCount)
 
         when (filterResult) {
             is FilterResult.Accepted -> {
@@ -159,7 +160,8 @@ class GpsInboxProcessor @Inject constructor(
                     altitude = fix.altitude,
                     accuracy = fix.accuracy,
                     speed = fix.speed,
-                    timestamp = fix.timestamp
+                    timestamp = fix.timestamp,
+                    bootCount = fix.bootCount
                 )
                 activeTripDao.insertWaypoint(newWaypoint)
 
