@@ -66,11 +66,19 @@ class LocationTrackingService : Service() {
 
         // Atomic guard ensuring single-session initialization and preventing race conditions
         private val isStartingOrRunning = AtomicBoolean(false)
+        private val isDrainingGps = AtomicBoolean(false)
 
-        fun isTrackingRunning(): Boolean = isStartingOrRunning.get() || _serviceState.value.isTracking
+        fun isDraining(): Boolean = isDrainingGps.get()
+
+        fun isTrackingRunning(): Boolean = isStartingOrRunning.get() || _serviceState.value.isTracking || isDrainingGps.get()
+
+        fun setDrainingForTesting(draining: Boolean) {
+            isDrainingGps.set(draining)
+        }
 
         fun resetGuardForTesting() {
             isStartingOrRunning.set(false)
+            isDrainingGps.set(false)
             _serviceState.value = TrackingServiceState()
         }
     }
@@ -168,7 +176,8 @@ class LocationTrackingService : Service() {
             gpsLocationQueue = GpsLocationQueue(
                 scope = serviceScope,
                 dispatcher = ioDispatcher,
-                maxCapacity = 1000
+                maxCapacity = 1000,
+                bufferDir = cacheDir
             ) { location ->
                 handleLocationSerialized(location)
             }
@@ -244,6 +253,7 @@ class LocationTrackingService : Service() {
     private fun cleanupFailedStartup() {
         isStartingOrRunning.set(false)
         isStopping.set(false)
+        isDrainingGps.set(false)
         gpsLocationQueue?.cancelEmergency()
         tickerJob?.cancel()
         try {
@@ -351,6 +361,7 @@ class LocationTrackingService : Service() {
         if (!isStopping.compareAndSet(false, true)) {
             return
         }
+        isDrainingGps.set(true)
         serviceScope.launch(ioDispatcher) {
             try {
                 // 1. Stop receiving new location callbacks
@@ -367,6 +378,7 @@ class LocationTrackingService : Service() {
                 gpsLocationQueue?.drainAndClose()
             } catch (e: Exception) {
                 Log.e("LocationTrackingService", "Waypoint persistence failed during tracking; halting finalization: ${e.message}", e)
+                isDrainingGps.set(false)
                 _serviceState.value = TrackingServiceState(isTracking = false)
                 isStartingOrRunning.set(false)
                 isStopping.set(false)
@@ -374,6 +386,7 @@ class LocationTrackingService : Service() {
                 stopSelf()
                 return@launch
             }
+            isDrainingGps.set(false)
 
             // 4. False trip prevention: if movement is under 200m and not confirmed, discard
             val distanceMiles = totalDistanceMeters / METERS_PER_MILE
@@ -476,6 +489,7 @@ class LocationTrackingService : Service() {
         super.onDestroy()
         isStartingOrRunning.set(false)
         isStopping.set(false)
+        isDrainingGps.set(false)
         gpsLocationQueue?.cancelEmergency()
         tickerJob?.cancel()
         try {

@@ -74,9 +74,10 @@ class TripDebounceWorker @AssistedInject constructor(
 
             // 3. Coordinate finalization with LocationTrackingService
             val method = TrackingMethod.fromString(activeTrip.trackingMethod)
-            var isFinalized = false
+            val isServiceActive = LocationTrackingService.isTrackingRunning() || LocationTrackingService.isDraining()
 
-            if (LocationTrackingService.isTrackingRunning()) {
+            if (isServiceActive) {
+                // Delegate stop to the running service so it stops receiving GPS, drains the queue, and finalizes cleanly
                 val stopIntent = Intent(context, LocationTrackingService::class.java).apply {
                     action = LocationTrackingService.ACTION_STOP
                 }
@@ -86,44 +87,52 @@ class TripDebounceWorker @AssistedInject constructor(
                     Log.w("TripDebounceWorker", "Could not send stop intent to service: ${e.message}")
                 }
 
-                // Wait for service to confirm finalization
+                // Wait for service to finish draining all GPS fixes and finalize the trip
+                var finalizedInDb = false
                 var attempts = 0
-                while (attempts < 25) { // Poll up to 5 seconds
+                while (attempts < 20) { // Poll up to 4 seconds
                     delay(200L)
                     val finalized = tripRepository.getTripById(activeTrip.id)
                     val activeInDb = activeTripRepository.getActiveTrip()
                     if (finalized != null || activeInDb == null) {
-                        isFinalized = true
+                        finalizedInDb = true
+                        break
+                    }
+                    if (!LocationTrackingService.isTrackingRunning() && !LocationTrackingService.isDraining()) {
                         break
                     }
                     attempts++
                 }
-            }
 
-            // Fallback recovery if service was not running or did not finalize within timeout
-            if (!isFinalized) {
-                val finalizedTrip = finalizeTripUseCase.execute(activeTrip.id, method)
-                if (finalizedTrip != null) {
-                    isFinalized = true
-                    if (finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
-                        notificationHelper.showTripDetectedNotification(
-                            finalizedTrip.id,
-                            finalizedTrip.totalDistanceMiles
-                        )
-                    }
-                } else {
-                    // Check if trip was discarded as false trip (<200m) or already finalized
-                    val finalized = tripRepository.getTripById(activeTrip.id)
-                    val activeInDb = activeTripRepository.getActiveTrip()
-                    if (finalized != null || activeInDb == null) {
-                        isFinalized = true
-                    }
+                if (!finalizedInDb) {
+                    // Service is still actively running or draining GPS points.
+                    // The worker MUST NOT finalize prematurely while GPS points are draining.
+                    // Return Result.retry() and preserve the active trip and its preferences.
+                    Log.i("TripDebounceWorker", "Service still running/draining; retrying worker without clearing preferences")
+                    return Result.retry()
                 }
+
+                // Finalization confirmed by service
+                preferencesManager.clearActiveTripId(activeTrip.id)
+                preferencesManager.clearVehicleAnchor()
+                return Result.success()
             }
 
-            if (!isFinalized) {
-                // Return retry so WorkManager can re-attempt finalization safely without data loss
+            // 4. Safe recovery path ONLY when service is completely inactive (killed by OS or device rebooted)
+            val finalizedTrip = finalizeTripUseCase.execute(activeTrip.id, method)
+            val isConfirmed = finalizedTrip != null ||
+                    tripRepository.getTripById(activeTrip.id) != null ||
+                    activeTripRepository.getActiveTrip() == null
+
+            if (!isConfirmed) {
                 return Result.retry()
+            }
+
+            if (finalizedTrip != null && finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
+                notificationHelper.showTripDetectedNotification(
+                    finalizedTrip.id,
+                    finalizedTrip.totalDistanceMiles
+                )
             }
 
             // Only clear preferences after confirmed finalization

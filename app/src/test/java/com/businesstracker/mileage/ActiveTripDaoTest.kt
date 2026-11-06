@@ -284,4 +284,45 @@ class ActiveTripDaoTest {
         val tripBWaypoints = activeTripDao.getWaypointsForTrip(tripBId)
         assertEquals("Waypoints for Trip B must still be intact", 1, tripBWaypoints.size)
     }
+
+    // Regression Test 5: Verify the final saved trip contains the last accepted GPS waypoints
+    @Test
+    fun finalizedTrip_containsAllAcceptedWaypoints_includingFinalFix() = runBlocking {
+        val tripId = "trip-waypoints-final-check"
+        val activeTrip = ActiveTripEntity(
+            id = tripId,
+            startTime = 1000L,
+            startLatitude = 37.3382,
+            startLongitude = -121.8863,
+            lastLatitude = 37.3500, // Final waypoint location
+            lastLongitude = -121.8863,
+            lastTimestamp = 5000L,
+            totalDistanceMeters = 1500.0,
+            trackingMethod = "AUTO_DETECTED",
+            suggestedBusiness = "MySucculentCorner"
+        )
+        activeTripDao.insertActiveTrip(activeTrip)
+
+        // Insert sequential waypoints
+        val w1 = ActiveWaypointEntity(tripId = tripId, latitude = 37.3382, longitude = -121.8863, altitude = 0.0, timestamp = 1000L, speed = 10f, accuracy = 4f)
+        val w2 = ActiveWaypointEntity(tripId = tripId, latitude = 37.3420, longitude = -121.8863, altitude = 0.0, timestamp = 3000L, speed = 15f, accuracy = 4f)
+        val w3Final = ActiveWaypointEntity(tripId = tripId, latitude = 37.3500, longitude = -121.8863, altitude = 0.0, timestamp = 5000L, speed = 20f, accuracy = 4f)
+
+        activeTripDao.insertWaypoint(w1)
+        activeTripDao.insertWaypoint(w2)
+        activeTripDao.insertWaypoint(w3Final)
+
+        // Finalize
+        val finalized = coordinator.finalizeTrip(tripId, TrackingMethod.AUTO_DETECTED)
+        assertNotNull("Finalized trip must not be null", finalized)
+
+        val savedTrip = database.tripDao().getTripById(tripId)
+        assertNotNull("Saved trip must exist in database", savedTrip)
+        assertEquals("End latitude must match final accepted waypoint", 37.3500, savedTrip!!.endLatitude, 0.00001)
+
+        // Verify waypointsJson deserializes all 3 waypoints including the final one
+        val recoveredWaypoints = Gson().fromJson(savedTrip.waypointsJson, Array<com.businesstracker.mileage.domain.model.Waypoint>::class.java)
+        assertEquals("All 3 waypoints must be preserved in the final saved trip", 3, recoveredWaypoints.size)
+        assertEquals("Last waypoint in list must match final accepted fix", 37.3500, recoveredWaypoints.last().latitude, 0.00001)
+    }
 }

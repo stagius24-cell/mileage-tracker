@@ -36,64 +36,70 @@ class GpsLocationQueueTest {
         }
     }
 
-    // FIX 1 & Regression Test 1: GPS queue saturation without dropped or reordered locations
+    // Regression Test 1: More than 1,000 incoming GPS fixes without data loss and bounded memory
     @Test
-    fun gpsQueueSaturation_preservesAllLocationsInExactTimestampOrder() = runBlocking {
+    fun moreThan1000GpsFixes_processedWithoutDataLoss_withBoundedMemory() = runBlocking {
         val processedTimestamps = Collections.synchronizedList(mutableListOf<Long>())
-        val totalLocations = 80
+        val totalLocations = 1200
+        val boundedCapacity = 150 // Strict memory limit
 
         val queue = GpsLocationQueue(
             scope = testScope,
             dispatcher = Dispatchers.Default,
-            maxCapacity = 200
+            maxCapacity = boundedCapacity
         ) { location ->
-            delay(5) // Introduce processing latency to saturate pipeline
             processedTimestamps.add(location.time)
         }
 
-        // Deliver fixes in rapid batches
-        val batch1 = (1..40).map { createLocation(37.3382, -121.8863, it * 1000L) }
-        val batch2 = (41..80).map { createLocation(37.3382, -121.8863, it * 1000L) }
-
-        queue.enqueueBatch(batch1)
-        queue.enqueueBatch(batch2)
+        // Enqueue 1,200 locations in chunks
+        for (chunkStart in 1..totalLocations step 100) {
+            val chunk = (chunkStart until chunkStart + 100).map { i ->
+                createLocation(37.3382, -121.8863, i * 1000L)
+            }
+            queue.enqueueBatch(chunk)
+        }
 
         queue.drainAndClose()
 
-        assertEquals("All enqueued GPS fixes must be processed without loss", totalLocations, processedTimestamps.size)
+        assertEquals("Exactly 1,200 GPS fixes must be consumed without any loss", totalLocations, processedTimestamps.size)
+        assertEquals("Spillover count must be 0 after draining", 0, queue.getSpilloverCount())
 
-        // Verify strictly ascending timestamp order
+        // Verify order across entire 1,200 locations
         for (i in 0 until totalLocations) {
             assertEquals((i + 1) * 1000L, processedTimestamps[i])
         }
     }
 
-    // FIX 1 & Regression Test 2: Queue drain waiting for all pending producer work
+    // Regression Test 2: Multiple batches with overlapping or out-of-order timestamps
     @Test
-    fun queueDrain_waitsForAllPendingProducerWork_beforeReturning() = runBlocking {
-        val processedCount = AtomicInteger(0)
-        val itemCount = 25
+    fun multipleBatches_withOverlappingTimestamps_processedInStrictTimestampOrder() = runBlocking {
+        val processedTimestamps = Collections.synchronizedList(mutableListOf<Long>())
 
         val queue = GpsLocationQueue(
             scope = testScope,
             dispatcher = Dispatchers.Default,
-            maxCapacity = 100
-        ) {
-            delay(10)
-            processedCount.incrementAndGet()
+            maxCapacity = 50
+        ) { location ->
+            delay(5)
+            processedTimestamps.add(location.time)
         }
 
-        val locations = (1..itemCount).map { createLocation(37.0 + it * 0.001, -122.0, it * 1000L) }
-        queue.enqueueBatch(locations)
+        // Three overlapping batches arriving concurrently / out-of-order
+        val batch1 = listOf(1000L, 4000L, 7000L).map { createLocation(37.0, -122.0, it) }
+        val batch2 = listOf(2000L, 5000L, 8000L).map { createLocation(37.0, -122.0, it) }
+        val batch3 = listOf(500L, 3000L, 6000L).map { createLocation(37.0, -122.0, it) }
 
-        // drainAndClose must suspend until all items are fully consumed
+        queue.enqueueBatch(batch1)
+        queue.enqueueBatch(batch2)
+        queue.enqueueBatch(batch3)
+
         queue.drainAndClose()
 
-        assertEquals("drainAndClose must ensure 100% of pending items are consumed prior to returning", itemCount, processedCount.get())
-        assertTrue("Queue must be closed after drainAndClose", queue.isClosed())
+        val expected = listOf(500L, 1000L, 2000L, 3000L, 4000L, 5000L, 6000L, 7000L, 8000L)
+        assertEquals("Consumer must receive points in strictly ascending timestamp order across all batches", expected, processedTimestamps)
     }
 
-    // FIX 1 & Regression Test 3: GPS persistence failure prevents premature finalization
+    // Regression Test: GPS persistence failure prevents premature finalization
     @Test
     fun gpsPersistenceFailure_haltsProcessingAndSurfacesErrorOnDrain() = runBlocking {
         val queue = GpsLocationQueue(
