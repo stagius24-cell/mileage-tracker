@@ -18,6 +18,8 @@ class FilterGpsPointUseCase @Inject constructor() {
 
     /**
      * Evaluates a candidate location against anti-jitter constraints.
+     * Uses monotonic elapsed time if in the same boot session to remain immune to wall-clock or NTP jumps.
+     * Detects boot session changes (reboots) and safely re-baselines using sensor Doppler speed.
      *
      * @param newLocation The incoming Android Location
      * @param lastAcceptedWaypoint The last accepted valid waypoint (null if first point)
@@ -38,7 +40,9 @@ class FilterGpsPointUseCase @Inject constructor() {
             altitude = newLocation.altitude,
             accuracy = newLocation.accuracy,
             speed = newLocation.speed,
-            timestamp = newLocation.time
+            timestamp = newLocation.time,
+            sequenceNumber = lastAcceptedWaypoint?.sequenceNumber?.plus(1L) ?: 0L,
+            elapsedRealtimeNanos = newLocation.elapsedRealtimeNanos
         )
 
         // First point is automatically accepted if accuracy is acceptable
@@ -69,12 +73,40 @@ class FilterGpsPointUseCase @Inject constructor() {
             )
         }
 
-        // 3. Reject impossible speed spikes (> 110 mph)
-        val deltaTimeSeconds = (newLocation.time - lastAcceptedWaypoint.timestamp).coerceAtLeast(1L) / 1000.0
-        val calculatedSpeedMps = deltaDistance / deltaTimeSeconds
-        val sensorSpeedMps = if (newLocation.hasSpeed()) newLocation.speed.toDouble() else calculatedSpeedMps
+        // 3. Monotonic timing & speed check:
+        // Use monotonic elapsed time if in the same boot session (immune to NTP and timezone clock changes).
+        // If elapsedRealtimeNanos reset/decreased, device rebooted: safely re-baseline with sensor Doppler speed.
+        val hasMonotonicBoth = newLocation.elapsedRealtimeNanos > 0L && lastAcceptedWaypoint.elapsedRealtimeNanos > 0L
+        val isSameBootSession = hasMonotonicBoth && newLocation.elapsedRealtimeNanos >= lastAcceptedWaypoint.elapsedRealtimeNanos
+        val isBootSessionReset = hasMonotonicBoth && newLocation.elapsedRealtimeNanos < lastAcceptedWaypoint.elapsedRealtimeNanos
 
-        val speedToCheck = maxOf(calculatedSpeedMps, sensorSpeedMps)
+        val deltaTimeSeconds: Double? = when {
+            isSameBootSession -> {
+                val deltaNanos = newLocation.elapsedRealtimeNanos - lastAcceptedWaypoint.elapsedRealtimeNanos
+                (deltaNanos / 1_000_000_000.0).coerceAtLeast(0.001)
+            }
+            isBootSessionReset -> {
+                // Device reboot detected; monotonic time reset to 0
+                null
+            }
+            else -> {
+                // Fallback for tests/mocks without elapsedRealtimeNanos: use wall-clock delta if positive
+                val wallDeltaMs = newLocation.time - lastAcceptedWaypoint.timestamp
+                if (wallDeltaMs > 0L) wallDeltaMs / 1000.0 else null
+            }
+        }
+
+        val calculatedSpeedMps = if (deltaTimeSeconds != null) {
+            deltaDistance / deltaTimeSeconds
+        } else null
+
+        val sensorSpeedMps = if (newLocation.hasSpeed()) newLocation.speed.toDouble() else null
+
+        val speedToCheck = if (calculatedSpeedMps != null && sensorSpeedMps != null) {
+            maxOf(calculatedSpeedMps, sensorSpeedMps)
+        } else {
+            calculatedSpeedMps ?: sensorSpeedMps ?: (deltaDistance / 5.0)
+        }
         val speedMph = speedToCheck * METERS_PER_SECOND_TO_MPH
 
         if (speedMph > MAX_SPEED_MPH) {

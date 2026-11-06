@@ -325,4 +325,84 @@ class ActiveTripDaoTest {
         assertEquals("All 3 waypoints must be preserved in the final saved trip", 3, recoveredWaypoints.size)
         assertEquals("Last waypoint in list must match final accepted fix", 37.3500, recoveredWaypoints.last().latitude, 0.00001)
     }
+
+    @Test
+    fun finalizeTrip_sub200mMeters_isDiscardedAsFalseTrip() = runBlocking {
+        val tripId = "trip-sub-200m"
+        val activeTrip = ActiveTripEntity(
+            id = tripId,
+            startTime = 1000L,
+            startLatitude = 37.3382,
+            startLongitude = -121.8863,
+            lastLatitude = 37.3395,
+            lastLongitude = -121.8863,
+            lastTimestamp = 3000L,
+            totalDistanceMeters = 199.0, // Strictly < 200.0 meters!
+            trackingMethod = "AUTO_DETECTED",
+            suggestedBusiness = "MySucculentCorner"
+        )
+        activeTripDao.insertActiveTrip(activeTrip)
+
+        val result = coordinator.finalizeTrip(tripId, TrackingMethod.AUTO_DETECTED)
+        assertEquals("Trip under 200m must return null (discarded)", null, result)
+        assertEquals("Trip under 200m must not exist in trips table", null, database.tripDao().getTripById(tripId))
+        assertEquals("Lifecycle must be DISCARDED", "DISCARDED", database.tripLifecycleDao().getState(tripId))
+    }
+
+    @Test
+    fun finalizeTrip_exact200Meters_isSuccessfullyFinalized() = runBlocking {
+        val tripId = "trip-exact-200m"
+        val activeTrip = ActiveTripEntity(
+            id = tripId,
+            startTime = 1000L,
+            startLatitude = 37.3382,
+            startLongitude = -121.8863,
+            lastLatitude = 37.3400,
+            lastLongitude = -121.8863,
+            lastTimestamp = 3000L,
+            totalDistanceMeters = 200.0, // Exactly 200.0 meters
+            trackingMethod = "AUTO_DETECTED",
+            suggestedBusiness = "MySucculentCorner"
+        )
+        activeTripDao.insertActiveTrip(activeTrip)
+
+        val result = coordinator.finalizeTrip(tripId, TrackingMethod.AUTO_DETECTED)
+        assertNotNull("Trip with exactly 200m must finalize", result)
+        assertNotNull("Trip with 200m must exist in trips table", database.tripDao().getTripById(tripId))
+        assertEquals("Lifecycle must be FINALIZED", "FINALIZED", database.tripLifecycleDao().getState(tripId))
+    }
+
+    @Test
+    fun waypoints_orderedStrictlyBySequenceNumber() = runBlocking {
+        val tripId = "trip-waypoint-seq-order"
+        val activeTrip = ActiveTripEntity(
+            id = tripId,
+            startTime = 1000L,
+            startLatitude = 37.3382,
+            startLongitude = -121.8863,
+            lastLatitude = 37.3400,
+            lastLongitude = -121.8863,
+            lastTimestamp = 3000L,
+            totalDistanceMeters = 300.0,
+            trackingMethod = "AUTO_DETECTED",
+            suggestedBusiness = "MySucculentCorner"
+        )
+        activeTripDao.insertActiveTrip(activeTrip)
+
+        // Insert with out-of-order timestamps but ordered sequence numbers
+        val wp2 = ActiveWaypointEntity(tripId = tripId, sequenceNumber = 2L, latitude = 37.2, longitude = -122.2, accuracy = 5f, speed = 10f, timestamp = 1000L)
+        val wp1 = ActiveWaypointEntity(tripId = tripId, sequenceNumber = 1L, latitude = 37.1, longitude = -122.1, accuracy = 5f, speed = 10f, timestamp = 5000L)
+        val wp3 = ActiveWaypointEntity(tripId = tripId, sequenceNumber = 3L, latitude = 37.3, longitude = -122.3, accuracy = 5f, speed = 10f, timestamp = 2000L)
+
+        activeTripDao.insertWaypoint(wp2)
+        activeTripDao.insertWaypoint(wp1)
+        activeTripDao.insertWaypoint(wp3)
+
+        val waypointsAsc = activeTripDao.getWaypointsForTrip(tripId)
+        assertEquals("Waypoints must be ordered by sequenceNumber ASC", listOf(1L, 2L, 3L), waypointsAsc.map { it.sequenceNumber })
+
+        val lastWp = activeTripDao.getLastWaypointForTrip(tripId)
+        assertNotNull(lastWp)
+        assertEquals("Last waypoint must be sequenceNumber 3", 3L, lastWp!!.sequenceNumber)
+    }
 }

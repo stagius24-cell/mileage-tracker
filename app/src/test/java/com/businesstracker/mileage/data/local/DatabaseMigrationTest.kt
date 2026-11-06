@@ -136,4 +136,87 @@ class DatabaseMigrationTest {
         cursor.close()
         db.close()
     }
+
+    @Test
+    fun migrate3To4_preservesExistingData_andAddsTripSequenceAndWaypointColumns() {
+        var db = helper.createDatabase(TEST_DB, 3).apply {
+            execSQL("""
+                INSERT INTO active_trip (id, startTime, startLatitude, startLongitude, lastLatitude, lastLongitude, lastTimestamp, totalDistanceMeters, trackingMethod, isPaused, pausedDurationMillis, suggestedBusiness)
+                VALUES ('active-v3', 1000, 37.33, -121.88, 37.35, -121.89, 2000, 2500.0, 'AUTO_DETECTED', 0, 0, 'MySucculentCorner')
+            """.trimIndent())
+            execSQL("""
+                INSERT INTO active_waypoints (id, tripId, sourceFixId, latitude, longitude, altitude, accuracy, speed, timestamp)
+                VALUES (1, 'active-v3', 10, 37.33, -121.88, 10.0, 5.0, 15.0, 1000)
+            """.trimIndent())
+            close()
+        }
+
+        // Migrate to v4
+        db = helper.runMigrationsAndValidate(TEST_DB, 4, true, ExpenseTrackerDatabase.MIGRATION_3_4)
+
+        // Verify existing active trip and waypoint preserved
+        val tripCursor = db.query("SELECT id, totalDistanceMeters FROM active_trip WHERE id = 'active-v3'")
+        assertTrue(tripCursor.moveToFirst())
+        assertEquals("active-v3", tripCursor.getString(0))
+        assertEquals(2500.0, tripCursor.getDouble(1), 0.001)
+        tripCursor.close()
+
+        val wpCursor = db.query("SELECT id, sequenceNumber, elapsedRealtimeNanos FROM active_waypoints WHERE id = 1")
+        assertTrue(wpCursor.moveToFirst())
+        assertEquals(1L, wpCursor.getLong(0))
+        assertEquals(0L, wpCursor.getLong(1))
+        assertEquals(0L, wpCursor.getLong(2))
+        wpCursor.close()
+
+        // Verify trip_sequence table works in v4
+        db.execSQL("""
+            INSERT INTO trip_sequence (tripId, lastSequenceNumber)
+            VALUES ('active-v3', 42)
+        """.trimIndent())
+        val seqCursor = db.query("SELECT lastSequenceNumber FROM trip_sequence WHERE tripId = 'active-v3'")
+        assertTrue(seqCursor.moveToFirst())
+        assertEquals(42L, seqCursor.getLong(0))
+        seqCursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate2To4_preservesExistingData() {
+        var db = helper.createDatabase(TEST_DB, 2).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v2-to-v4', '2026-11-06', 1000, 2000, 37.33, -121.88, 37.35, -121.89, 7.5, 7.5, 'MySucculentCorner', 'Delivery', 'AUTO_DETECTED', 'BUSINESS', 0.67, 5.025, '[]', 'PENDING')
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 4, true, ExpenseTrackerDatabase.MIGRATION_2_4)
+
+        val cursor = db.query("SELECT id, totalDistanceMiles FROM trips WHERE id = 'trip-v2-to-v4'")
+        assertTrue(cursor.moveToFirst())
+        assertEquals("trip-v2-to-v4", cursor.getString(0))
+        assertEquals(7.5, cursor.getDouble(1), 0.001)
+        cursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate1To4_compositeMigration_preservesAllData() {
+        var db = helper.createDatabase(TEST_DB, 1).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v1-to-v4', '2026-11-06', 1000, 2000, 37.33, -121.88, 37.35, -121.89, 15.0, 15.0, 'MySucculentCorner', 'Delivery', 'AUTO_DETECTED', 'BUSINESS', 0.67, 10.05, '[]', 'PENDING')
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 4, true, ExpenseTrackerDatabase.MIGRATION_1_4)
+
+        val cursor = db.query("SELECT id, totalDistanceMiles FROM trips WHERE id = 'trip-v1-to-v4'")
+        assertTrue(cursor.moveToFirst())
+        assertEquals("trip-v1-to-v4", cursor.getString(0))
+        assertEquals(15.0, cursor.getDouble(1), 0.001)
+        cursor.close()
+        db.close()
+    }
 }

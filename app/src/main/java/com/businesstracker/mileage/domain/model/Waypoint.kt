@@ -6,5 +6,7 @@ data class Waypoint(
     val altitude: Double = 0.0,
     val accuracy: Float = 0.0f,
     val speed: Float = 0.0f,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val sequenceNumber: Long = 0L,
+    val elapsedRealtimeNanos: Long = 0L
 )

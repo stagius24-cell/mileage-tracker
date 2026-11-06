@@ -14,6 +14,7 @@ import android.util.Log
 import androidx.core.app.ServiceCompat
 import com.businesstracker.mileage.data.local.GpsInboxDao
 import com.businesstracker.mileage.data.local.TripLifecycleDao
+import com.businesstracker.mileage.data.local.TripSequenceDao
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.coordinator.TripFinalizationCoordinator
 import com.businesstracker.mileage.domain.model.FilterResult
@@ -96,6 +97,7 @@ class LocationTrackingService : Service() {
     @Inject lateinit var gpsInboxDao: GpsInboxDao
     @Inject lateinit var drainPendingGpsFixesUseCase: DrainPendingGpsFixesUseCase
     @Inject lateinit var tripLifecycleDao: TripLifecycleDao
+    @Inject lateinit var tripSequenceDao: TripSequenceDao
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -185,7 +187,8 @@ class LocationTrackingService : Service() {
                 gpsInboxDao = gpsInboxDao,
                 tripIdProvider = { currentTripId },
                 batchFetchLimit = 100,
-                drainPendingGpsFixesUseCase = drainPendingGpsFixesUseCase
+                drainPendingGpsFixesUseCase = drainPendingGpsFixesUseCase,
+                tripSequenceDao = tripSequenceDao
             ) { location ->
                 handleLocationSerialized(location)
             }
@@ -202,6 +205,9 @@ class LocationTrackingService : Service() {
                     )
                     currentTripId = activeTrip.id
                     preferencesManager.setActiveTripId(currentTripId)
+
+                    val initialSeq = tripSequenceDao.getLastSequenceNumber(currentTripId) ?: 0L
+                    gpsLocationQueue?.admissionBarrier?.initializeSequence(initialSeq)
 
                     // Track authoritative lifecycle in Room
                     try {
@@ -425,8 +431,7 @@ class LocationTrackingService : Service() {
             // Persisted active trip in Room is authoritative
             val persistedActiveTrip = activeTripRepository.getActiveTrip()
             val totalMeters = persistedActiveTrip?.totalDistanceMeters ?: totalDistanceMeters
-            val distanceMiles = totalMeters / METERS_PER_MILE
-            if (!isDisplacementConfirmed && totalMeters < 200.0 && distanceMiles < 0.12) {
+            if (!isDisplacementConfirmed && totalMeters < 200.0) {
                 if (currentTripId.isNotEmpty()) {
                     tripFinalizationCoordinator.discardFalseTrip(currentTripId)
                     preferencesManager.clearActiveTripId(currentTripId)

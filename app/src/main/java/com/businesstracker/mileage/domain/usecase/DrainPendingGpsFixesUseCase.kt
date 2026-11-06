@@ -11,9 +11,10 @@ import javax.inject.Singleton
  *
  * Guarantees:
  * - Drains pending GPS fixes using the atomic GpsInboxProcessor.
- * - Database and processing errors are NEVER swallowed or converted to empty lists.
+ * - Handles all ProcessResult outcomes explicitly, never looping infinitely.
+ * - Distinguishes terminal orphans from unresolved orphans (halts drain, preserves data).
  * - Confirms exact trip pending count is zero before returning.
- * - Throws on any database failure, halting premature finalization.
+ * - Throws on any database or unresolved orphan failure, halting premature finalization.
  */
 @Singleton
 class DrainPendingGpsFixesUseCase @Inject constructor(
@@ -29,7 +30,6 @@ class DrainPendingGpsFixesUseCase @Inject constructor(
         var totalProcessed = 0
 
         while (true) {
-            // Never catch and swallow database exceptions! Propagate so callers halt finalization.
             val pendingFixes = gpsInboxDao.getPendingFixes(tripId, batchLimit)
             if (pendingFixes.isEmpty()) {
                 val remainingCount = gpsInboxDao.getPendingCount(tripId)
@@ -41,8 +41,30 @@ class DrainPendingGpsFixesUseCase @Inject constructor(
 
             for (fix in pendingFixes) {
                 val result = gpsInboxProcessor.processFixTransaction(fix.id)
-                totalProcessed++
-                onFixProcessed?.invoke(result)
+                when (result) {
+                    is GpsInboxProcessor.ProcessResult.Accepted -> {
+                        totalProcessed++
+                        onFixProcessed?.invoke(result)
+                    }
+                    is GpsInboxProcessor.ProcessResult.AlreadyConsumed -> {
+                        totalProcessed++
+                        onFixProcessed?.invoke(result)
+                    }
+                    is GpsInboxProcessor.ProcessResult.Rejected -> {
+                        totalProcessed++
+                        onFixProcessed?.invoke(result)
+                    }
+                    is GpsInboxProcessor.ProcessResult.StaleOrphanAcknowledged -> {
+                        totalProcessed++
+                        onFixProcessed?.invoke(result)
+                    }
+                    is GpsInboxProcessor.ProcessResult.UnresolvedOrphan -> {
+                        throw IllegalStateException("Drain halted: Unresolved orphan fix ${result.fixId} for trip ${result.tripId} (${result.reason}). Fix preserved in inbox.")
+                    }
+                    is GpsInboxProcessor.ProcessResult.TripNotFound -> {
+                        throw IllegalStateException("Drain halted: Fix ${fix.id} referenced missing trip ${result.tripId}. Preserved in inbox.")
+                    }
+                }
             }
         }
 

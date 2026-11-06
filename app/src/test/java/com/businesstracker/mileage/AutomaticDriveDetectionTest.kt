@@ -69,6 +69,30 @@ class AutomaticDriveDetectionTest {
         assertEquals("Movement under 200m without confirmation must be discarded", TripStopDecision.DISCARD_FALSE_TRIP, stopDecision)
     }
 
+    @Test
+    fun test02b_exactDisplacementBoundaries_enforces200MetersPrecisely() {
+        assertEquals("199.0m without confirmation must be discarded",
+            TripStopDecision.DISCARD_FALSE_TRIP,
+            engine.evaluateTripStop(isDisplacementConfirmed = false, totalDistanceMeters = 199.0)
+        )
+        assertEquals("199.9m without confirmation must be discarded",
+            TripStopDecision.DISCARD_FALSE_TRIP,
+            engine.evaluateTripStop(isDisplacementConfirmed = false, totalDistanceMeters = 199.9)
+        )
+        assertEquals("199.99m without confirmation must be discarded",
+            TripStopDecision.DISCARD_FALSE_TRIP,
+            engine.evaluateTripStop(isDisplacementConfirmed = false, totalDistanceMeters = 199.99)
+        )
+        assertEquals("Exactly 200.0m must finalize trip",
+            TripStopDecision.FINALIZE_TRIP,
+            engine.evaluateTripStop(isDisplacementConfirmed = false, totalDistanceMeters = 200.0)
+        )
+        assertEquals("200.1m must finalize trip",
+            TripStopDecision.FINALIZE_TRIP,
+            engine.evaluateTripStop(isDisplacementConfirmed = false, totalDistanceMeters = 200.1)
+        )
+    }
+
     // Vehicle exit and debounce
     @Test
     fun test03_confirmedTrip_finalizedAfterVehicleExitAndDebounce() {

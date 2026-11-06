@@ -417,4 +417,81 @@ class GpsLocationQueueTest {
             processedTimes.toList()
         )
     }
+
+    @Test
+    fun queueRecreation_withPersistentSequence_continuesMonotonicallyWithoutDuplicates() = runBlocking {
+        val tripId = "trip-seq-persist"
+        val tripSequenceDao = database.tripSequenceDao()
+
+        val processedSequences = Collections.synchronizedList(mutableListOf<Long>())
+
+        // Initial queue session: process 2 batches
+        val queue1 = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = tripSequenceDao.getLastSequenceNumber(tripId) ?: 0L,
+            batchFetchLimit = 10
+        ) { loc ->
+            // query fix to inspect sequence number
+        }
+
+        queue1.enqueueBatchSync(listOf(createLocation(37.33, -121.88, 1000L)))
+        queue1.enqueueBatchSync(listOf(createLocation(37.34, -121.89, 2000L)))
+        queue1.drainAndClose()
+
+        val lastSeq = tripSequenceDao.getLastSequenceNumber(tripId)
+        assertEquals("Persistent sequence after 2 batches must be 2", 2L, lastSeq)
+
+        // Queue recreated (simulating service restart / debounce cancellation)
+        val queue2 = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = tripSequenceDao.getLastSequenceNumber(tripId) ?: 0L,
+            batchFetchLimit = 10
+        )
+
+        queue2.enqueueBatchSync(listOf(createLocation(37.35, -121.90, 3000L)))
+        queue2.enqueueBatchSync(listOf(createLocation(37.36, -121.91, 4000L)))
+        queue2.drainAndClose()
+
+        val finalSeq = tripSequenceDao.getLastSequenceNumber(tripId)
+        assertEquals("Persistent sequence across queue recreation must advance monotonically to 4", 4L, finalSeq)
+    }
+
+    @Test
+    fun admissionBarrier_closeAndWait_doesNotReturnPrematurelyOnThreadInterruption() {
+        val barrier = GpsAdmissionBarrier(initialSequence = 0L)
+        val token = barrier.acquireSequenceOrNull()
+        assertEquals(1L, token)
+        assertEquals(1, barrier.inFlight())
+
+        val closedFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+        val waitThread = Thread {
+            barrier.closeAndWait()
+            closedFlag.set(true)
+        }
+
+        waitThread.start()
+        Thread.sleep(50) // Let waitThread enter closeAndWait() wait loop
+
+        // Interrupt the thread while inFlight == 1
+        waitThread.interrupt()
+        Thread.sleep(50)
+
+        // Barrier must NOT return prematurely on interruption while inFlight > 0
+        assertTrue("closeAndWait must NOT return while inFlight > 0 even if interrupted", !closedFlag.get())
+        assertTrue("Thread should still be alive waiting for inFlight == 0", waitThread.isAlive)
+
+        // Release in-flight sequence
+        barrier.releaseSequence()
+        waitThread.join(1000)
+
+        assertTrue("closeAndWait must complete after in-flight reaches 0", closedFlag.get())
+    }
 }

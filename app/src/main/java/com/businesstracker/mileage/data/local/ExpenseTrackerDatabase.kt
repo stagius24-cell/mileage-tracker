@@ -9,6 +9,7 @@ import com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity
 import com.businesstracker.mileage.data.local.entity.GpsInboxEntity
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.data.local.entity.TripLifecycleEntity
+import com.businesstracker.mileage.data.local.entity.TripSequenceEntity
 
 @Database(
     entities = [
@@ -16,9 +17,10 @@ import com.businesstracker.mileage.data.local.entity.TripLifecycleEntity
         ActiveTripEntity::class,
         ActiveWaypointEntity::class,
         GpsInboxEntity::class,
-        TripLifecycleEntity::class
+        TripLifecycleEntity::class,
+        TripSequenceEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class ExpenseTrackerDatabase : RoomDatabase() {
@@ -27,6 +29,7 @@ abstract class ExpenseTrackerDatabase : RoomDatabase() {
     abstract fun activeTripDao(): ActiveTripDao
     abstract fun gpsInboxDao(): GpsInboxDao
     abstract fun tripLifecycleDao(): TripLifecycleDao
+    abstract fun tripSequenceDao(): TripSequenceDao
 
     companion object {
         const val DATABASE_NAME = "EXPENSE_TRACKER_DB"
@@ -79,6 +82,39 @@ abstract class ExpenseTrackerDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 MIGRATION_1_2.migrate(db)
                 MIGRATION_2_3.migrate(db)
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. Durable per-trip sequence table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `trip_sequence` (
+                        `tripId` TEXT NOT NULL,
+                        `lastSequenceNumber` INTEGER NOT NULL,
+                        PRIMARY KEY(`tripId`)
+                    )
+                """.trimIndent())
+
+                // 2. Sequence number and monotonic elapsed time for active_waypoints
+                db.execSQL("ALTER TABLE `active_waypoints` ADD COLUMN `sequenceNumber` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE `active_waypoints` ADD COLUMN `elapsedRealtimeNanos` INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_active_waypoints_tripId_sequenceNumber` ON `active_waypoints` (`tripId`, `sequenceNumber`)")
+            }
+        }
+
+        val MIGRATION_2_4 = object : Migration(2, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_2_3.migrate(db)
+                MIGRATION_3_4.migrate(db)
+            }
+        }
+
+        val MIGRATION_1_4 = object : Migration(1, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_1_2.migrate(db)
+                MIGRATION_2_3.migrate(db)
+                MIGRATION_3_4.migrate(db)
             }
         }
     }

@@ -72,6 +72,8 @@ class ActiveTripRepositoryImpl @Inject constructor(
         activeTripDao.insertWaypoint(
             ActiveWaypointEntity(
                 tripId = tripId,
+                sequenceNumber = waypoint.sequenceNumber,
+                elapsedRealtimeNanos = waypoint.elapsedRealtimeNanos,
                 latitude = waypoint.latitude,
                 longitude = waypoint.longitude,
                 altitude = waypoint.altitude,
@@ -105,7 +107,9 @@ class ActiveTripRepositoryImpl @Inject constructor(
                 altitude = it.altitude,
                 accuracy = it.accuracy,
                 speed = it.speed,
-                timestamp = it.timestamp
+                timestamp = it.timestamp,
+                sequenceNumber = it.sequenceNumber,
+                elapsedRealtimeNanos = it.elapsedRealtimeNanos
             )
         }
     }
@@ -119,7 +123,9 @@ class ActiveTripRepositoryImpl @Inject constructor(
                     altitude = it.altitude,
                     accuracy = it.accuracy,
                     speed = it.speed,
-                    timestamp = it.timestamp
+                    timestamp = it.timestamp,
+                    sequenceNumber = it.sequenceNumber,
+                    elapsedRealtimeNanos = it.elapsedRealtimeNanos
                 )
             }
         }.flowOn(ioDispatcher)
