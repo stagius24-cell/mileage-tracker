@@ -109,7 +109,7 @@ class GpsLocationQueue(
                         Log.e("GpsLocationQueue", "Error in drainPendingGpsFixesUseCase consumer loop: ${e.message}", e)
                         break
                     }
-                } else {
+                } else if (onLocationProcessed != null) {
                     // Direct processing path (used when useCase is not provided, e.g. in standalone unit tests)
                     val pendingFixes = try {
                         gpsInboxDao.getPendingFixes(currentTripId, limit = batchFetchLimit)
@@ -133,7 +133,7 @@ class GpsLocationQueue(
                             }
 
                             try {
-                                onLocationProcessed?.invoke(location)
+                                onLocationProcessed.invoke(location)
                                 gpsInboxDao.deleteFixById(fix.id)
                             } catch (e: Throwable) {
                                 processingError = e
@@ -159,6 +159,8 @@ class GpsLocationQueue(
                         }
                         signalChannel.receiveCatching()
                     }
+                } else {
+                    signalChannel.receiveCatching()
                 }
             }
         }
