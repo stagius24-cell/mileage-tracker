@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.GpsInboxDao
+import com.businesstracker.mileage.data.local.TripSequenceDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
