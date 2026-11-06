@@ -34,12 +34,23 @@ object PdfReportGenerator {
     private const val PAGE_HEIGHT = 842 // Standard A4 height in points
     private const val MARGIN = 36f
 
+    /**
+     * Isolated test-only accommodation:
+     * When running under Robolectric/JVM where native Skia PDF fonts/canvas are unavailable,
+     * test suites can explicitly enable this flag to simulate successful PDF generation.
+     * In production, this flag is ALWAYS false.
+     */
+    @androidx.annotation.VisibleForTesting
+    internal var testModeFallback: Boolean = false
+
+    @Throws(java.io.IOException::class)
     fun generatePdfReport(context: Context, data: ReportSummaryData): File {
         val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
         val pdfFile = File(exportDir, "Mileage_Report_${System.currentTimeMillis()}.pdf")
+        var document: PdfDocument? = null
 
         try {
-            val document = PdfDocument()
+            document = PdfDocument()
 
         val textPaint = Paint().apply {
             isAntiAlias = true
@@ -213,17 +224,22 @@ object PdfReportGenerator {
         FileOutputStream(pdfFile).use { out ->
             document.writeTo(out)
         }
-        document.close()
 
         return pdfFile
     } catch (t: Throwable) {
-        // Under Robolectric / JVM unit testing, android.graphics.pdf.PdfDocument native rendering
-        // throws IllegalStateException (native Skia font/canvas unavailable).
-        // Fall back to writing a valid mock PDF file for test environments.
-        FileOutputStream(pdfFile).use { out ->
-            out.write("%PDF-1.4\n%Business Mileage Report\n%Period: ${data.dateRangeLabel}\n%Entity: ${data.businessEntity}\n%Total Miles: ${data.totalMiles}\n%Total Deduction: ${data.totalDeduction}\n%%EOF\n".toByteArray())
+        if (testModeFallback) {
+            // Isolated test-only accommodation
+            FileOutputStream(pdfFile).use { out ->
+                out.write("%PDF-1.4\n%Business Mileage Report\n%Period: ${data.dateRangeLabel}\n%Entity: ${data.businessEntity}\n%Total Miles: ${data.totalMiles}\n%Total Deduction: ${data.totalDeduction}\n%%EOF\n".toByteArray())
+            }
+            return pdfFile
         }
-        return pdfFile
+        // In production: Always return genuine export error and do not write fake PDF
+        throw java.io.IOException("Failed to generate PDF report: ${t.message}", t)
+    } finally {
+        try {
+            document?.close()
+        } catch (_: Exception) {}
     }
     }
 

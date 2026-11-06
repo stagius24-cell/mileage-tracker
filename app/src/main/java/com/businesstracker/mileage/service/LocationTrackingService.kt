@@ -4,19 +4,24 @@ import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
 import android.os.Build
+import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.GpsInboxDao
 import com.businesstracker.mileage.data.local.TripLifecycleDao
 import com.businesstracker.mileage.data.local.TripSequenceDao
+import com.businesstracker.mileage.data.local.entity.TripLifecycleEntity
+import com.businesstracker.mileage.data.local.entity.TripLifecycleState
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.coordinator.TripFinalizationCoordinator
 import com.businesstracker.mileage.domain.model.FilterResult
@@ -110,6 +115,7 @@ class LocationTrackingService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private var tickerJob: Job? = null
     private var gpsLocationQueue: GpsLocationQueue? = null
+    private var gpsHandlerThread: HandlerThread? = null
 
     private val isStopping = AtomicBoolean(false)
     private var currentTripId: String = ""
@@ -136,7 +142,11 @@ class LocationTrackingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        if (intent == null || intent.action == null) {
+            recoverActiveTripSession()
+            return START_STICKY
+        }
+        when (intent.action) {
             ACTION_START -> {
                 val tripId = intent.getStringExtra(EXTRA_TRIP_ID) ?: UUID.randomUUID().toString()
                 val methodStr = intent.getStringExtra(EXTRA_TRACKING_METHOD) ?: TrackingMethod.AUTO_DETECTED.value
@@ -146,8 +156,179 @@ class LocationTrackingService : Service() {
             ACTION_PAUSE -> pauseTracking()
             ACTION_RESUME -> resumeTracking()
             ACTION_STOP -> stopTracking()
+            else -> recoverActiveTripSession()
         }
         return START_STICKY // System will recreate service if killed, enabling interruption recovery
+    }
+
+    /**
+     * Safe process recreation recovery when the OS restarts the service with a null intent.
+     * Inspects persistent active trip and recovers existing trip state without generating new IDs.
+     */
+    private fun recoverActiveTripSession() {
+        if (isStartingOrRunning.getAndSet(true)) {
+            // Service already starting or tracking
+            return
+        }
+
+        serviceScope.launch(ioDispatcher) {
+            try {
+                val activeTrip = activeTripRepository.getActiveTrip()
+                if (activeTrip == null) {
+                    Log.d("LocationTrackingService", "Null intent received but no active trip found; stopping service.")
+                    isStartingOrRunning.set(false)
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return@launch
+                }
+
+                // Check location permissions safely without crashing
+                val hasFine = ContextCompat.checkSelfPermission(
+                    this@LocationTrackingService,
+                    android.Manifest.permission.ACCESS_FINE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+                val hasCoarse = ContextCompat.checkSelfPermission(
+                    this@LocationTrackingService,
+                    android.Manifest.permission.ACCESS_COARSE_LOCATION
+                ) == PackageManager.PERMISSION_GRANTED
+
+                if (!hasFine && !hasCoarse) {
+                    Log.w("LocationTrackingService", "Location permissions missing during process recreation; preserving active trip state.")
+                    try {
+                        tripLifecycleDao.updateState(
+                            activeTrip.id,
+                            TripLifecycleState.RECOVERY_REQUIRED.value
+                        )
+                    } catch (_: Exception) {}
+                    isStartingOrRunning.set(false)
+                    _serviceState.value = TrackingServiceState(
+                        isTracking = false,
+                        tripId = activeTrip.id,
+                        distanceMiles = activeTrip.totalDistanceMeters * 0.000621371,
+                        isPaused = activeTrip.isPaused
+                    )
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return@launch
+                }
+
+                isStopping.set(false)
+                currentTripId = activeTrip.id
+                trackingMethod = TrackingMethod.fromString(activeTrip.trackingMethod)
+                tripStartTime = activeTrip.startTime
+                totalDistanceMeters = activeTrip.totalDistanceMeters
+                isPaused = activeTrip.isPaused
+                currentSpeedMph = 0.0
+
+                preferencesManager.setActiveTripId(currentTripId)
+
+                // Restore persistent ongoing notification
+                val initialNotification = notificationHelper.buildTrackingNotification(
+                    distanceMiles = totalDistanceMeters * 0.000621371,
+                    durationMillis = maxOf(0L, System.currentTimeMillis() - tripStartTime),
+                    isPaused = isPaused
+                )
+                val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                } else {
+                    0
+                }
+                ServiceCompat.startForeground(
+                    this@LocationTrackingService,
+                    NotificationHelper.NOTIFICATION_TRACKING_ID,
+                    initialNotification,
+                    foregroundType
+                )
+
+                // Recover waypoints and displacement confirmation state
+                val recoveredWaypoints = activeTripRepository.getWaypoints(currentTripId)
+                waypointCount = recoveredWaypoints.size
+                lastAcceptedWaypoint = recoveredWaypoints.lastOrNull()
+                anchorWaypoint = recoveredWaypoints.firstOrNull() ?: if (activeTrip.startLatitude != 0.0 || activeTrip.startLongitude != 0.0) {
+                    Waypoint(
+                        latitude = activeTrip.startLatitude,
+                        longitude = activeTrip.startLongitude,
+                        timestamp = activeTrip.startTime
+                    )
+                } else null
+
+                if (totalDistanceMeters >= 200.0) {
+                    isDisplacementConfirmed = true
+                } else if (anchorWaypoint != null && lastAcceptedWaypoint != null) {
+                    val distanceResults = FloatArray(1)
+                    Location.distanceBetween(
+                        anchorWaypoint!!.latitude,
+                        anchorWaypoint!!.longitude,
+                        lastAcceptedWaypoint!!.latitude,
+                        lastAcceptedWaypoint!!.longitude,
+                        distanceResults
+                    )
+                    if (distanceResults[0] >= 200.0f) {
+                        isDisplacementConfirmed = true
+                    }
+                }
+
+                // Initialize durable Room-backed GPS location queue
+                gpsLocationQueue?.stopConsumer()
+                gpsLocationQueue = GpsLocationQueue(
+                    scope = serviceScope,
+                    dispatcher = ioDispatcher,
+                    gpsInboxDao = gpsInboxDao,
+                    tripIdProvider = { currentTripId },
+                    batchFetchLimit = 100,
+                    drainPendingGpsFixesUseCase = drainPendingGpsFixesUseCase,
+                    tripSequenceDao = tripSequenceDao,
+                    database = database,
+                    bootCountProvider = bootCountProvider,
+                    onFixProcessed = { result ->
+                        handleFixProcessed(result)
+                    }
+                )
+
+                // Reconcile sequence monotonically
+                val initialSeq = tripSequenceDao.getReconciledMaxSequence(currentTripId)
+                gpsLocationQueue?.admissionBarrier?.initializeSequence(initialSeq)
+
+                // Update authoritative lifecycle in Room
+                try {
+                    tripLifecycleDao.insertOrUpdate(
+                        TripLifecycleEntity(
+                            tripId = currentTripId,
+                            state = TripLifecycleState.TRACKING.value
+                        )
+                    )
+                } catch (_: Exception) {}
+
+                // Drain any pending GPS inbox records before accepting new fixes
+                try {
+                    drainPendingGpsFixesUseCase.drain(
+                        tripId = currentTripId,
+                        batchLimit = 100,
+                        onFixProcessed = { handleFixProcessed(it) }
+                    )
+                } catch (e: Exception) {
+                    Log.w("LocationTrackingService", "Error draining inbox fixes during recovery: ${e.message}")
+                }
+
+                // Register location updates with FusedLocationProviderClient on dedicated HandlerThread
+                val updatesRegistered = startLocationUpdates()
+                if (isStopping.get()) {
+                    return@launch
+                }
+
+                if (!updatesRegistered) {
+                    Log.e("LocationTrackingService", "Location updates could not be started during recovery; preserving active trip state.")
+                    cleanupFailedStartup()
+                    return@launch
+                }
+
+                startDurationTicker()
+                updateServiceState()
+            } catch (e: Exception) {
+                Log.e("LocationTrackingService", "Failed during process recreation recovery", e)
+                cleanupFailedStartup()
+            }
+        }
     }
 
     private fun startTracking(
@@ -308,6 +489,8 @@ class LocationTrackingService : Service() {
         try {
             fusedLocationClient.removeLocationUpdates(locationCallback)
         } catch (_: Exception) {}
+        stopGpsHandlerThread()
+        stopGpsHandlerThread()
         if (wakeLock?.isHeld == true) {
             try { wakeLock?.release() } catch (_: Exception) {}
         }
@@ -323,6 +506,17 @@ class LocationTrackingService : Service() {
         stopSelf()
     }
 
+    private fun stopGpsHandlerThread() {
+        gpsHandlerThread?.let { thread ->
+            try {
+                thread.quitSafely()
+            } catch (_: Exception) {
+                try { thread.quit() } catch (_: Exception) {}
+            }
+        }
+        gpsHandlerThread = null
+    }
+
     @SuppressLint("MissingPermission")
     private suspend fun startLocationUpdates(): Boolean {
         val locationRequest = LocationRequest.Builder(
@@ -334,16 +528,22 @@ class LocationTrackingService : Service() {
         }.build()
 
         return try {
+            stopGpsHandlerThread()
+            val thread = HandlerThread("GpsLocationHandlerThread").apply { start() }
+            gpsHandlerThread = thread
+
             fusedLocationClient.requestLocationUpdates(
                 locationRequest,
                 locationCallback,
-                Looper.getMainLooper()
+                thread.looper
             ).await()
             true
         } catch (e: SecurityException) {
+            stopGpsHandlerThread()
             Log.e("LocationTrackingService", "Location permission missing when requesting updates", e)
             false
         } catch (e: Exception) {
+            stopGpsHandlerThread()
             Log.e("LocationTrackingService", "Failed to register location updates: ${e.message}", e)
             false
         }
@@ -455,6 +655,7 @@ class LocationTrackingService : Service() {
             } catch (e: Exception) {
                 Log.w("LocationTrackingService", "Error removing location updates: ${e.message}")
             }
+            stopGpsHandlerThread()
 
             // 2. Stop ticker
             tickerJob?.cancel()
@@ -611,6 +812,11 @@ class LocationTrackingService : Service() {
     }
 
     @VisibleForTesting
+    internal fun recoverActiveTripSessionForTesting() {
+        recoverActiveTripSession()
+    }
+
+    @VisibleForTesting
     internal fun getInternalDistanceMeters(): Double = totalDistanceMeters
 
     @VisibleForTesting
@@ -640,6 +846,7 @@ class LocationTrackingService : Service() {
         try {
             fusedLocationClient.removeLocationUpdates(locationCallback)
         } catch (_: Exception) {}
+        stopGpsHandlerThread()
         if (wakeLock?.isHeld == true) {
             try { wakeLock?.release() } catch (_: Exception) {}
         }

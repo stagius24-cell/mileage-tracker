@@ -10,6 +10,7 @@ import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Scope
 import com.google.android.gms.tasks.Tasks
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -110,7 +111,27 @@ open class GoogleAuthManager @Inject constructor(
 
             Result.success(email)
         } catch (e: Exception) {
-            val errorMsg = e.localizedMessage ?: "Google Sign-In failed"
+            val errorMsg = if (e is ApiException) {
+                when (e.statusCode) {
+                    CommonStatusCodes.DEVELOPER_ERROR -> { // 10
+                        "Google Sign-In is not configured for this build. Register the app's package name and signing SHA-1 in Google Cloud Console, or use Apps Script Webhook sync instead."
+                    }
+                    CommonStatusCodes.SIGN_IN_REQUIRED -> { // 4
+                        "Google Sign-In required. Please choose an account to connect."
+                    }
+                    CommonStatusCodes.NETWORK_ERROR -> { // 7
+                        "Network error during Google Sign-In. Please check your internet connection."
+                    }
+                    CommonStatusCodes.CANCELED -> { // 16
+                        "Google Sign-In was cancelled."
+                    }
+                    else -> {
+                        "Google Sign-In failed (${e.statusCode}). Please verify your configuration or use Apps Script Webhook sync."
+                    }
+                }
+            } else {
+                "Google Sign-In failed. Please try again or use Apps Script Webhook sync."
+            }
             preferencesManager.setSheetsLastError(errorMsg)
             Result.failure(e)
         }

@@ -97,10 +97,12 @@ class ReportsExportCalculationTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
+        PdfReportGenerator.testModeFallback = true
     }
 
     @After
     fun tearDown() {
+        PdfReportGenerator.testModeFallback = false
         Dispatchers.resetMain()
     }
 

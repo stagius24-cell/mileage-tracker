@@ -11,6 +11,7 @@ import com.businesstracker.mileage.domain.model.DashboardSummary
 import com.businesstracker.mileage.domain.model.TimeFilter
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.TripClassification
+import com.businesstracker.mileage.domain.repository.ActiveTripRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.domain.usecase.CalculateMileageRateUseCase
 import com.businesstracker.mileage.domain.usecase.GetDashboardSummaryUseCase
@@ -49,6 +50,7 @@ data class DashboardUiState(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val tripRepository: TripRepository,
+    private val activeTripRepository: ActiveTripRepository,
     private val rateUseCase: CalculateMileageRateUseCase,
     private val summaryUseCase: GetDashboardSummaryUseCase,
     @ApplicationContext private val appContext: Context
@@ -65,7 +67,29 @@ class DashboardViewModel @Inject constructor(
     private val _processingTripIds = MutableStateFlow<Set<String>>(emptySet())
     private val _lastClassifiedTrip = MutableStateFlow<TripEntity?>(null)
 
-    val serviceState: StateFlow<TrackingServiceState> = LocationTrackingService.serviceState
+    val serviceState: StateFlow<TrackingServiceState> = combine(
+        LocationTrackingService.serviceState,
+        activeTripRepository.observeActiveTrip()
+    ) { liveState, activeTrip ->
+        if (liveState.isTracking) {
+            liveState
+        } else if (activeTrip != null) {
+            TrackingServiceState(
+                isTracking = true,
+                tripId = activeTrip.id,
+                distanceMiles = activeTrip.totalDistanceMeters * 0.000621371,
+                isPaused = activeTrip.isPaused,
+                durationMillis = maxOf(0L, System.currentTimeMillis() - activeTrip.startTime),
+                trackingMethod = TrackingMethod.fromString(activeTrip.trackingMethod)
+            )
+        } else {
+            liveState
+        }
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = LocationTrackingService.serviceState.value
+    )
 
     private data class TripFilterState(
         val unreviewed: List<TripEntity>,

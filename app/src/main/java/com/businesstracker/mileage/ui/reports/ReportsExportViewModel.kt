@@ -221,6 +221,12 @@ class ReportsExportViewModel @Inject constructor(
             if (it.date.length >= 4) it.date.substring(0, 4) else null
         }.distinct().sortedDescending().ifEmpty { listOf(currentYear) }
 
+        val uTrips = filtered.filter { it.classification == "UNREVIEWED" }
+        val unreviewedPotential = uTrips.sumOf { trip ->
+            val rate = if (trip.applicableRate > 0.0) trip.applicableRate else rateUseCase.getApplicableRate(trip.date)
+            trip.totalDistanceMiles * rate
+        }
+
         ReportsUiState(
             selectedYear = year,
             availableYears = availableYears,
@@ -241,7 +247,7 @@ class ReportsExportViewModel @Inject constructor(
             purposeBreakdown = purposeBreakdowns,
             isExporting = dateArgs.exporting,
             ytdLoggedDeduction = totalDeduction,
-            ytdPotentialDeduction = totalDeduction + round(uMiles * 0.760),
+            ytdPotentialDeduction = round(totalDeduction + unreviewedPotential),
             ytdBusinessMiles = bMiles,
             ytdTotalMiles = totalMiles
         )
@@ -349,27 +355,47 @@ class ReportsExportViewModel @Inject constructor(
                 trips = state.filteredTrips
             )
 
-            val pdfFile = PdfReportGenerator.generatePdfReport(context, summaryData)
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                pdfFile
-            )
+            try {
+                val pdfFile = PdfReportGenerator.generatePdfReport(context, summaryData)
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    pdfFile
+                )
 
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
-                putExtra(Intent.EXTRA_SUBJECT, "Business Mileage PDF Report")
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/pdf"
+                    putExtra(Intent.EXTRA_SUBJECT, "Business Mileage PDF Report")
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+
+                onFileReady(Intent.createChooser(shareIntent, "Share Mileage PDF").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+            } catch (e: Exception) {
+                android.util.Log.e("ReportsExportViewModel", "Failed to export PDF: ${e.message}", e)
             }
-
-            onFileReady(Intent.createChooser(shareIntent, "Share Mileage PDF").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
         }
     }
 
-    private fun escapeCsv(value: String): String = value.replace("\"", "\"\"")
+    internal fun escapeCsv(value: String): String {
+        // Protect against spreadsheet formula injection (CSV Injection / CWE-1236)
+        // Values starting with '=', '+', '-', '@', '\t', or '\r' must be prefixed with a single quote (')
+        val sanitized = if (
+            value.startsWith('=') ||
+            value.startsWith('+') ||
+            value.startsWith('-') ||
+            value.startsWith('@') ||
+            value.startsWith('\t') ||
+            value.startsWith('\r')
+        ) {
+            "'$value"
+        } else {
+            value
+        }
+        return sanitized.replace("\"", "\"\"")
+    }
 
     private fun round(value: Double): Double = kotlin.math.round(value * 100.0) / 100.0
 
