@@ -15,25 +15,41 @@ class GpsAdmissionBarrier {
     private var sequenceGenerator = 0L
 
     /**
+     * Attempts to acquire a sequence number and increment the in-flight counter.
+     * Returns null if the barrier is closed.
+     */
+    fun acquireSequenceOrNull(): Long? {
+        synchronized(lock) {
+            if (isClosed) return null
+            inFlightCount++
+            return ++sequenceGenerator
+        }
+    }
+
+    /**
+     * Decrements the in-flight counter and notifies waiting drain threads.
+     */
+    fun releaseSequence() {
+        synchronized(lock) {
+            if (inFlightCount > 0) {
+                inFlightCount--
+                (lock as Object).notifyAll()
+            }
+        }
+    }
+
+    /**
      * Attempts to admit a batch for ingestion.
      * If the barrier is closed, returns null immediately.
      * Otherwise, increments in-flight count, assigns a monotonic sequence number,
      * executes the ingestion block, and decrements in-flight count upon completion.
      */
     fun <T> tryAcquire(block: (sequence: Long) -> T): T? {
-        val seq: Long
-        synchronized(lock) {
-            if (isClosed) return null
-            inFlightCount++
-            seq = ++sequenceGenerator
-        }
+        val seq = acquireSequenceOrNull() ?: return null
         try {
             return block(seq)
         } finally {
-            synchronized(lock) {
-                inFlightCount--
-                (lock as Object).notifyAll()
-            }
+            releaseSequence()
         }
     }
 

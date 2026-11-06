@@ -158,7 +158,7 @@ class GpsInboxProcessor @Inject constructor(
                 ProcessResult.Rejected(
                     fixId = fix.id,
                     tripId = tripId,
-                    reason = filterResult.description
+                    reason = "${filterResult.reason}: ${filterResult.details}"
                 )
             }
         }

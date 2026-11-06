@@ -137,41 +137,42 @@ class GpsLocationQueue(
         val currentTripId = tripIdProvider()
         if (currentTripId.isEmpty()) return
 
-        admissionBarrier.tryAcquire { sequence ->
-            // Monotonic sorting within batch: Android monotonic acquisition time (elapsedRealtimeNanos)
-            val sorted = locations.sortedWith(
-                compareBy<Location> { loc ->
-                    if (loc.elapsedRealtimeNanos != 0L) loc.elapsedRealtimeNanos else loc.time * 1_000_000L
-                }.thenBy { it.time }
-            )
+        val sequence = admissionBarrier.acquireSequenceOrNull() ?: return
+        // Monotonic sorting within batch: Android monotonic acquisition time (elapsedRealtimeNanos)
+        val sorted = locations.sortedWith(
+            compareBy<Location> { loc ->
+                if (loc.elapsedRealtimeNanos != 0L) loc.elapsedRealtimeNanos else loc.time * 1_000_000L
+            }.thenBy { it.time }
+        )
 
-            val entities = sorted.map { loc ->
-                val monotonicTime = if (loc.elapsedRealtimeNanos != 0L) {
-                    loc.elapsedRealtimeNanos
-                } else {
-                    loc.time * 1_000_000L
-                }
-                GpsInboxEntity(
-                    tripId = currentTripId,
-                    sequenceNumber = sequence,
-                    elapsedRealtimeNanos = monotonicTime,
-                    latitude = loc.latitude,
-                    longitude = loc.longitude,
-                    altitude = loc.altitude,
-                    accuracy = loc.accuracy,
-                    speed = loc.speed,
-                    timestamp = loc.time
-                )
+        val entities = sorted.map { loc ->
+            val monotonicTime = if (loc.elapsedRealtimeNanos != 0L) {
+                loc.elapsedRealtimeNanos
+            } else {
+                loc.time * 1_000_000L
             }
+            GpsInboxEntity(
+                tripId = currentTripId,
+                sequenceNumber = sequence,
+                elapsedRealtimeNanos = monotonicTime,
+                latitude = loc.latitude,
+                longitude = loc.longitude,
+                altitude = loc.altitude,
+                accuracy = loc.accuracy,
+                speed = loc.speed,
+                timestamp = loc.time
+            )
+        }
 
-            scope.launch(dispatcher) {
-                try {
-                    gpsInboxDao.insertFixes(entities)
-                    signalChannel.trySend(Unit)
-                } catch (e: Throwable) {
-                    Log.e("GpsLocationQueue", "Critical error inserting fixes into inbox: ${e.message}", e)
-                    processingError = e
-                }
+        scope.launch(dispatcher) {
+            try {
+                gpsInboxDao.insertFixes(entities)
+                signalChannel.trySend(Unit)
+            } catch (e: Throwable) {
+                Log.e("GpsLocationQueue", "Critical error inserting fixes into inbox: ${e.message}", e)
+                processingError = e
+            } finally {
+                admissionBarrier.releaseSequence()
             }
         }
     }
@@ -181,7 +182,8 @@ class GpsLocationQueue(
         val currentTripId = tripIdProvider()
         if (currentTripId.isEmpty()) return
 
-        admissionBarrier.tryAcquire { sequence ->
+        val sequence = admissionBarrier.acquireSequenceOrNull() ?: return
+        try {
             val sorted = locations.sortedWith(
                 compareBy<Location> { loc ->
                     if (loc.elapsedRealtimeNanos != 0L) loc.elapsedRealtimeNanos else loc.time * 1_000_000L
@@ -208,6 +210,8 @@ class GpsLocationQueue(
             }
             gpsInboxDao.insertFixes(entities)
             signalChannel.trySend(Unit)
+        } finally {
+            admissionBarrier.releaseSequence()
         }
     }
 
