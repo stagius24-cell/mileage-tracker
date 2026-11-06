@@ -86,7 +86,7 @@ class GoogleSheetsSyncWorker @AssistedInject constructor(
             is SheetsSyncResult.HttpError -> {
                 if (result.statusCode in 500..599) Result.retry() else Result.failure()
             }
-            is SheetsSyncResult.UnexpectedError -> Result.retry()
+            is SheetsSyncResult.UnexpectedError -> Result.failure()
         }
     }
 }

@@ -4,16 +4,115 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import androidx.annotation.VisibleForTesting
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.security.KeyStore
-import java.security.KeyStoreException
-import java.security.NoSuchProviderException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/**
+ * Interface defining the cryptographic key provisioning contract.
+ * Separates production hardware-backed AndroidKeyStore from test-only key providers.
+ */
+interface SecureKeyProvider {
+    fun getOrCreateKey(): SecretKey?
+    fun deleteKey()
+}
+
+/**
+ * Production key provider utilizing the hardware-backed Android KeyStore (AES-256 GCM).
+ *
+ * Enforces strict fail-closed security:
+ * - If AndroidKeyStore is unavailable, or key generation/retrieval fails, it returns null.
+ * - Under NO circumstances does it fall back to software keys or plaintext storage.
+ */
+class AndroidKeyStoreProvider(
+    private val keyAlias: String = KEY_ALIAS
+) : SecureKeyProvider {
+    companion object {
+        const val ANDROID_KEY_STORE = "AndroidKeyStore"
+        const val KEY_ALIAS = "com.businesstracker.mileage.sheets_oauth_key"
+    }
+
+    override fun getOrCreateKey(): SecretKey? {
+        return try {
+            val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
+            if (keyStore.containsAlias(keyAlias)) {
+                keyStore.getKey(keyAlias, null) as? SecretKey
+            } else {
+                val keyGenerator = KeyGenerator.getInstance(
+                    KeyProperties.KEY_ALGORITHM_AES,
+                    ANDROID_KEY_STORE
+                )
+                val keyGenParameterSpec = KeyGenParameterSpec.Builder(
+                    keyAlias,
+                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+                )
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .setKeySize(256)
+                    .build()
+
+                keyGenerator.init(keyGenParameterSpec)
+                keyGenerator.generateKey()
+            }
+        } catch (_: Exception) {
+            // Strict fail-closed: NO fallback to software keys in production
+            null
+        }
+    }
+
+    override fun deleteKey() {
+        try {
+            val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
+            if (keyStore.containsAlias(keyAlias)) {
+                keyStore.deleteEntry(keyAlias)
+            }
+        } catch (_: Exception) {}
+    }
+}
+
+/**
+ * Test-only key provider utilizing real AES-256 SecretKeys in a software KeyStore.
+ * Strictly intended for unit tests and JVM test runners where Android hardware HSM is unavailable.
+ * Cannot be instantiated by production Hilt dependency injection.
+ */
+@VisibleForTesting
+class TestSoftwareKeyProvider(
+    private var customKey: SecretKey? = null
+) : SecureKeyProvider {
+    companion object {
+        private const val TEST_ALIAS = "com.businesstracker.mileage.test_key"
+        private const val TEST_PASSWORD = "mileage_test_ks_pass"
+    }
+
+    private var inMemoryKey: SecretKey? = customKey
+
+    override fun getOrCreateKey(): SecretKey? {
+        inMemoryKey?.let { return it }
+        return try {
+            val keyGenerator = KeyGenerator.getInstance("AES")
+            keyGenerator.init(256)
+            val generated = keyGenerator.generateKey()
+            inMemoryKey = generated
+            generated
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    override fun deleteKey() {
+        inMemoryKey = null
+    }
+
+    fun setKey(key: SecretKey?) {
+        inMemoryKey = key
+    }
+}
 
 /**
  * Hardware-backed secure credential storage utilizing Android KeyStore (AES-256 GCM).
@@ -25,9 +124,8 @@ import javax.inject.Singleton
  * - Under no circumstances is Base64 obfuscation or plaintext storage used as a fallback.
  *   If the cryptographic provider, KeyStore, or Cipher fails, the manager fails closed
  *   (returns false or null, persisting zero unencrypted data).
- * - For testing environments lacking hardware HSM (e.g. Robolectric / JVM unit tests),
- *   a software-backed KeyStore generating real AES-256 SecretKeys is supported so that
- *   full AES-GCM authenticated cipher encryption and decryption is rigorously verified.
+ * - Production builds strictly use [AndroidKeyStoreProvider]. If AndroidKeyStore is unavailable,
+ *   it fails closed without falling back to software keys.
  * - Calling [clearAllCredentials] deletes the cryptographic key entry from the KeyStore
  *   and clears all stored ciphertext preferences.
  */
@@ -36,8 +134,6 @@ class SecureStorageManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     companion object {
-        const val ANDROID_KEY_STORE = "AndroidKeyStore"
-        private const val KEY_ALIAS = "com.businesstracker.mileage.sheets_oauth_key"
         private const val PREFS_NAME = "mileage_secure_credentials"
         private const val KEY_ENCRYPTED_OAUTH_TOKEN = "enc_oauth_token"
         private const val KEY_ENCRYPTED_REFRESH_TOKEN = "enc_refresh_token"
@@ -47,97 +143,33 @@ class SecureStorageManager @Inject constructor(
         private const val KEY_ACCOUNT_EMAIL_IV = "account_email_iv"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val GCM_TAG_LENGTH = 128
-        private const val SOFTWARE_KEY_PASS = "mileage_software_ks_pass"
-
-        // In-memory software KeyStore fallback specifically for unit test environments
-        @Volatile
-        private var softwareKeyStore: KeyStore? = null
-        private val softwareLock = Any()
-
-        private fun getSoftwareKeyStore(): KeyStore {
-            softwareKeyStore?.let { return it }
-            synchronized(softwareLock) {
-                softwareKeyStore?.let { return it }
-                val ks = KeyStore.getInstance(KeyStore.getDefaultType())
-                ks.load(null, null)
-                softwareKeyStore = ks
-                return ks
-            }
-        }
-
-        /**
-         * Clears in-memory test KeyStore state between tests if needed.
-         */
-        internal fun resetSoftwareKeyStoreForTests() {
-            synchronized(softwareLock) {
-                softwareKeyStore = null
-            }
-        }
     }
 
-    // Optional override for unit testing with mocked or custom keys
-    internal var testSecretKey: SecretKey? = null
+    // In production, keyProvider is strictly AndroidKeyStoreProvider
+    private var keyProvider: SecureKeyProvider = AndroidKeyStoreProvider()
+
+    /**
+     * Test-only constructor allowing explicit injection of a test key provider.
+     */
+    @VisibleForTesting
+    constructor(context: Context, testKeyProvider: SecureKeyProvider) : this(context) {
+        this.keyProvider = testKeyProvider
+    }
+
+    /**
+     * Test-only setter allowing test suites to inject custom key providers.
+     */
+    @VisibleForTesting
+    internal fun setTestKeyProvider(provider: SecureKeyProvider?) {
+        this.keyProvider = provider ?: AndroidKeyStoreProvider()
+    }
 
     private val prefs by lazy {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
-    /**
-     * Resolves an existing AES key or generates a new one.
-     * Uses Android KeyStore in production; falls back to software KeyStore for unit tests.
-     * Returns null if key creation fails, enforcing fail-closed behavior.
-     */
     private fun getOrCreateSecretKey(): SecretKey? {
-        testSecretKey?.let { return it }
-
-        // Step 1: Attempt hardware AndroidKeyStore
-        try {
-            val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
-            if (keyStore.containsAlias(KEY_ALIAS)) {
-                val key = keyStore.getKey(KEY_ALIAS, null) as? SecretKey
-                if (key != null) return key
-            } else {
-                val keyGenerator = KeyGenerator.getInstance(
-                    KeyProperties.KEY_ALGORITHM_AES,
-                    ANDROID_KEY_STORE
-                )
-                val keyGenParameterSpec = KeyGenParameterSpec.Builder(
-                    KEY_ALIAS,
-                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-                )
-                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                    .setKeySize(256)
-                    .build()
-
-                keyGenerator.init(keyGenParameterSpec)
-                return keyGenerator.generateKey()
-            }
-        } catch (_: NoSuchProviderException) {
-            // AndroidKeyStore provider not registered (e.g. Robolectric / JVM test runner)
-        } catch (_: KeyStoreException) {
-            // AndroidKeyStore unavailable in this environment
-        } catch (_: Exception) {
-            // Other KeyStore access error
-        }
-
-        // Step 2: Software KeyStore provider for test environments
-        return try {
-            val ks = getSoftwareKeyStore()
-            val protParam = KeyStore.PasswordProtection(SOFTWARE_KEY_PASS.toCharArray())
-            if (ks.containsAlias(KEY_ALIAS)) {
-                val entry = ks.getEntry(KEY_ALIAS, protParam) as? KeyStore.SecretKeyEntry
-                entry?.secretKey
-            } else {
-                val keyGenerator = KeyGenerator.getInstance("AES")
-                keyGenerator.init(256)
-                val secretKey = keyGenerator.generateKey()
-                ks.setEntry(KEY_ALIAS, KeyStore.SecretKeyEntry(secretKey), protParam)
-                secretKey
-            }
-        } catch (_: Exception) {
-            null
-        }
+        return keyProvider.getOrCreateKey()
     }
 
     /**
@@ -253,26 +285,13 @@ class SecureStorageManager @Inject constructor(
 
     /**
      * Completely purges all stored credentials, deletes the cryptographic key alias
-     * from KeyStore, and wipes all associated shared preferences.
+     * from KeyStore via [keyProvider], and wipes all associated shared preferences.
      */
     fun clearAllCredentials() {
-        // Purge hardware AndroidKeyStore alias
         try {
-            val ks = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
-            if (ks.containsAlias(KEY_ALIAS)) {
-                ks.deleteEntry(KEY_ALIAS)
-            }
+            keyProvider.deleteKey()
         } catch (_: Exception) {}
 
-        // Purge software KeyStore alias
-        try {
-            val sks = getSoftwareKeyStore()
-            if (sks.containsAlias(KEY_ALIAS)) {
-                sks.deleteEntry(KEY_ALIAS)
-            }
-        } catch (_: Exception) {}
-
-        testSecretKey = null
         prefs.edit().clear().commit()
     }
 }

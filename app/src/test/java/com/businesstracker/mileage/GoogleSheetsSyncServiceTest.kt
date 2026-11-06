@@ -114,7 +114,8 @@ class GoogleSheetsSyncServiceTest {
 
         val context = RuntimeEnvironment.getApplication()
         preferencesManager = TrackingPreferencesManager(context)
-        secureStorageManager = SecureStorageManager(context)
+        val testKeyProvider = com.businesstracker.mileage.data.security.TestSoftwareKeyProvider()
+        secureStorageManager = SecureStorageManager(context, testKeyProvider)
         secureStorageManager.clearAllCredentials()
     }
 
@@ -632,5 +633,265 @@ class GoogleSheetsSyncServiceTest {
         @Suppress("DEPRECATION")
         val remainingPlaintext = preferencesManager.sheetsAuthToken.first()
         assertTrue("Plaintext token must be removed from DataStore", remainingPlaintext.isBlank())
+    }
+
+    @Test
+    fun syncViaSheetsApi_malformedJsonRead_returnsUnexpectedError_andMarksZeroTrips() = runTest {
+        tripsList.add(createTrip("trip_malformed", "BUSINESS", 10.0))
+        configureSheetsApi("test_sheet", "valid_tok")
+
+        val service = createService()
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                // Return 200 OK with HTML/malformed JSON
+                Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .body("<html><head><title>502 Bad Gateway</title></head></html>".toResponseBody("text/html".toMediaType()))
+                    .build()
+            }
+            .build()
+
+        val result = service.syncPendingTrips()
+        assertTrue("Malformed JSON must fail closed with UnexpectedError", result is SheetsSyncResult.UnexpectedError)
+        assertEquals("Zero trips should be marked synced", 0, markedSyncedTripIds.size)
+        assertEquals("Trip must remain pending", "PENDING", tripsList[0].syncStatus)
+    }
+
+    @Test
+    fun syncViaSheetsApi_missingRangeAndValues_failsClosed() = runTest {
+        tripsList.add(createTrip("trip_bad_struct", "BUSINESS", 4.0))
+        configureSheetsApi("test_sheet", "valid_tok")
+
+        val service = createService()
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                // Return empty JSON object lacking both range and values
+                Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .body("{}".toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+
+        val result = service.syncPendingTrips()
+        assertTrue("Unexpected structure must fail closed", result is SheetsSyncResult.UnexpectedError)
+        assertEquals(0, markedSyncedTripIds.size)
+    }
+
+    @Test
+    fun syncViaSheetsApi_malformedRowData_failsClosed() = runTest {
+        tripsList.add(createTrip("trip_bad_row", "BUSINESS", 4.0))
+        configureSheetsApi("test_sheet", "valid_tok")
+
+        val service = createService()
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                // Return 'values' where elements are not arrays
+                Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .body("{\"range\":\"Sheet1!A:A\",\"values\":[123, true]}".toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+
+        val result = service.syncPendingTrips()
+        assertTrue("Malformed row data must fail closed", result is SheetsSyncResult.UnexpectedError)
+        assertEquals(0, markedSyncedTripIds.size)
+    }
+
+    @Test
+    fun syncViaSheetsApi_validEmptySheet_initializesHeaderAndAppendsRows() = runTest {
+        tripsList.add(createTrip("trip_empty_sheet", "BUSINESS", 7.5))
+        configureSheetsApi("test_sheet", "valid_tok")
+
+        var headerPutCalled = false
+        var rowAppended = false
+
+        val service = createService()
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                if (req.method == "GET") {
+                    // Valid empty range response from Google Sheets (omits "values")
+                    val body = "{\"range\":\"Sheet1!A:A\",\"majorDimension\":\"ROWS\"}"
+                    Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                        .body(body.toResponseBody("application/json".toMediaType())).build()
+                } else if (req.method == "PUT" && req.url.toString().contains("A1:P1")) {
+                    headerPutCalled = true
+                    Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                        .body("{\"updatedRows\":1}".toResponseBody("application/json".toMediaType())).build()
+                } else if (req.method == "POST") {
+                    rowAppended = true
+                    Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                        .body("{\"updates\":{\"updatedRows\":1}}".toResponseBody("application/json".toMediaType())).build()
+                } else {
+                    Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                        .body("{}".toResponseBody("application/json".toMediaType())).build()
+                }
+            }
+            .build()
+
+        val result = service.syncPendingTrips()
+        assertTrue("Valid empty sheet should succeed", result is SheetsSyncResult.Success)
+        assertTrue("Header row must be written", headerPutCalled)
+        assertTrue("Trip row must be appended", rowAppended)
+        assertEquals("SYNCED", tripsList[0].syncStatus)
+    }
+
+    @Test
+    fun syncViaSheetsApi_preservesExactHttpStatus_onWriteFailure() = runTest {
+        tripsList.add(createTrip("trip_status_test", "BUSINESS", 6.0))
+        configureSheetsApi("test_sheet", "valid_tok")
+
+        // Test 403 Forbidden
+        val service403 = createService()
+        service403.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                if (req.method == "GET") {
+                    val body = "{\"values\":[[\"Trip ID\"]]}"
+                    Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                        .body(body.toResponseBody("application/json".toMediaType())).build()
+                } else {
+                    Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(403).message("Forbidden")
+                        .body("{\"error\":{\"code\":403,\"message\":\"The caller does not have permission\"}}".toResponseBody("application/json".toMediaType())).build()
+                }
+            }
+            .build()
+
+        val res403 = service403.syncPendingTrips()
+        assertTrue("Must return AccessDenied on 403 write failure, not 500", res403 is SheetsSyncResult.AccessDenied)
+
+        // Test 429 Rate Limit
+        val service429 = createService()
+        service429.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                if (req.method == "GET") {
+                    val body = "{\"values\":[[\"Trip ID\"]]}"
+                    Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                        .body(body.toResponseBody("application/json".toMediaType())).build()
+                } else {
+                    Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(429).message("Too Many Requests")
+                        .body("{\"error\":{\"code\":429}}".toResponseBody("application/json".toMediaType())).build()
+                }
+            }
+            .build()
+
+        val res429 = service429.syncPendingTrips()
+        assertTrue("Must return RateLimited on 429 write failure, not 500", res429 is SheetsSyncResult.RateLimited)
+
+        // Test 503 Server Error
+        val service503 = createService()
+        service503.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                if (req.method == "GET") {
+                    val body = "{\"values\":[[\"Trip ID\"]]}"
+                    Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                        .body(body.toResponseBody("application/json".toMediaType())).build()
+                } else {
+                    Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(503).message("Service Unavailable")
+                        .body("{}".toResponseBody("application/json".toMediaType())).build()
+                }
+            }
+            .build()
+
+        val res503 = service503.syncPendingTrips()
+        assertTrue("Must return ServerError on 503 write failure", res503 is SheetsSyncResult.ServerError)
+        assertEquals(503, (res503 as SheetsSyncResult.ServerError).statusCode)
+    }
+
+    @Test
+    fun syncViaWebhook_missingSyncedTripIds_failsClosedWithoutMarkingTrips() = runTest {
+        tripsList.add(createTrip("trip_webhook_1", "BUSINESS", 5.0))
+        configureWebhook("https://example.com/macros/exec")
+
+        val service = createService()
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                // Response with HTTP 200 but omitting 'syncedTripIds'
+                Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .body("{\"status\":\"success\",\"message\":\"Processed successfully\"}".toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+
+        val result = service.syncPendingTrips()
+        assertTrue("Must fail closed with HttpError when syncedTripIds array is missing", result is SheetsSyncResult.HttpError)
+        assertEquals("Zero trips should be marked synced", 0, markedSyncedTripIds.size)
+        assertEquals("Trip must remain pending", "PENDING", tripsList[0].syncStatus)
+    }
+
+    @Test
+    fun syncViaWebhook_partialConfirmation_marksOnlyConfirmedTrips() = runTest {
+        tripsList.add(createTrip("trip_w1", "BUSINESS", 5.0))
+        tripsList.add(createTrip("trip_w2", "BUSINESS", 8.0))
+        configureWebhook("https://example.com/macros/exec")
+
+        val service = createService()
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                // Explicitly confirm ONLY trip_w1
+                Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .body("{\"status\":\"success\",\"syncedTripIds\":[\"trip_w1\"]}".toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+
+        val result = service.syncPendingTrips()
+        assertTrue("Must return PartialSuccess", result is SheetsSyncResult.PartialSuccess)
+        val partial = result as SheetsSyncResult.PartialSuccess
+        assertEquals(1, partial.successCount)
+        assertEquals(1, partial.failedCount)
+
+        assertEquals(listOf("trip_w1"), markedSyncedTripIds)
+        assertEquals("SYNCED", tripsList[0].syncStatus)
+        assertEquals("PENDING", tripsList[1].syncStatus)
+    }
+
+    @Test
+    fun syncViaWebhook_unknownTripIds_marksOnlyMatchingSubmittedTrips() = runTest {
+        tripsList.add(createTrip("trip_target", "BUSINESS", 12.0))
+        configureWebhook("https://example.com/macros/exec")
+
+        val service = createService()
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                // Confirms an unknown trip ID alongside valid trip ID
+                Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .body("{\"status\":\"success\",\"syncedTripIds\":[\"trip_target\",\"unknown_ghost_id\"]}".toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+
+        val result = service.syncPendingTrips()
+        assertTrue("Must confirm submitted trip", result is SheetsSyncResult.Success)
+        assertEquals(listOf("trip_target"), markedSyncedTripIds)
+        assertEquals("SYNCED", tripsList[0].syncStatus)
+    }
+
+    @Test
+    fun syncViaWebhook_explicitFailure_failsClosed() = runTest {
+        tripsList.add(createTrip("trip_fail", "BUSINESS", 5.0))
+        configureWebhook("https://example.com/macros/exec")
+
+        val service = createService()
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .body("{\"status\":\"error\",\"message\":\"Daily quota exceeded\"}".toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+
+        val result = service.syncPendingTrips()
+        assertTrue("Explicit failure status must fail closed", result is SheetsSyncResult.HttpError)
+        assertEquals(0, markedSyncedTripIds.size)
+        assertEquals("PENDING", tripsList[0].syncStatus)
     }
 }

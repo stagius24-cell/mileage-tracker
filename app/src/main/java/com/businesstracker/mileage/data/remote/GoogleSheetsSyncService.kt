@@ -2,6 +2,7 @@ package com.businesstracker.mileage.data.remote
 
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.data.security.GoogleAuthManager
 import com.businesstracker.mileage.data.security.SecureStorageManager
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.google.gson.Gson
@@ -57,13 +58,15 @@ sealed class SheetsSyncResult {
  *    distributed ACID table transactions across distinct devices or external concurrent writers.
  *    If multiple distinct devices simultaneously sync to the same spreadsheet without an intermediary
  *    central database, cell-level race conditions are theoretically possible at the Sheets API level.
+ * 4. Webhook Response Contract: Requires explicit JSON response containing a "syncedTripIds" string
+ *    array confirming individual trip IDs. Trips are never marked synced on HTTP 200 alone.
  */
 @Singleton
 class GoogleSheetsSyncService @Inject constructor(
     private val preferencesManager: TrackingPreferencesManager,
     private val tripRepository: TripRepository,
     private val secureStorageManager: SecureStorageManager,
-    private val googleAuthManager: com.businesstracker.mileage.data.security.GoogleAuthManager?,
+    private val googleAuthManager: GoogleAuthManager?,
     private val gson: Gson
 ) {
     // Secondary constructor for testing or when GoogleAuthManager is omitted
@@ -193,18 +196,60 @@ class GoogleSheetsSyncService @Inject constructor(
                     }
                     in 200..299 -> {
                         val body = response.body?.string().orEmpty()
-                        val json = try {
-                            gson.fromJson(body, JsonObject::class.java)
-                        } catch (_: Exception) {
+                        if (body.isBlank()) {
+                            val msg = "Empty response body received from Google Sheets API"
+                            preferencesManager.setSheetsLastError(msg)
+                            return SheetsSyncResult.HttpError(response.code, msg)
+                        }
+
+                        val jsonElement = try {
+                            gson.fromJson(body, JsonElement::class.java)
+                        } catch (e: Exception) {
                             null
                         }
-                        val values = json?.getAsJsonArray("values")
-                        if (values != null && values.size() > 0) {
+
+                        if (jsonElement == null || !jsonElement.isJsonObject) {
+                            val msg = "Malformed JSON received from Google Sheets API"
+                            preferencesManager.setSheetsLastError(msg)
+                            return SheetsSyncResult.UnexpectedError(IllegalArgumentException(msg))
+                        }
+
+                        val json = jsonElement.asJsonObject
+
+                        // Validate Google Sheets response structure
+                        // A valid values.get response must contain either "range" or "values"
+                        if (!json.has("range") && !json.has("values")) {
+                            val msg = "Invalid Google Sheets response structure: missing required range or values"
+                            preferencesManager.setSheetsLastError(msg)
+                            return SheetsSyncResult.UnexpectedError(IllegalArgumentException(msg))
+                        }
+
+                        // Distinguish genuinely empty sheet from missing/malformed values
+                        if (json.has("values")) {
+                            val valuesElement = json.get("values")
+                            if (!valuesElement.isJsonArray) {
+                                val msg = "Malformed Google Sheets response: 'values' must be an array"
+                                preferencesManager.setSheetsLastError(msg)
+                                return SheetsSyncResult.UnexpectedError(IllegalArgumentException(msg))
+                            }
+                            val values = valuesElement.asJsonArray
                             maxRowFound = values.size()
                             for (i in 0 until values.size()) {
-                                val row = values.get(i).asJsonArray
+                                val rowElement = values.get(i)
+                                if (!rowElement.isJsonArray) {
+                                    val msg = "Malformed row at index $i: expected JSON array"
+                                    preferencesManager.setSheetsLastError(msg)
+                                    return SheetsSyncResult.UnexpectedError(IllegalArgumentException(msg))
+                                }
+                                val row = rowElement.asJsonArray
                                 if (row.size() > 0) {
-                                    val cell = row.get(0).asString
+                                    val cell = try {
+                                        row.get(0).asString
+                                    } catch (_: Exception) {
+                                        val msg = "Malformed cell at row ${i + 1}: expected string"
+                                        preferencesManager.setSheetsLastError(msg)
+                                        return SheetsSyncResult.UnexpectedError(IllegalArgumentException(msg))
+                                    }
                                     if (i == 0 && cell.equals("Trip ID", ignoreCase = true)) {
                                         isHeaderPresent = true
                                     } else if (cell.isNotBlank()) {
@@ -212,6 +257,10 @@ class GoogleSheetsSyncService @Inject constructor(
                                     }
                                 }
                             }
+                        } else {
+                            // Genuinely empty sheet: Google Sheets API omits "values" when range has no data
+                            maxRowFound = 0
+                            isHeaderPresent = false
                         }
                     }
                     else -> {
@@ -245,7 +294,14 @@ class GoogleSheetsSyncService @Inject constructor(
                     if (!resp.isSuccessful) {
                         val msg = "Failed to initialize spreadsheet header (${resp.code})."
                         preferencesManager.setSheetsLastError(msg)
-                        return if (resp.code == 401) SheetsSyncResult.TokenExpired(msg) else SheetsSyncResult.HttpError(resp.code, msg)
+                        return when (resp.code) {
+                            401 -> SheetsSyncResult.TokenExpired(msg)
+                            403 -> SheetsSyncResult.AccessDenied(msg)
+                            404 -> SheetsSyncResult.NotFound(msg)
+                            429 -> SheetsSyncResult.RateLimited(msg)
+                            in 500..599 -> SheetsSyncResult.ServerError(resp.code, msg)
+                            else -> SheetsSyncResult.HttpError(resp.code, msg)
+                        }
                     }
                 }
                 if (maxRowFound < 1) maxRowFound = 1
@@ -256,6 +312,7 @@ class GoogleSheetsSyncService @Inject constructor(
             var nextAvailableRow = maxOf(maxRowFound + 1, 2)
             val failedTrips = mutableListOf<Pair<String, String>>()
             var authExpiredMidSync = false
+            var primaryFailureResult: SheetsSyncResult? = null
 
             // Step 3: Process each individual trip and confirm remote write
             for (trip in trips) {
@@ -286,18 +343,48 @@ class GoogleSheetsSyncService @Inject constructor(
                             when (r.code) {
                                 401 -> {
                                     authExpiredMidSync = true
-                                    failedTrips.add(trip.id to "Token expired (401)")
+                                    val err = "Token expired (401)"
+                                    failedTrips.add(trip.id to err)
+                                    if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.TokenExpired(err)
+                                    false
+                                }
+                                403 -> {
+                                    val err = "Access denied (403)"
+                                    failedTrips.add(trip.id to err)
+                                    if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.AccessDenied(err)
+                                    false
+                                }
+                                404 -> {
+                                    val err = "Spreadsheet not found (404)"
+                                    failedTrips.add(trip.id to err)
+                                    if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.NotFound(err)
+                                    false
+                                }
+                                429 -> {
+                                    val err = "Rate limit exceeded (429)"
+                                    failedTrips.add(trip.id to err)
+                                    if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.RateLimited(err)
+                                    false
+                                }
+                                in 500..599 -> {
+                                    val err = "Server error (${r.code})"
+                                    failedTrips.add(trip.id to err)
+                                    if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.ServerError(r.code, err)
                                     false
                                 }
                                 in 200..299 -> true
                                 else -> {
-                                    failedTrips.add(trip.id to "HTTP ${r.code}")
+                                    val err = "HTTP error (${r.code})"
+                                    failedTrips.add(trip.id to err)
+                                    if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.HttpError(r.code, err)
                                     false
                                 }
                             }
                         }
                     } catch (e: IOException) {
-                        failedTrips.add(trip.id to (e.localizedMessage ?: "Network error"))
+                        val err = e.localizedMessage ?: "Network error"
+                        failedTrips.add(trip.id to err)
+                        if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.NetworkError(err, e)
                         false
                     }
 
@@ -329,18 +416,48 @@ class GoogleSheetsSyncService @Inject constructor(
                             when (r.code) {
                                 401 -> {
                                     authExpiredMidSync = true
-                                    failedTrips.add(trip.id to "Token expired (401)")
+                                    val err = "Token expired (401)"
+                                    failedTrips.add(trip.id to err)
+                                    if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.TokenExpired(err)
+                                    false
+                                }
+                                403 -> {
+                                    val err = "Access denied (403)"
+                                    failedTrips.add(trip.id to err)
+                                    if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.AccessDenied(err)
+                                    false
+                                }
+                                404 -> {
+                                    val err = "Spreadsheet not found (404)"
+                                    failedTrips.add(trip.id to err)
+                                    if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.NotFound(err)
+                                    false
+                                }
+                                429 -> {
+                                    val err = "Rate limit exceeded (429)"
+                                    failedTrips.add(trip.id to err)
+                                    if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.RateLimited(err)
+                                    false
+                                }
+                                in 500..599 -> {
+                                    val err = "Server error (${r.code})"
+                                    failedTrips.add(trip.id to err)
+                                    if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.ServerError(r.code, err)
                                     false
                                 }
                                 in 200..299 -> true
                                 else -> {
-                                    failedTrips.add(trip.id to "HTTP ${r.code}")
+                                    val err = "HTTP error (${r.code})"
+                                    failedTrips.add(trip.id to err)
+                                    if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.HttpError(r.code, err)
                                     false
                                 }
                             }
                         }
                     } catch (e: IOException) {
-                        failedTrips.add(trip.id to (e.localizedMessage ?: "Network error"))
+                        val err = e.localizedMessage ?: "Network error"
+                        failedTrips.add(trip.id to err)
+                        if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.NetworkError(err, e)
                         false
                     }
 
@@ -359,7 +476,7 @@ class GoogleSheetsSyncService @Inject constructor(
             val totalSucceeded = insertedCount + updatedCount
             val totalFailed = failedTrips.size + (if (authExpiredMidSync) (trips.size - (totalSucceeded + failedTrips.size)) else 0)
 
-            // Step 4: Outcome evaluation
+            // Step 4: Outcome evaluation preserving real HTTP status codes
             if (totalFailed == 0 && totalSucceeded > 0) {
                 preferencesManager.setSheetsLastSyncTime(System.currentTimeMillis())
                 preferencesManager.setSheetsLastError(null)
@@ -370,17 +487,19 @@ class GoogleSheetsSyncService @Inject constructor(
                 preferencesManager.setSheetsLastError(errMsg)
                 return SheetsSyncResult.PartialSuccess(totalSucceeded, totalFailed, errMsg)
             } else {
-                val errMsg = if (authExpiredMidSync) {
-                    "Google authorization expired. Please reconnect."
-                } else {
-                    failedTrips.firstOrNull()?.second ?: "Sync failed for all eligible trips."
+                val categorized = primaryFailureResult ?: SheetsSyncResult.HttpError(500, "Sync failed for all eligible trips.")
+                val errMsg = when (categorized) {
+                    is SheetsSyncResult.TokenExpired -> categorized.message
+                    is SheetsSyncResult.AccessDenied -> categorized.message
+                    is SheetsSyncResult.NotFound -> categorized.message
+                    is SheetsSyncResult.RateLimited -> categorized.message
+                    is SheetsSyncResult.ServerError -> categorized.message
+                    is SheetsSyncResult.NetworkError -> categorized.message
+                    is SheetsSyncResult.HttpError -> categorized.message
+                    else -> "Sync failed for all eligible trips."
                 }
                 preferencesManager.setSheetsLastError(errMsg)
-                return if (authExpiredMidSync) {
-                    SheetsSyncResult.TokenExpired(errMsg)
-                } else {
-                    SheetsSyncResult.HttpError(500, errMsg)
-                }
+                return categorized
             }
 
         } catch (e: IOException) {
@@ -452,6 +571,11 @@ class GoogleSheetsSyncService @Inject constructor(
                         preferencesManager.setSheetsLastError(err)
                         return SheetsSyncResult.NotFound(err)
                     }
+                    429 -> {
+                        val err = "Webhook rate limit exceeded (429)"
+                        preferencesManager.setSheetsLastError(err)
+                        return SheetsSyncResult.RateLimited(err)
+                    }
                     in 500..599 -> {
                         val err = "Webhook server error (${response.code})"
                         preferencesManager.setSheetsLastError(err)
@@ -485,22 +609,33 @@ class GoogleSheetsSyncService @Inject constructor(
                             return SheetsSyncResult.HttpError(200, serverMsg)
                         }
 
-                        // Check for per-trip confirmation in response (syncedTripIds array)
-                        val syncedIdsArray = jsonObj.getAsJsonArray("syncedTripIds")
-                        val confirmedTripIds = if (syncedIdsArray != null) {
-                            val set = mutableSetOf<String>()
-                            for (i in 0 until syncedIdsArray.size()) {
-                                set.add(syncedIdsArray.get(i).asString)
-                            }
-                            set
-                        } else {
-                            trips.map { it.id }.toSet()
+                        // Webhook Response Contract: Requires explicit 'syncedTripIds' JSON array.
+                        // Trips are never confirmed on HTTP 200 alone.
+                        if (!jsonObj.has("syncedTripIds") || !jsonObj.get("syncedTripIds").isJsonArray) {
+                            val err = "Webhook response contract violation: missing or invalid 'syncedTripIds' array"
+                            preferencesManager.setSheetsLastError(err)
+                            return SheetsSyncResult.HttpError(200, err)
                         }
+
+                        val syncedIdsArray = jsonObj.getAsJsonArray("syncedTripIds")
+                        val confirmedTripIds = mutableSetOf<String>()
+                        for (i in 0 until syncedIdsArray.size()) {
+                            val elem = syncedIdsArray.get(i)
+                            if (elem.isJsonPrimitive && elem.asJsonPrimitive.isString) {
+                                val id = elem.asString.trim()
+                                if (id.isNotEmpty()) {
+                                    confirmedTripIds.add(id)
+                                }
+                            }
+                        }
+
+                        val submittedIds = trips.map { it.id }.toSet()
+                        val validConfirmedIds = confirmedTripIds.filter { submittedIds.contains(it) }.toSet()
 
                         val now = System.currentTimeMillis()
                         var markedCount = 0
                         for (trip in trips) {
-                            if (confirmedTripIds.contains(trip.id)) {
+                            if (validConfirmedIds.contains(trip.id)) {
                                 tripRepository.markSynced(trip.id, now)
                                 markedCount++
                             }
@@ -512,12 +647,12 @@ class GoogleSheetsSyncService @Inject constructor(
                             return SheetsSyncResult.Success(trips.size, 0)
                         } else if (markedCount > 0) {
                             val failedCount = trips.size - markedCount
-                            val errMsg = "Partial webhook sync: $markedCount synced, $failedCount unconfirmed."
+                            val errMsg = "Partial webhook sync: $markedCount confirmed, $failedCount unconfirmed."
                             preferencesManager.setSheetsLastSyncTime(now)
                             preferencesManager.setSheetsLastError(errMsg)
                             return SheetsSyncResult.PartialSuccess(markedCount, failedCount, errMsg)
                         } else {
-                            val errMsg = "Webhook did not confirm any trips as synced."
+                            val errMsg = "Webhook did not confirm any submitted trips as synced."
                             preferencesManager.setSheetsLastError(errMsg)
                             return SheetsSyncResult.HttpError(200, errMsg)
                         }

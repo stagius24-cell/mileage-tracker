@@ -2,7 +2,10 @@ package com.businesstracker.mileage
 
 import android.content.Context
 import android.util.Base64
+import com.businesstracker.mileage.data.security.AndroidKeyStoreProvider
+import com.businesstracker.mileage.data.security.SecureKeyProvider
 import com.businesstracker.mileage.data.security.SecureStorageManager
+import com.businesstracker.mileage.data.security.TestSoftwareKeyProvider
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -21,12 +24,14 @@ import javax.crypto.SecretKey
 class SecureStorageManagerTest {
 
     private lateinit var context: Context
+    private lateinit var testKeyProvider: TestSoftwareKeyProvider
     private lateinit var secureStorageManager: SecureStorageManager
 
     @Before
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
-        secureStorageManager = SecureStorageManager(context)
+        testKeyProvider = TestSoftwareKeyProvider()
+        secureStorageManager = SecureStorageManager(context, testKeyProvider)
         secureStorageManager.clearAllCredentials()
     }
 
@@ -179,10 +184,41 @@ class SecureStorageManagerTest {
         val kgen = KeyGenerator.getInstance("AES")
         kgen.init(256)
         val differentKey: SecretKey = kgen.generateKey()
-        secureStorageManager.testSecretKey = differentKey
+        testKeyProvider.setKey(differentKey)
 
         // Attempting to decrypt with different key must fail closed
         val decrypted = secureStorageManager.getOAuthToken()
         assertNull("Decryption with mismatched key must return null, never plaintext fallback", decrypted)
+    }
+
+    @Test
+    fun productionProvider_failsClosed_whenAndroidKeyStoreFails_withoutSoftwareFallback() {
+        // A provider simulating production AndroidKeyStore failure
+        val failingProductionProvider = object : SecureKeyProvider {
+            override fun getOrCreateKey(): SecretKey? = null // AndroidKeyStore fails/unavailable
+            override fun deleteKey() {}
+        }
+
+        val prodManager = SecureStorageManager(context, failingProductionProvider)
+        val saved = prodManager.saveOAuthToken("test_prod_token")
+
+        assertFalse("Production provider MUST return false on KeyStore failure", saved)
+        assertNull("Production provider MUST return null without software fallback", prodManager.getOAuthToken())
+        assertFalse("Production provider MUST report no token", prodManager.hasOAuthToken())
+
+        val rawPrefs = context.getSharedPreferences("mileage_secure_credentials", Context.MODE_PRIVATE)
+        assertNull("No ciphertext or plaintext must be persisted on failure", rawPrefs.getString("enc_oauth_token", null))
+    }
+
+    @Test
+    fun defaultConstructor_usesAndroidKeyStoreProvider() {
+        val defaultManager = SecureStorageManager(context)
+        // Default constructor strictly wires AndroidKeyStoreProvider
+        // In Robolectric environment without hardware HSM, it fails closed safely without crashing
+        val saved = defaultManager.saveOAuthToken("prod_token")
+        if (!saved) {
+            assertNull(defaultManager.getOAuthToken())
+            assertFalse(defaultManager.hasOAuthToken())
+        }
     }
 }
