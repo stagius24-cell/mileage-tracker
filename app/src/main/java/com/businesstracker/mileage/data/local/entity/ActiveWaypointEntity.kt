@@ -18,7 +18,8 @@ import androidx.room.PrimaryKey
     ],
     indices = [
         Index(value = ["tripId"]),
-        Index(value = ["timestamp"])
+        Index(value = ["timestamp"]),
+        Index(value = ["tripId", "sourceFixId"])
     ]
 )
 data class ActiveWaypointEntity(
@@ -28,6 +29,9 @@ data class ActiveWaypointEntity(
 
     @ColumnInfo(name = "tripId")
     val tripId: String,
+
+    @ColumnInfo(name = "sourceFixId")
+    val sourceFixId: Long? = null,
 
     @ColumnInfo(name = "latitude")
     val latitude: Double,

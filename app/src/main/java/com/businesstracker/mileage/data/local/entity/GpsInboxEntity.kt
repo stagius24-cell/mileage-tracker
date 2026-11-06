@@ -7,13 +7,14 @@ import androidx.room.PrimaryKey
 
 /**
  * Durable Room-backed inbox entity for raw incoming GPS location fixes.
- * Guarantees crash-safety, strict chronological ordering via indexed timestamps,
+ * Guarantees crash-safety, strict chronological ordering via monotonic time and sequence,
  * and zero data loss on service termination or app backgrounding.
  */
 @Entity(
     tableName = "gps_inbox",
     indices = [
-        Index(value = ["tripId", "timestamp"])
+        Index(value = ["tripId", "sequenceNumber"]),
+        Index(value = ["tripId", "elapsedRealtimeNanos", "timestamp", "id"])
     ]
 )
 data class GpsInboxEntity(
@@ -23,6 +24,12 @@ data class GpsInboxEntity(
 
     @ColumnInfo(name = "tripId")
     val tripId: String,
+
+    @ColumnInfo(name = "sequenceNumber")
+    val sequenceNumber: Long = 0L,
+
+    @ColumnInfo(name = "elapsedRealtimeNanos")
+    val elapsedRealtimeNanos: Long = 0L,
 
     @ColumnInfo(name = "latitude")
     val latitude: Double,

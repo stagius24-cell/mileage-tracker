@@ -35,6 +35,9 @@ interface ActiveTripDao {
     @Query("SELECT * FROM active_trip LIMIT 1")
     suspend fun getActiveTrip(): ActiveTripEntity?
 
+    @Query("SELECT * FROM active_trip WHERE id = :tripId LIMIT 1")
+    suspend fun getActiveTripById(tripId: String): ActiveTripEntity?
+
     @Query("SELECT * FROM active_trip LIMIT 1")
     fun observeActiveTrip(): Flow<ActiveTripEntity?>
 
@@ -51,16 +54,22 @@ interface ActiveTripDao {
     suspend fun clearActiveTrip()
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertWaypoint(waypoint: ActiveWaypointEntity)
+    suspend fun insertWaypoint(waypoint: ActiveWaypointEntity): Long
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWaypoints(waypoints: List<ActiveWaypointEntity>)
 
-    @Query("SELECT * FROM active_waypoints WHERE tripId = :tripId ORDER BY timestamp ASC")
+    @Query("SELECT * FROM active_waypoints WHERE tripId = :tripId ORDER BY timestamp ASC, id ASC")
     suspend fun getWaypointsForTrip(tripId: String): List<ActiveWaypointEntity>
 
-    @Query("SELECT * FROM active_waypoints WHERE tripId = :tripId ORDER BY timestamp ASC")
+    @Query("SELECT * FROM active_waypoints WHERE tripId = :tripId ORDER BY timestamp ASC, id ASC")
     fun observeWaypointsForTrip(tripId: String): Flow<List<ActiveWaypointEntity>>
+
+    @Query("SELECT * FROM active_waypoints WHERE tripId = :tripId ORDER BY timestamp DESC, id DESC LIMIT 1")
+    suspend fun getLastWaypointForTrip(tripId: String): ActiveWaypointEntity?
+
+    @Query("SELECT COUNT(*) FROM active_waypoints WHERE tripId = :tripId AND sourceFixId = :fixId")
+    suspend fun countWaypointsForFix(tripId: String, fixId: Long): Int
 
     @Query("DELETE FROM active_waypoints WHERE tripId = :tripId")
     suspend fun deleteWaypointsForTrip(tripId: String)
@@ -68,8 +77,6 @@ interface ActiveTripDao {
     @Transaction
     suspend fun clearAllActiveData() {
         clearActiveTrip()
-        // Foreign key cascade cleans up active_waypoints, or delete explicitly:
-        // delete from active_waypoints
     }
 
     @Query("UPDATE active_trip SET totalDistanceMeters = :distanceMeters, lastLatitude = :lat, lastLongitude = :lng, lastTimestamp = :timestamp WHERE id = :tripId")

@@ -4,24 +4,24 @@ import android.location.Location
 import android.util.Log
 import com.businesstracker.mileage.data.local.GpsInboxDao
 import com.businesstracker.mileage.data.local.entity.GpsInboxEntity
+import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Durable Room-backed GPS location queue.
- * - Stores all incoming GPS fixes in SQLite `gps_inbox` indexed by (tripId, timestamp).
+ * - Race-safe admission barrier (GpsAdmissionBarrier) prevents lost callback batches.
+ * - Assigns monotonic sequence numbers and preserves Android monotonic acquisition time (elapsedRealtimeNanos).
  * - Enforces bounded memory by reading in limited batches (batchFetchLimit).
- * - Guarantees strict global chronological ordering via SQL `ORDER BY timestamp ASC, id ASC`.
- * - Deletes a GPS fix ONLY after onLocationProcessed() completes successfully.
+ * - Guarantees strict global chronological ordering via SQL ORDER BY sequenceNumber ASC, elapsedRealtimeNanos ASC, timestamp ASC, id ASC.
+ * - Deletes a GPS fix ONLY after transactional processing completes successfully.
  * - Retains unprocessed fixes in SQLite on process termination, service restart, or persistence failure.
- * - Prevents premature finalization by surfacing any processing errors to drainAndClose().
+ * - Never converts database exceptions into empty lists or zero counts.
  */
 class GpsLocationQueue(
     private val scope: CoroutineScope,
@@ -29,11 +29,12 @@ class GpsLocationQueue(
     private val gpsInboxDao: GpsInboxDao,
     private val tripIdProvider: () -> String,
     private val batchFetchLimit: Int = 100,
-    private val onLocationProcessed: suspend (Location) -> Unit
+    private val drainPendingGpsFixesUseCase: DrainPendingGpsFixesUseCase? = null,
+    private val onLocationProcessed: (suspend (Location) -> Unit)? = null
 ) {
     private val signalChannel = Channel<Unit>(Channel.CONFLATED)
     private val isStopping = AtomicBoolean(false)
-    private val activeProducers = AtomicInteger(0)
+    val admissionBarrier = GpsAdmissionBarrier()
     private var consumerJob: Job? = null
 
     @Volatile
@@ -47,54 +48,81 @@ class GpsLocationQueue(
         consumerJob = scope.launch(dispatcher) {
             while (isActive) {
                 val currentTripId = tripIdProvider()
-                val pendingFixes = if (currentTripId.isNotEmpty()) {
-                    try {
-                        gpsInboxDao.getPendingFixes(currentTripId, limit = batchFetchLimit)
-                    } catch (e: Exception) {
-                        Log.e("GpsLocationQueue", "Error querying pending fixes: ${e.message}", e)
-                        emptyList()
-                    }
-                } else {
-                    emptyList()
+                if (currentTripId.isEmpty()) {
+                    signalChannel.receiveCatching()
+                    continue
                 }
 
-                if (pendingFixes.isNotEmpty()) {
-                    for (fix in pendingFixes) {
-                        if (!isActive) break
-                        val location = Location("gps").apply {
-                            latitude = fix.latitude
-                            longitude = fix.longitude
-                            altitude = fix.altitude
-                            accuracy = fix.accuracy
-                            speed = fix.speed
-                            time = fix.timestamp
+                if (drainPendingGpsFixesUseCase != null) {
+                    try {
+                        val processed = drainPendingGpsFixesUseCase.drain(
+                            tripId = currentTripId,
+                            batchLimit = batchFetchLimit
+                        )
+                        if (isStopping.get()) {
+                            val count = gpsInboxDao.getPendingCount(currentTripId)
+                            if (count == 0 && admissionBarrier.inFlight() == 0) {
+                                break
+                            }
                         }
-
-                        try {
-                            onLocationProcessed(location)
-                            // Remove from inbox ONLY after successful processing!
-                            gpsInboxDao.deleteFixById(fix.id)
-                        } catch (e: Throwable) {
-                            processingError = e
-                            Log.e("GpsLocationQueue", "Waypoint processing failed for fix ${fix.id}: ${e.message}", e)
-                            // Halt consumer loop on persistence failure to protect unprocessed fixes!
-                            break
+                        if (processed == 0) {
+                            signalChannel.receiveCatching()
                         }
-                    }
-
-                    if (processingError != null) {
+                    } catch (e: Throwable) {
+                        processingError = e
+                        Log.e("GpsLocationQueue", "Error in drainPendingGpsFixesUseCase consumer loop: ${e.message}", e)
                         break
                     }
                 } else {
-                    val currentId = tripIdProvider()
-                    val count = if (currentId.isNotEmpty()) {
-                        try { gpsInboxDao.getPendingCount(currentId) } catch (_: Exception) { 0 }
-                    } else 0
-
-                    if (isStopping.get() && count == 0 && activeProducers.get() == 0) {
+                    // Direct processing path (used when useCase is not provided, e.g. in standalone unit tests)
+                    val pendingFixes = try {
+                        gpsInboxDao.getPendingFixes(currentTripId, limit = batchFetchLimit)
+                    } catch (e: Throwable) {
+                        processingError = e
+                        Log.e("GpsLocationQueue", "Error querying pending fixes: ${e.message}", e)
                         break
                     }
-                    signalChannel.receiveCatching()
+
+                    if (pendingFixes.isNotEmpty()) {
+                        for (fix in pendingFixes) {
+                            if (!isActive) break
+                            val location = Location("gps").apply {
+                                latitude = fix.latitude
+                                longitude = fix.longitude
+                                altitude = fix.altitude
+                                accuracy = fix.accuracy
+                                speed = fix.speed
+                                time = fix.timestamp
+                                elapsedRealtimeNanos = fix.elapsedRealtimeNanos
+                            }
+
+                            try {
+                                onLocationProcessed?.invoke(location)
+                                gpsInboxDao.deleteFixById(fix.id)
+                            } catch (e: Throwable) {
+                                processingError = e
+                                Log.e("GpsLocationQueue", "Waypoint processing failed for fix ${fix.id}: ${e.message}", e)
+                                break
+                            }
+                        }
+
+                        if (processingError != null) {
+                            break
+                        }
+                    } else {
+                        val count = try {
+                            gpsInboxDao.getPendingCount(currentTripId)
+                        } catch (e: Throwable) {
+                            processingError = e
+                            Log.e("GpsLocationQueue", "Error querying pending count: ${e.message}", e)
+                            break
+                        }
+
+                        if (isStopping.get() && count == 0 && admissionBarrier.inFlight() == 0) {
+                            break
+                        }
+                        signalChannel.receiveCatching()
+                    }
                 }
             }
         }
@@ -102,57 +130,85 @@ class GpsLocationQueue(
 
     /**
      * Enqueues a batch of incoming GPS fixes durably into Room SQLite inbox.
+     * Uses GpsAdmissionBarrier for race-safe admission.
      */
     fun enqueueBatch(locations: List<Location>) {
-        if (isStopping.get() || locations.isEmpty()) return
+        if (locations.isEmpty()) return
         val currentTripId = tripIdProvider()
         if (currentTripId.isEmpty()) return
 
-        val entities = locations.map { loc ->
-            GpsInboxEntity(
-                tripId = currentTripId,
-                latitude = loc.latitude,
-                longitude = loc.longitude,
-                altitude = loc.altitude,
-                accuracy = loc.accuracy,
-                speed = loc.speed,
-                timestamp = loc.time
+        admissionBarrier.tryAcquire { sequence ->
+            // Monotonic sorting within batch: Android monotonic acquisition time (elapsedRealtimeNanos)
+            val sorted = locations.sortedWith(
+                compareBy<Location> { loc ->
+                    if (loc.elapsedRealtimeNanos != 0L) loc.elapsedRealtimeNanos else loc.time * 1_000_000L
+                }.thenBy { it.time }
             )
-        }
 
-        activeProducers.incrementAndGet()
-        scope.launch(dispatcher) {
-            try {
-                gpsInboxDao.insertFixes(entities)
-                signalChannel.trySend(Unit)
-            } catch (e: Exception) {
-                Log.e("GpsLocationQueue", "Critical error inserting fixes into inbox: ${e.message}", e)
-                processingError = e
-            } finally {
-                activeProducers.decrementAndGet()
-                signalChannel.trySend(Unit)
+            val entities = sorted.map { loc ->
+                val monotonicTime = if (loc.elapsedRealtimeNanos != 0L) {
+                    loc.elapsedRealtimeNanos
+                } else {
+                    loc.time * 1_000_000L
+                }
+                GpsInboxEntity(
+                    tripId = currentTripId,
+                    sequenceNumber = sequence,
+                    elapsedRealtimeNanos = monotonicTime,
+                    latitude = loc.latitude,
+                    longitude = loc.longitude,
+                    altitude = loc.altitude,
+                    accuracy = loc.accuracy,
+                    speed = loc.speed,
+                    timestamp = loc.time
+                )
+            }
+
+            scope.launch(dispatcher) {
+                try {
+                    gpsInboxDao.insertFixes(entities)
+                    signalChannel.trySend(Unit)
+                } catch (e: Throwable) {
+                    Log.e("GpsLocationQueue", "Critical error inserting fixes into inbox: ${e.message}", e)
+                    processingError = e
+                }
             }
         }
     }
 
     suspend fun enqueueBatchSync(locations: List<Location>) {
-        if (isStopping.get() || locations.isEmpty()) return
+        if (locations.isEmpty()) return
         val currentTripId = tripIdProvider()
         if (currentTripId.isEmpty()) return
 
-        val entities = locations.map { loc ->
-            GpsInboxEntity(
-                tripId = currentTripId,
-                latitude = loc.latitude,
-                longitude = loc.longitude,
-                altitude = loc.altitude,
-                accuracy = loc.accuracy,
-                speed = loc.speed,
-                timestamp = loc.time
+        admissionBarrier.tryAcquire { sequence ->
+            val sorted = locations.sortedWith(
+                compareBy<Location> { loc ->
+                    if (loc.elapsedRealtimeNanos != 0L) loc.elapsedRealtimeNanos else loc.time * 1_000_000L
+                }.thenBy { it.time }
             )
+
+            val entities = sorted.map { loc ->
+                val monotonicTime = if (loc.elapsedRealtimeNanos != 0L) {
+                    loc.elapsedRealtimeNanos
+                } else {
+                    loc.time * 1_000_000L
+                }
+                GpsInboxEntity(
+                    tripId = currentTripId,
+                    sequenceNumber = sequence,
+                    elapsedRealtimeNanos = monotonicTime,
+                    latitude = loc.latitude,
+                    longitude = loc.longitude,
+                    altitude = loc.altitude,
+                    accuracy = loc.accuracy,
+                    speed = loc.speed,
+                    timestamp = loc.time
+                )
+            }
+            gpsInboxDao.insertFixes(entities)
+            signalChannel.trySend(Unit)
         }
-        gpsInboxDao.insertFixes(entities)
-        signalChannel.trySend(Unit)
     }
 
     fun enqueue(location: Location) {
@@ -172,12 +228,10 @@ class GpsLocationQueue(
             return
         }
 
-        // Wait for all accepted producer batches in flight to finish writing to SQLite
-        while (activeProducers.get() > 0) {
-            delay(10L)
-        }
+        // 1. Close admission barrier and await completion of all in-flight Room insertions
+        admissionBarrier.closeAndWait()
 
-        // Wake consumer to drain all remaining items from SQLite inbox
+        // 2. Wake consumer to drain
         signalChannel.trySend(Unit)
 
         try {
@@ -189,31 +243,25 @@ class GpsLocationQueue(
         processingError?.let { err ->
             throw IllegalStateException("Waypoint processing failed during tracking: ${err.message}", err)
         }
+
+        // 3. Verify exact pending count is 0
+        val currentTripId = tripIdProvider()
+        if (currentTripId.isNotEmpty()) {
+            val pendingCount = gpsInboxDao.getPendingCount(currentTripId)
+            if (pendingCount > 0) {
+                throw IllegalStateException("Queue drain verification failed: $pendingCount fixes remain pending for trip $currentTripId")
+            }
+        }
     }
 
     /**
-     * Stops the in-memory consumer without deleting any pending fixes from SQLite inbox.
-     * Used on normal service destruction or system kill so work can be recovered later.
+     * Stops consumer without deleting pending fixes from SQLite inbox.
+     * Preserves pending data across process death or service destruction.
      */
     fun stopConsumer() {
         isStopping.set(true)
+        admissionBarrier.closeAndWait()
         consumerJob?.cancel()
-    }
-
-    /**
-     * Unrecoverable cancellation (e.g. startup failure when permission is missing).
-     */
-    fun cancelEmergency() {
-        isStopping.set(true)
-        consumerJob?.cancel()
-        val currentTripId = tripIdProvider()
-        if (currentTripId.isNotEmpty()) {
-            scope.launch(dispatcher) {
-                try {
-                    gpsInboxDao.deleteFixesForTrip(currentTripId)
-                } catch (_: Exception) {}
-            }
-        }
     }
 
     suspend fun getPendingCount(): Int {

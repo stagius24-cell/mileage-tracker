@@ -9,11 +9,15 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.businesstracker.mileage.data.local.GpsInboxDao
+import com.businesstracker.mileage.data.local.TripLifecycleDao
+import com.businesstracker.mileage.data.local.entity.TripLifecycleState
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
+import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FinalizeTripUseCase
 import com.businesstracker.mileage.service.LocationTrackingService
 import com.businesstracker.mileage.service.NotificationHelper
@@ -30,7 +34,10 @@ class TripDebounceWorker @AssistedInject constructor(
     private val activeTripRepository: ActiveTripRepository,
     private val tripRepository: TripRepository,
     private val finalizeTripUseCase: FinalizeTripUseCase,
-    private val notificationHelper: NotificationHelper
+    private val notificationHelper: NotificationHelper,
+    private val drainPendingGpsFixesUseCase: DrainPendingGpsFixesUseCase,
+    private val gpsInboxDao: GpsInboxDao,
+    private val tripLifecycleDao: TripLifecycleDao
 ) : CoroutineWorker(context, workerParams) {
 
     companion object {
@@ -117,6 +124,21 @@ class TripDebounceWorker @AssistedInject constructor(
             }
 
             // 4. Safe recovery path ONLY when service is completely inactive (killed by OS or device rebooted)
+            // Drain all pending GPS fixes from the Room inbox before attempting finalization!
+            try {
+                drainPendingGpsFixesUseCase.drain(activeTrip.id)
+            } catch (e: Exception) {
+                Log.e("TripDebounceWorker", "Failed to drain pending GPS fixes during recovery: ${e.message}", e)
+                return Result.retry()
+            }
+
+            // Confirm pending count is strictly zero
+            val remainingFixes = gpsInboxDao.getPendingCount(activeTrip.id)
+            if (remainingFixes > 0) {
+                Log.w("TripDebounceWorker", "Pending fixes remain ($remainingFixes); retrying worker")
+                return Result.retry()
+            }
+
             val finalizedTrip = finalizeTripUseCase.execute(activeTrip.id, method)
             if (!isTripTerminated(activeTrip.id)) {
                 // Ambiguous recovery: preserve active state and return retry
@@ -142,8 +164,10 @@ class TripDebounceWorker @AssistedInject constructor(
     }
 
     private suspend fun isTripTerminated(tripId: String): Boolean {
-        val isFinalized = tripRepository.getTripById(tripId) != null
-        val isDiscarded = preferencesManager.isTripDiscarded(tripId)
+        val isFinalizedInDb = tripRepository.getTripById(tripId) != null
+        val lifecycleState = tripLifecycleDao.getState(tripId)
+        val isDiscarded = lifecycleState == TripLifecycleState.DISCARDED.value || preferencesManager.isTripDiscarded(tripId)
+        val isFinalized = isFinalizedInDb || lifecycleState == TripLifecycleState.FINALIZED.value
         return isFinalized || isDiscarded
     }
 }

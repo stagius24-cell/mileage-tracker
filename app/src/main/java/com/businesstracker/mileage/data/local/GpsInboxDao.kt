@@ -15,7 +15,10 @@ interface GpsInboxDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertFixes(fixes: List<GpsInboxEntity>): List<Long>
 
-    @Query("SELECT * FROM gps_inbox WHERE tripId = :tripId ORDER BY timestamp ASC, id ASC LIMIT :limit")
+    @Query("SELECT * FROM gps_inbox WHERE id = :id")
+    suspend fun getFixById(id: Long): GpsInboxEntity?
+
+    @Query("SELECT * FROM gps_inbox WHERE tripId = :tripId ORDER BY sequenceNumber ASC, elapsedRealtimeNanos ASC, timestamp ASC, id ASC LIMIT :limit")
     suspend fun getPendingFixes(tripId: String, limit: Int): List<GpsInboxEntity>
 
     @Query("SELECT COUNT(*) FROM gps_inbox WHERE tripId = :tripId")

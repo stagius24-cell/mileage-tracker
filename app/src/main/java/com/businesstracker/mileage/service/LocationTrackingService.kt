@@ -92,6 +92,8 @@ class LocationTrackingService : Service() {
     @Inject lateinit var notificationHelper: NotificationHelper
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
     @Inject lateinit var gpsInboxDao: GpsInboxDao
+    @Inject lateinit var drainPendingGpsFixesUseCase: DrainPendingGpsFixesUseCase
+    @Inject lateinit var tripLifecycleDao: com.businesstracker.mileage.data.local.TripLifecycleDao
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -180,7 +182,8 @@ class LocationTrackingService : Service() {
                 dispatcher = ioDispatcher,
                 gpsInboxDao = gpsInboxDao,
                 tripIdProvider = { currentTripId },
-                batchFetchLimit = 100
+                batchFetchLimit = 100,
+                drainPendingGpsFixesUseCase = drainPendingGpsFixesUseCase
             ) { location ->
                 handleLocationSerialized(location)
             }
@@ -197,6 +200,16 @@ class LocationTrackingService : Service() {
                     )
                     currentTripId = activeTrip.id
                     preferencesManager.setActiveTripId(currentTripId)
+
+                    // Track authoritative lifecycle in Room
+                    try {
+                        tripLifecycleDao.insertOrUpdate(
+                            com.businesstracker.mileage.data.local.entity.TripLifecycleEntity(
+                                tripId = currentTripId,
+                                state = com.businesstracker.mileage.data.local.entity.TripLifecycleState.TRACKING.value
+                            )
+                        )
+                    } catch (_: Exception) {}
 
                     val existingTrip = if (activeTrip.totalDistanceMeters > 0.0 || activeTrip.id != tripId) activeTrip else null
 
@@ -229,13 +242,8 @@ class LocationTrackingService : Service() {
                     }
 
                     if (!updatesRegistered) {
-                        Log.e("LocationTrackingService", "Location updates could not be started; cleaning up failed startup")
-                        if (currentTripId.isNotEmpty()) {
-                            try {
-                                activeTripRepository.clearActiveTrip(currentTripId)
-                                preferencesManager.clearActiveTripId(currentTripId)
-                            } catch (_: Exception) {}
-                        }
+                        Log.e("LocationTrackingService", "Location updates could not be started; halting startup without deleting recovered data")
+                        // Never clear active trip or preferences on transient registration failure!
                         cleanupFailedStartup()
                         return@launch
                     }
@@ -257,7 +265,7 @@ class LocationTrackingService : Service() {
         isStartingOrRunning.set(false)
         isStopping.set(false)
         isDrainingGps.set(false)
-        gpsLocationQueue?.cancelEmergency()
+        gpsLocationQueue?.stopConsumer() // Never wipe or cancelEmergency persisted data!
         tickerJob?.cancel()
         try {
             fusedLocationClient.removeLocationUpdates(locationCallback)
@@ -367,6 +375,13 @@ class LocationTrackingService : Service() {
         isDrainingGps.set(true)
         serviceScope.launch(ioDispatcher) {
             try {
+                tripLifecycleDao.updateState(
+                    currentTripId,
+                    com.businesstracker.mileage.data.local.entity.TripLifecycleState.DRAINING.value
+                )
+            } catch (_: Exception) {}
+
+            try {
                 // 1. Stop receiving new location callbacks
                 fusedLocationClient.removeLocationUpdates(locationCallback)
             } catch (e: Exception) {
@@ -381,6 +396,12 @@ class LocationTrackingService : Service() {
                 gpsLocationQueue?.drainAndClose()
             } catch (e: Exception) {
                 Log.e("LocationTrackingService", "Waypoint persistence failed during tracking; halting finalization: ${e.message}", e)
+                try {
+                    tripLifecycleDao.updateState(
+                        currentTripId,
+                        com.businesstracker.mileage.data.local.entity.TripLifecycleState.RECOVERY_REQUIRED.value
+                    )
+                } catch (_: Exception) {}
                 isDrainingGps.set(false)
                 _serviceState.value = TrackingServiceState(isTracking = false)
                 isStartingOrRunning.set(false)
@@ -391,9 +412,19 @@ class LocationTrackingService : Service() {
             }
             isDrainingGps.set(false)
 
+            try {
+                tripLifecycleDao.updateState(
+                    currentTripId,
+                    com.businesstracker.mileage.data.local.entity.TripLifecycleState.READY_TO_FINALIZE.value
+                )
+            } catch (_: Exception) {}
+
             // 4. False trip prevention: if movement is under 200m and not confirmed, discard
-            val distanceMiles = totalDistanceMeters / METERS_PER_MILE
-            if (!isDisplacementConfirmed && totalDistanceMeters < 200.0 && distanceMiles < 0.12) {
+            // Persisted active trip in Room is authoritative
+            val persistedActiveTrip = activeTripRepository.getActiveTrip()
+            val totalMeters = persistedActiveTrip?.totalDistanceMeters ?: totalDistanceMeters
+            val distanceMiles = totalMeters / METERS_PER_MILE
+            if (!isDisplacementConfirmed && totalMeters < 200.0 && distanceMiles < 0.12) {
                 if (currentTripId.isNotEmpty()) {
                     tripFinalizationCoordinator.discardFalseTrip(currentTripId)
                     preferencesManager.clearActiveTripId(currentTripId)

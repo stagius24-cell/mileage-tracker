@@ -306,4 +306,115 @@ class GpsLocationQueueTest {
         assertEquals("Total processed fixes across process termination must equal 15", 15, totalProcessed)
         assertEquals("Inbox must be completely clean after recovery", 0, gpsInboxDao.getPendingCount(tripId))
     }
+
+    // Test 21 & PART 4: Service stop racing with incoming callback batch does not lose accepted fix
+    @Test
+    fun serviceStop_racingWithIncomingCallback_doesNotLoseAcceptedFix() = runBlocking {
+        val tripId = "trip-race-stop"
+        val processedFixes = Collections.synchronizedList(mutableListOf<Long>())
+
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            batchFetchLimit = 10
+        ) { loc ->
+            processedFixes.add(loc.time)
+        }
+
+        // Simulate incoming batch acquiring barrier right as stop/drain begins
+        val loc = createLocation(37.3382, -121.8863, 1000L)
+        queue.enqueue(loc)
+        queue.drainAndClose()
+
+        assertEquals("Accepted callback must not be lost when racing with stop", 1, processedFixes.size)
+        assertEquals(0, gpsInboxDao.getPendingCount(tripId))
+    }
+
+    // Test 23 & PART 10: 1,200 fixes processed under bounded batch limits
+    @Test
+    fun full1200Fixes_processedWithoutLoss_underBoundedBatchLimit() = runBlocking {
+        val tripId = "trip-1200-fixes"
+        val totalFixes = 1200
+        val batchLimit = 50
+        val processedCount = AtomicInteger(0)
+
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            batchFetchLimit = batchLimit
+        ) {
+            processedCount.incrementAndGet()
+        }
+
+        for (i in 1..totalFixes step 100) {
+            val chunk = (i until i + 100).map { createLocation(37.3382, -121.8863, it * 1000L) }
+            queue.enqueueBatchSync(chunk)
+        }
+
+        queue.drainAndClose()
+
+        assertEquals("All 1,200 fixes must be consumed without loss", totalFixes, processedCount.get())
+        assertEquals(0, gpsInboxDao.getPendingCount(tripId))
+    }
+
+    // Test 26 & 27: Monotonic acquisition time protects against wall-clock NTP adjustments and tie-breaks deterministically
+    @Test
+    fun monotonicTimePolicy_handlesWallClockAdjustment_andTieBreaksDeterministically() = runBlocking {
+        val tripId = "trip-clock-adjustment"
+        val processedTimes = Collections.synchronizedList(mutableListOf<Long>())
+
+        // Fix 1: Monotonic nanos = 10ms, wall-clock = 5000L
+        // Fix 2: Monotonic nanos = 20ms, wall-clock = 2000L (user/NTP changed clock backward)
+        // Fix 3: Monotonic nanos = 30ms, wall-clock = 2000L (identical wall-clock, tie-broken by monotonic time and id)
+        val fix1 = com.businesstracker.mileage.data.local.entity.GpsInboxEntity(
+            id = 1,
+            tripId = tripId,
+            sequenceNumber = 1,
+            elapsedRealtimeNanos = 10_000_000L,
+            latitude = 37.0,
+            longitude = -122.0,
+            timestamp = 5000L
+        )
+        val fix2 = com.businesstracker.mileage.data.local.entity.GpsInboxEntity(
+            id = 2,
+            tripId = tripId,
+            sequenceNumber = 2,
+            elapsedRealtimeNanos = 20_000_000L,
+            latitude = 37.0,
+            longitude = -122.0,
+            timestamp = 2000L
+        )
+        val fix3 = com.businesstracker.mileage.data.local.entity.GpsInboxEntity(
+            id = 3,
+            tripId = tripId,
+            sequenceNumber = 3,
+            elapsedRealtimeNanos = 30_000_000L,
+            latitude = 37.0,
+            longitude = -122.0,
+            timestamp = 2000L
+        )
+
+        gpsInboxDao.insertFixes(listOf(fix1, fix2, fix3))
+
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            batchFetchLimit = 10
+        ) { loc ->
+            processedTimes.add(loc.elapsedRealtimeNanos)
+        }
+
+        queue.drainAndClose()
+
+        assertEquals("Ordering must be strictly monotonic even with wall-clock time anomalies",
+            listOf(10_000_000L, 20_000_000L, 30_000_000L),
+            processedTimes.toList()
+        )
+    }
 }

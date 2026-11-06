@@ -68,7 +68,7 @@ class ActiveTripRepositoryImpl @Inject constructor(
         activeTrip
     }
 
-    override suspend fun recordWaypoint(tripId: String, waypoint: Waypoint) = withContext(ioDispatcher) {
+    override suspend fun recordWaypoint(tripId: String, waypoint: Waypoint): Unit = withContext(ioDispatcher) {
         activeTripDao.insertWaypoint(
             ActiveWaypointEntity(
                 tripId = tripId,
@@ -80,6 +80,7 @@ class ActiveTripRepositoryImpl @Inject constructor(
                 timestamp = waypoint.timestamp
             )
         )
+        Unit
     }
 
     override suspend fun updateTripProgress(

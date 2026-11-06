@@ -59,6 +59,10 @@ android {
         compose = true
         buildConfig = true
     }
+
+    sourceSets {
+        getByName("test").assets.srcDirs("$projectDir/schemas")
+    }
 }
 
 dependencies {

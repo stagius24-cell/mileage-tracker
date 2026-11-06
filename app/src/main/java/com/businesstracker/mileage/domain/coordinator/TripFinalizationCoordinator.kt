@@ -1,13 +1,17 @@
 package com.businesstracker.mileage.domain.coordinator
 
 import android.util.Log
+import androidx.room.withTransaction
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.entity.TripEntity
+import com.businesstracker.mileage.data.local.entity.TripLifecycleEntity
+import com.businesstracker.mileage.data.local.entity.TripLifecycleState
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.model.TripPurpose
+import com.businesstracker.mileage.domain.model.Waypoint
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.domain.usecase.CalculateMileageRateUseCase
@@ -22,8 +26,8 @@ import javax.inject.Singleton
 
 /**
  * Single-owner, thread-safe, and crash-safe trip finalization coordinator.
- * Used by both LocationTrackingService and TripDebounceWorker to eliminate race conditions
- * and guarantee database idempotency.
+ * Authoritative in Room: manages trip lifecycle states, eliminates race conditions,
+ * and guarantees exact-ID finalization idempotency without global clear operations.
  */
 @Singleton
 class TripFinalizationCoordinator @Inject constructor(
@@ -47,24 +51,65 @@ class TripFinalizationCoordinator @Inject constructor(
         fallbackTrackingMethod: TrackingMethod = TrackingMethod.AUTO_DETECTED
     ): TripEntity? = withContext(ioDispatcher) {
         finalizationMutex.withLock {
-            // 1. Idempotency Check: if trip already exists in trips table, return it directly
+            if (tripId.isEmpty()) return@withLock null
+
+            // 1. Idempotency Check via Room Lifecycle and Trips table
+            val lifecycle = database.tripLifecycleDao().getLifecycle(tripId)
+            if (lifecycle?.state == TripLifecycleState.FINALIZED.value) {
+                return@withLock tripRepository.getTripById(tripId)
+            }
+            if (lifecycle?.state == TripLifecycleState.DISCARDED.value) {
+                return@withLock null
+            }
+
             val existingTrip = tripRepository.getTripById(tripId)
             if (existingTrip != null) {
-                try {
-                    activeTripRepository.clearActiveTrip(tripId)
-                    preferencesManager.clearActiveTripId(tripId)
-                } catch (_: Exception) {}
+                database.tripLifecycleDao().insertOrUpdate(
+                    TripLifecycleEntity(tripId = tripId, state = TripLifecycleState.FINALIZED.value)
+                )
                 return@withLock existingTrip
             }
 
-            // 2. Fetch active trip data
-            val activeTrip = activeTripRepository.getActiveTrip()
-            if (activeTrip == null || (activeTrip.id != tripId && tripId.isNotEmpty())) {
-                // Active session not in table; check persisted trips again
+            // 2. Fetch active trip data strictly by exact tripId
+            val activeTrip = database.activeTripDao().getActiveTripById(tripId)
+            if (activeTrip == null) {
+                // Trip is neither active nor finalized; check if discarded
+                if (preferencesManager.isTripDiscarded(tripId)) {
+                    return@withLock null
+                }
                 return@withLock tripRepository.getTripById(tripId)
             }
 
-            val waypoints = activeTripRepository.getWaypoints(activeTrip.id)
+            // 3. Verify exact trip has zero pending GPS fixes
+            val pendingGpsCount = database.gpsInboxDao().getPendingCount(tripId)
+            if (pendingGpsCount > 0) {
+                throw IllegalStateException("Cannot finalize trip $tripId: $pendingGpsCount GPS fixes remain pending in Room inbox")
+            }
+
+            // 4. Claim finalization state transition in Room
+            database.tripLifecycleDao().insertOrUpdate(
+                TripLifecycleEntity(tripId = tripId, state = TripLifecycleState.DRAINING.value)
+            )
+
+            // 5. Check false trip threshold using persisted Room data: discard movement < 200m (0.12 miles)
+            val totalDistanceMiles = (activeTrip.totalDistanceMeters / METERS_PER_MILE).roundToDecimals(2)
+            if (totalDistanceMiles < 0.12 && activeTrip.totalDistanceMeters < 200.0) {
+                discardFalseTripInternal(tripId)
+                return@withLock null
+            }
+
+            val waypointsEntities = database.activeTripDao().getWaypointsForTrip(tripId)
+            val waypoints = waypointsEntities.map { entity ->
+                Waypoint(
+                    latitude = entity.latitude,
+                    longitude = entity.longitude,
+                    altitude = entity.altitude,
+                    accuracy = entity.accuracy,
+                    speed = entity.speed,
+                    timestamp = entity.timestamp
+                )
+            }
+
             val startTime = activeTrip.startTime
             val endTime = System.currentTimeMillis()
             val dateString = rateCalculator.getFormattedDate(startTime)
@@ -74,16 +119,7 @@ class TripFinalizationCoordinator @Inject constructor(
             val endLat = activeTrip.lastLatitude
             val endLng = activeTrip.lastLongitude
 
-            // 3. Prevent false trips: discard stationary jitter or movements under 200m (0.12 miles)
-            val totalDistanceMiles = (activeTrip.totalDistanceMeters / METERS_PER_MILE).roundToDecimals(2)
-            if (totalDistanceMiles < 0.12 && activeTrip.totalDistanceMeters < 200.0) {
-                activeTripRepository.clearActiveTrip(activeTrip.id)
-                preferencesManager.clearActiveTripId(activeTrip.id)
-                preferencesManager.recordDiscardedTrip(activeTrip.id)
-                return@withLock null
-            }
-
-            // 4. Geocode endpoints asynchronously
+            // 6. Geocode endpoints asynchronously
             val startAddress = geocodeUseCase.getFormattedAddress(startLat, startLng)
             val endAddress = geocodeUseCase.getFormattedAddress(endLat, endLng)
 
@@ -107,7 +143,6 @@ class TripFinalizationCoordinator @Inject constructor(
             }
             val purpose = if (isPersonalDrive) "Personal Drive" else TripPurpose.NURSERY_PICKUP
 
-            // 5. Preserve original tracking method from active trip
             val method = if (activeTrip.trackingMethod.isNotEmpty()) {
                 activeTrip.trackingMethod
             } else {
@@ -139,23 +174,44 @@ class TripFinalizationCoordinator @Inject constructor(
                 syncedAt = null
             )
 
-            // 6. Atomic database persistence: inserts trip and clears active trip in single Room transaction
-            database.tripDao().persistFinalizedTripAndClearActive(tripEntity)
-            preferencesManager.clearActiveTripId(activeTrip.id)
+            // 7. Atomic database transaction: persists trip, marks lifecycle FINALIZED,
+            // and cleans up ONLY this exact trip's active records
+            database.withTransaction {
+                database.tripDao().insertTripIgnore(tripEntity)
+                database.tripLifecycleDao().insertOrUpdate(
+                    TripLifecycleEntity(tripId = tripId, state = TripLifecycleState.FINALIZED.value)
+                )
+                database.activeTripDao().deleteActiveTripById(tripId)
+                database.activeTripDao().deleteWaypointsForTrip(tripId)
+                database.gpsInboxDao().deleteFixesForTrip(tripId)
+            }
 
+            preferencesManager.clearActiveTripId(activeTrip.id)
             tripEntity
         }
     }
 
     suspend fun discardFalseTrip(tripId: String) = withContext(ioDispatcher) {
         finalizationMutex.withLock {
-            try {
-                activeTripRepository.clearActiveTrip(tripId)
-                preferencesManager.clearActiveTripId(tripId)
-                preferencesManager.recordDiscardedTrip(tripId)
-            } catch (e: Exception) {
-                Log.e("TripFinalizationCoordinator", "Error discarding false trip: ${e.message}", e)
+            discardFalseTripInternal(tripId)
+        }
+    }
+
+    private suspend fun discardFalseTripInternal(tripId: String) {
+        try {
+            database.withTransaction {
+                database.tripLifecycleDao().insertOrUpdate(
+                    TripLifecycleEntity(tripId = tripId, state = TripLifecycleState.DISCARDED.value, reason = "False trip (<200m)")
+                )
+                database.activeTripDao().deleteActiveTripById(tripId)
+                database.activeTripDao().deleteWaypointsForTrip(tripId)
+                database.gpsInboxDao().deleteFixesForTrip(tripId)
             }
+            preferencesManager.clearActiveTripId(tripId)
+            preferencesManager.recordDiscardedTrip(tripId)
+        } catch (e: Exception) {
+            Log.e("TripFinalizationCoordinator", "Error discarding false trip: ${e.message}", e)
+            throw e
         }
     }
 
