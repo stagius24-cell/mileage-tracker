@@ -43,14 +43,18 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var activityTransitionManager: ActivityTransitionManager
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
 
-    private var hasPromptedBackgroundLocation = false
-    private var showBackgroundSettingsDialog by mutableStateOf(false)
+    var hasRequestedBackgroundPermission = false
+        internal set
+    var hasShownSettingsExplanationDialog = false
+        internal set
+    var showBackgroundSettingsDialog by mutableStateOf(false)
+        internal set
 
     private val backgroundLocationLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        if (!isGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !hasPromptedBackgroundLocation) {
-            hasPromptedBackgroundLocation = true
+        if (!isGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !hasShownSettingsExplanationDialog) {
+            hasShownSettingsExplanationDialog = true
             showBackgroundSettingsDialog = true
         }
         checkAndRegisterTransitions()
@@ -67,8 +71,8 @@ class MainActivity : ComponentActivity() {
             val bgLocationGranted = ContextCompat.checkSelfPermission(
                 this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
-            if (!bgLocationGranted && !hasPromptedBackgroundLocation) {
-                hasPromptedBackgroundLocation = true
+            if (!bgLocationGranted && !hasRequestedBackgroundPermission) {
+                hasRequestedBackgroundPermission = true
                 backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                 return@registerForActivityResult
             }

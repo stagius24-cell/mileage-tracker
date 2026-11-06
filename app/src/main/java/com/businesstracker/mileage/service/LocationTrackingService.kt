@@ -13,6 +13,7 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.ServiceCompat
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.domain.coordinator.TripFinalizationCoordinator
 import com.businesstracker.mileage.domain.model.FilterResult
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.Waypoint
@@ -31,7 +32,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -63,12 +64,20 @@ class LocationTrackingService : Service() {
         val serviceState: StateFlow<TrackingServiceState> = _serviceState.asStateFlow()
 
         // Atomic guard ensuring single-session initialization and preventing race conditions
-        private val isStartingOrRunning = java.util.concurrent.atomic.AtomicBoolean(false)
+        private val isStartingOrRunning = AtomicBoolean(false)
+
+        fun isTrackingRunning(): Boolean = isStartingOrRunning.get() || _serviceState.value.isTracking
+
+        fun resetGuardForTesting() {
+            isStartingOrRunning.set(false)
+            _serviceState.value = TrackingServiceState()
+        }
     }
 
     @Inject lateinit var fusedLocationClient: FusedLocationProviderClient
     @Inject lateinit var filterGpsPointUseCase: FilterGpsPointUseCase
     @Inject lateinit var activeTripRepository: ActiveTripRepository
+    @Inject lateinit var tripFinalizationCoordinator: TripFinalizationCoordinator
     @Inject lateinit var finalizeTripUseCase: FinalizeTripUseCase
     @Inject lateinit var notificationHelper: NotificationHelper
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
@@ -77,9 +86,9 @@ class LocationTrackingService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var wakeLock: PowerManager.WakeLock? = null
     private var tickerJob: Job? = null
-    private val locationChannel = Channel<Location>(capacity = Channel.BUFFERED)
-    private var locationConsumerJob: Job? = null
+    private var gpsLocationQueue: GpsLocationQueue? = null
 
+    private val isStopping = AtomicBoolean(false)
     private var currentTripId: String = ""
     private var trackingMethod: TrackingMethod = TrackingMethod.AUTO_DETECTED
     private var tripStartTime: Long = 0L
@@ -92,11 +101,12 @@ class LocationTrackingService : Service() {
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
-            if (isPaused) return
+            if (isPaused || isStopping.get()) return
             // Sort by fix timestamp to ensure serialized in-order processing
             val sorted = result.locations.sortedBy { it.time }
             for (location in sorted) {
-                locationChannel.trySend(location)
+                if (isStopping.get()) break
+                gpsLocationQueue?.enqueue(location)
             }
         }
     }
@@ -132,6 +142,7 @@ class LocationTrackingService : Service() {
         }
 
         try {
+            isStopping.set(false)
             currentTripId = tripId
             trackingMethod = method
             isPaused = false
@@ -156,7 +167,15 @@ class LocationTrackingService : Service() {
                 foregroundType
             )
 
-            startLocationConsumer()
+            // Initialize serialized GPS location queue with non-loss backpressure
+            gpsLocationQueue?.cancelEmergency()
+            gpsLocationQueue = GpsLocationQueue(
+                scope = serviceScope,
+                dispatcher = ioDispatcher,
+                capacity = 64
+            ) { location ->
+                handleLocationSerialized(location)
+            }
 
             serviceScope.launch(ioDispatcher) {
                 try {
@@ -194,7 +213,20 @@ class LocationTrackingService : Service() {
                         isDisplacementConfirmed = false
                     }
 
-                    startLocationUpdates()
+                    // Register location updates with FusedLocationProviderClient
+                    val updatesRegistered = startLocationUpdates()
+                    if (!updatesRegistered) {
+                        Log.e("LocationTrackingService", "Location updates could not be started; cleaning up failed startup")
+                        if (currentTripId.isNotEmpty()) {
+                            try {
+                                activeTripRepository.clearActiveTrip(currentTripId)
+                                preferencesManager.setActiveTripId(null)
+                            } catch (_: Exception) {}
+                        }
+                        cleanupFailedStartup()
+                        return@launch
+                    }
+
                     startDurationTicker()
                     updateServiceState()
                 } catch (e: Exception) {
@@ -210,18 +242,22 @@ class LocationTrackingService : Service() {
 
     private fun cleanupFailedStartup() {
         isStartingOrRunning.set(false)
-        locationConsumerJob?.cancel()
+        isStopping.set(false)
+        gpsLocationQueue?.cancelEmergency()
         tickerJob?.cancel()
         try {
             fusedLocationClient.removeLocationUpdates(locationCallback)
         } catch (_: Exception) {}
+        if (wakeLock?.isHeld == true) {
+            try { wakeLock?.release() } catch (_: Exception) {}
+        }
         _serviceState.value = TrackingServiceState(isTracking = false)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
     @SuppressLint("MissingPermission")
-    private fun startLocationUpdates() {
+    private fun startLocationUpdates(): Boolean {
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
             LOCATION_INTERVAL_MILLIS
@@ -230,24 +266,19 @@ class LocationTrackingService : Service() {
             setWaitForAccurateLocation(false)
         }.build()
 
-        try {
+        return try {
             fusedLocationClient.requestLocationUpdates(
                 locationRequest,
                 locationCallback,
                 Looper.getMainLooper()
             )
+            true
         } catch (e: SecurityException) {
             Log.e("LocationTrackingService", "Location permission missing when requesting updates", e)
-        }
-    }
-
-    private fun startLocationConsumer() {
-        locationConsumerJob?.cancel()
-        locationConsumerJob = serviceScope.launch(ioDispatcher) {
-            for (location in locationChannel) {
-                if (!isActive) break
-                handleLocationSerialized(location)
-            }
+            false
+        } catch (e: Exception) {
+            Log.e("LocationTrackingService", "Failed to register location updates", e)
+            false
         }
     }
 
@@ -316,31 +347,45 @@ class LocationTrackingService : Service() {
     }
 
     private fun stopTracking() {
+        if (!isStopping.compareAndSet(false, true)) {
+            return
+        }
         serviceScope.launch(ioDispatcher) {
             try {
+                // 1. Stop receiving new location callbacks
                 fusedLocationClient.removeLocationUpdates(locationCallback)
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                Log.w("LocationTrackingService", "Error removing location updates: ${e.message}")
+            }
 
-            locationConsumerJob?.cancel()
+            // 2. Stop ticker
             tickerJob?.cancel()
 
-            // False trip prevention: if movement is under 200m and not confirmed, discard without polluting DB
-            val distanceMiles = totalDistanceMeters / 1609.344
+            // 3. Drain all queued GPS locations before finalizing
+            try {
+                gpsLocationQueue?.drainAndClose()
+            } catch (e: Exception) {
+                Log.w("LocationTrackingService", "Error draining GPS queue: ${e.message}")
+            }
+
+            // 4. False trip prevention: if movement is under 200m and not confirmed, discard
+            val distanceMiles = totalDistanceMeters / METERS_PER_MILE
             if (!isDisplacementConfirmed && totalDistanceMeters < 200.0 && distanceMiles < 0.12) {
                 if (currentTripId.isNotEmpty()) {
-                    activeTripRepository.clearActiveTrip(currentTripId)
+                    tripFinalizationCoordinator.discardFalseTrip(currentTripId)
                     preferencesManager.setActiveTripId(null)
                 }
                 _serviceState.value = TrackingServiceState(isTracking = false)
                 isStartingOrRunning.set(false)
+                isStopping.set(false)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return@launch
             }
 
-            // Finalize trip and persist to Room database
+            // 5. Finalize trip using single-owner idempotent coordinator
             if (currentTripId.isNotEmpty()) {
-                val finalizedTrip = finalizeTripUseCase.execute(currentTripId, trackingMethod)
+                val finalizedTrip = tripFinalizationCoordinator.finalizeTrip(currentTripId, trackingMethod)
                 finalizedTrip?.let { trip ->
                     if (trip.classification == com.businesstracker.mileage.domain.model.TripClassification.UNREVIEWED.value) {
                         notificationHelper.showTripDetectedNotification(trip.id, trip.totalDistanceMiles)
@@ -351,6 +396,7 @@ class LocationTrackingService : Service() {
 
             _serviceState.value = TrackingServiceState(isTracking = false)
             isStartingOrRunning.set(false)
+            isStopping.set(false)
             stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
@@ -422,13 +468,14 @@ class LocationTrackingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isStartingOrRunning.set(false)
-        locationConsumerJob?.cancel()
+        isStopping.set(false)
+        gpsLocationQueue?.cancelEmergency()
         tickerJob?.cancel()
         try {
             fusedLocationClient.removeLocationUpdates(locationCallback)
         } catch (_: Exception) {}
         if (wakeLock?.isHeld == true) {
-            wakeLock?.release()
+            try { wakeLock?.release() } catch (_: Exception) {}
         }
         serviceScope.cancel()
     }

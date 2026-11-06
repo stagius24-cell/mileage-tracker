@@ -17,6 +17,24 @@ interface TripDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTrip(trip: TripEntity)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertTripIgnore(trip: TripEntity): Long
+
+    @Query("DELETE FROM active_trip WHERE id = :tripId")
+    suspend fun deleteActiveTripById(tripId: String): Int
+
+    @Query("DELETE FROM active_waypoints WHERE tripId = :tripId")
+    suspend fun deleteActiveWaypointsByTripId(tripId: String): Int
+
+    @androidx.room.Transaction
+    suspend fun persistFinalizedTripAndClearActive(trip: TripEntity): Boolean {
+        val insertedRowId = insertTripIgnore(trip)
+        // Delete active session atomically regardless of whether row was newly inserted or previously present
+        deleteActiveTripById(trip.id)
+        deleteActiveWaypointsByTripId(trip.id)
+        return insertedRowId != -1L
+    }
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTrips(trips: List<TripEntity>)
 

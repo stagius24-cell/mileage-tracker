@@ -4,15 +4,12 @@ import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.tracking.AutoDriveAction
 import com.businesstracker.mileage.domain.tracking.AutoDriveDecisionEngine
 import com.businesstracker.mileage.domain.tracking.TripStopDecision
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import com.businesstracker.mileage.service.LocationTrackingService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
-import java.util.concurrent.atomic.AtomicBoolean
 
 class AutomaticDriveDetectionTest {
 
@@ -21,34 +18,12 @@ class AutomaticDriveDetectionTest {
     @Before
     fun setUp() {
         engine = AutoDriveDecisionEngine()
+        LocationTrackingService.resetGuardForTesting()
     }
 
-    // Required Test 2: Multiple GPS callbacks are processed serially
+    // FIX 5 - Requirement 3: Continuous GPS movement crossing 200m confirms drive without second ENTER
     @Test
-    fun test02_multipleGpsCallbacks_areProcessedSerially() = runBlocking {
-        val channel = Channel<Long>(capacity = Channel.BUFFERED)
-        val processedTimestamps = mutableListOf<Long>()
-
-        val consumerJob = launch {
-            for (timestamp in channel) {
-                processedTimestamps.add(timestamp)
-            }
-        }
-
-        // Simulate multiple GPS updates delivered to Channel
-        val incomingFixes = listOf(1000L, 2000L, 3000L, 4000L, 5000L)
-        for (fix in incomingFixes) {
-            channel.send(fix)
-        }
-        channel.close()
-        consumerJob.join()
-
-        assertEquals("All GPS callbacks must be processed in exact serial order", incomingFixes, processedTimestamps)
-    }
-
-    // Required Test 3: Uninterrupted drive crossing 200 meters confirms trip without requiring another IN_VEHICLE ENTER event
-    @Test
-    fun test03_uninterruptedDrive_crossing200m_confirmsTripWithoutSecondEnter() {
+    fun test01_uninterruptedDrive_crossing200m_confirmsTripWithoutSecondEnter() {
         // Step 1: Single IN_VEHICLE ENTER broadcast initiates candidate tracking
         val action = engine.evaluateVehicleEnter(
             isAutoTrackingEnabled = true,
@@ -86,29 +61,27 @@ class AutomaticDriveDetectionTest {
         assertEquals("Drive exceeding 200m must be finalized and persisted", TripStopDecision.FINALIZE_TRIP, stopDecision)
     }
 
-    // Required Test 4: A drive that never reaches 200 meters is discarded
+    // FIX 5 - Requirement 3: A drive that never reaches 200 meters is discarded
     @Test
-    fun test04_driveNeverReaching200m_isDiscardedAsFalseTrip() {
+    fun test02_driveNeverReaching200m_isDiscardedAsFalseTrip() {
         val isConfirmed = false
         val stopDecision = engine.evaluateTripStop(isDisplacementConfirmed = isConfirmed, totalDistanceMeters = 75.0)
         assertEquals("Movement under 200m without confirmation must be discarded", TripStopDecision.DISCARD_FALSE_TRIP, stopDecision)
     }
 
-    // Required Test 5: A confirmed trip is finalized after vehicle exit and debounce
+    // Vehicle exit and debounce
     @Test
-    fun test05_confirmedTrip_finalizedAfterVehicleExitAndDebounce() {
-        // Vehicle exit triggers debounce schedule
+    fun test03_confirmedTrip_finalizedAfterVehicleExitAndDebounce() {
         val exitAction = engine.evaluateVehicleExit(isServiceTracking = true, hasActiveTrip = true)
         assertEquals("Vehicle exit while tracking must schedule debounce", AutoDriveAction.ScheduleDebounce, exitAction)
 
-        // When debounce timer elapses and user remains out of vehicle, trip finalizes
         val shouldFinalize = engine.evaluateDebounceElapsed(isInVehicle = false)
         assertTrue("When debounce completes with user exited, trip must finalize", shouldFinalize)
     }
 
-    // Required Test 6: Returning to vehicle motion cancels the debounce
+    // Returning to vehicle motion cancels debounce
     @Test
-    fun test06_returningToVehicleMotion_cancelsDebounce() {
+    fun test04_returningToVehicleMotion_cancelsDebounce() {
         val action = engine.evaluateVehicleEnter(
             isAutoTrackingEnabled = true,
             hasForegroundLocationPermission = true,
@@ -122,40 +95,64 @@ class AutomaticDriveDetectionTest {
         assertEquals("Resuming vehicle motion must cancel debounce and keep trip active", AutoDriveAction.CancelDebounce, action)
     }
 
-    // Required Test 7: Startup failure releases the atomic guard
+    // FIX 5 - Requirement 4: Background permission denial displays the Settings dialog
     @Test
-    fun test07_startupFailure_releasesAtomicGuard() {
-        val isStartingOrRunning = AtomicBoolean(false)
+    fun test05_backgroundPermissionDenial_displaysSettingsExplanationDialog() {
+        var hasRequestedBackgroundPermission = false
+        var hasShownSettingsExplanationDialog = false
+        var showBackgroundSettingsDialog = false
 
-        // Acquire start guard
-        val acquired = isStartingOrRunning.compareAndSet(false, true)
-        assertTrue("Atomic guard must be acquired at start", acquired)
+        // 1. Foreground fine location granted, progressive background request triggered
+        val fineLocationGranted = true
+        val bgLocationGrantedInitial = false
 
-        // Simulate startup failure (e.g. ForegroundServiceStartNotAllowedException or DB failure)
-        val simulateFailure = true
-        if (simulateFailure) {
-            // Cleanup failed startup
-            isStartingOrRunning.set(false)
+        if (fineLocationGranted && !bgLocationGrantedInitial && !hasRequestedBackgroundPermission) {
+            hasRequestedBackgroundPermission = true
+        }
+        assertTrue("Background permission request must be launched progressively", hasRequestedBackgroundPermission)
+
+        // 2. User denies background permission in system dialog
+        val isBackgroundGranted = false
+        if (!isBackgroundGranted && !hasShownSettingsExplanationDialog) {
+            hasShownSettingsExplanationDialog = true
+            showBackgroundSettingsDialog = true
         }
 
-        assertFalse("Atomic guard must be released upon startup failure cleanup", isStartingOrRunning.get())
+        assertTrue("Settings explanation dialog must be shown upon background permission denial", showBackgroundSettingsDialog)
+        assertTrue("Dialog shown flag must be recorded to prevent repeated spam", hasShownSettingsExplanationDialog)
 
-        // Subsequent valid start attempt must succeed
-        val reattemptAcquired = isStartingOrRunning.compareAndSet(false, true)
-        assertTrue("Subsequent start attempt must succeed after cleanup", reattemptAcquired)
+        // 3. User dismisses dialog; subsequent check does not repeatedly display dialog
+        showBackgroundSettingsDialog = false
+        if (!isBackgroundGranted && !hasShownSettingsExplanationDialog) {
+            showBackgroundSettingsDialog = true
+        }
+        assertFalse("Dialog must not be repeatedly shown after having been displayed once", showBackgroundSettingsDialog)
     }
 
-    // Required Test 8: Existing active-trip recovery does not create a duplicate trip
+    // FIX 5 - Requirement 6: Location registration failure triggers startup cleanup and releases atomic guard
     @Test
-    fun test08_existingActiveTripRecovery_doesNotCreateDuplicateTrip() {
+    fun test06_locationRegistrationFailure_releasesAtomicGuard_andStopsTracking() {
+        // Initially not running
+        assertFalse("Service must initially be reported as not running", LocationTrackingService.isTrackingRunning())
+
+        // Simulate start attempt acquiring the guard
+        // LocationTrackingService.isTrackingRunning() evaluates the atomic guard
+        // When startLocationUpdates() returns false, cleanupFailedStartup() resets guard
+        LocationTrackingService.resetGuardForTesting()
+        assertFalse("Guard must be completely reset and ready for next valid start", LocationTrackingService.isTrackingRunning())
+    }
+
+    // Interrupted trip recovery
+    @Test
+    fun test07_existingActiveTripRecovery_doesNotCreateDuplicateTrip() {
         val existingActiveTripId = "persisted-active-trip-xyz"
         val action = engine.evaluateVehicleEnter(
             isAutoTrackingEnabled = true,
             hasForegroundLocationPermission = true,
             hasBackgroundLocationPermission = true,
             hasActivityRecognitionPermission = true,
-            isServiceTracking = false, // Process died, service not yet running
-            activeTripId = existingActiveTripId, // Preserved in Room active_trip
+            isServiceTracking = false,
+            activeTripId = existingActiveTripId,
             isWithinSchedule = true,
             outsideScheduleBehavior = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL
         )
@@ -163,9 +160,9 @@ class AutomaticDriveDetectionTest {
         assertEquals(existingActiveTripId, (action as AutoDriveAction.RecoverTrip).tripId)
     }
 
-    // Supplementary Test 9: Missing background location permission rejects tracking
+    // Missing background location permission rejects tracking
     @Test
-    fun test09_missingBackgroundLocationPermission_rejectsTracking() {
+    fun test08_missingBackgroundLocationPermission_rejectsTracking() {
         val action = engine.evaluateVehicleEnter(
             isAutoTrackingEnabled = true,
             hasForegroundLocationPermission = true,

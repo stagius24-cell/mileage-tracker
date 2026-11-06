@@ -69,13 +69,29 @@ class TripDebounceWorker @AssistedInject constructor(
                 return Result.success()
             }
 
-            // 3. Finalize existing trip preserving original tracking method
+            // 3. Coordinate finalization with LocationTrackingService
             val method = TrackingMethod.fromString(activeTrip.trackingMethod)
-            val finalizedTrip = finalizeTripUseCase.execute(activeTrip.id, method)
-
-            // 4. Notify user and clear persisted state only after successful finalization
-            if (finalizedTrip != null) {
-                if (finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
+            if (LocationTrackingService.isTrackingRunning()) {
+                // Delegate to active service so it stops receiving GPS, drains the queue, and finalizes cleanly
+                val stopIntent = Intent(context, LocationTrackingService::class.java).apply {
+                    action = LocationTrackingService.ACTION_STOP
+                }
+                try {
+                    context.startService(stopIntent)
+                } catch (e: Exception) {
+                    // In background restrictions if startService fails, finalize directly
+                    val finalizedTrip = finalizeTripUseCase.execute(activeTrip.id, method)
+                    if (finalizedTrip != null && finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
+                        notificationHelper.showTripDetectedNotification(
+                            finalizedTrip.id,
+                            finalizedTrip.totalDistanceMiles
+                        )
+                    }
+                }
+            } else {
+                // Service was stopped or terminated; finalize directly from persisted Room state
+                val finalizedTrip = finalizeTripUseCase.execute(activeTrip.id, method)
+                if (finalizedTrip != null && finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
                     notificationHelper.showTripDetectedNotification(
                         finalizedTrip.id,
                         finalizedTrip.totalDistanceMiles
@@ -85,14 +101,6 @@ class TripDebounceWorker @AssistedInject constructor(
 
             preferencesManager.setActiveTripId(null)
             preferencesManager.clearVehicleAnchor()
-
-            // 5. Safely stop the foreground service if running
-            val stopIntent = Intent(context, LocationTrackingService::class.java).apply {
-                action = LocationTrackingService.ACTION_STOP
-            }
-            try {
-                context.stopService(stopIntent)
-            } catch (_: Exception) {}
 
             Result.success()
         } catch (e: Exception) {
