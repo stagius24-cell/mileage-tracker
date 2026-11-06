@@ -260,10 +260,10 @@ class LocationTrackingServiceStateSyncTest {
         // 1. Populate database with 2 previously recovered waypoints totaling 800m
         activeTripRepository.createActiveTrip(tripId, 37.3382, -121.8863, "AUTO_DETECTED", "MySucculentCorner")
         database.activeTripDao().insertWaypoint(
-            ActiveWaypointEntity(tripId = tripId, sequenceNumber = 1, latitude = 37.3382, longitude = -121.8863, timestamp = 1000L)
+            ActiveWaypointEntity(tripId = tripId, sequenceNumber = 1, latitude = 37.3382, longitude = -121.8863, accuracy = 5f, speed = 10f, timestamp = 1000L)
         )
         database.activeTripDao().insertWaypoint(
-            ActiveWaypointEntity(tripId = tripId, sequenceNumber = 2, latitude = 37.3450, longitude = -121.8863, timestamp = 2000L)
+            ActiveWaypointEntity(tripId = tripId, sequenceNumber = 2, latitude = 37.3450, longitude = -121.8863, accuracy = 5f, speed = 10f, timestamp = 2000L)
         )
         database.activeTripDao().updateActiveTripProgress(tripId, 800.0, 37.3450, -121.8863, 2000L)
 
