@@ -160,6 +160,9 @@ class GpsLocationQueue(
                         signalChannel.receiveCatching()
                     }
                 } else {
+                    if (isStopping.get() && admissionBarrier.inFlight() == 0) {
+                        break
+                    }
                     signalChannel.receiveCatching()
                 }
             }

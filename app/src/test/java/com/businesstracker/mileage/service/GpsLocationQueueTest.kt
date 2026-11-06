@@ -456,7 +456,9 @@ class GpsLocationQueueTest {
             tripSequenceDao = tripSequenceDao,
             initialSequence = tripSequenceDao.getLastSequenceNumber(tripId) ?: 0L,
             batchFetchLimit = 10
-        )
+        ) { loc ->
+            // consumer drains fix from SQLite
+        }
 
         queue2.enqueueBatchSync(listOf(createLocation(37.35, -121.90, 3000L)))
         queue2.enqueueBatchSync(listOf(createLocation(37.36, -121.91, 4000L)))
