@@ -1,6 +1,7 @@
 package com.businesstracker.mileage.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,25 +19,31 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AttachMoney
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.LocalFlorist
-import androidx.compose.material.icons.filled.Timeline
-import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -45,65 +52,170 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.ui.components.SwipeableTripCard
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
+import java.time.LocalDate
+import java.time.format.TextStyle
 import java.util.Locale
 
 @Composable
 fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
+    onNavigateToReports: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var monthMenuExpanded by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // App Header & Wide IRS Rate Badge
+        // MileIQ-Style Header Bar (Month Picker + Document Icon & 3-Stat Bar)
         item {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text(
-                    text = "MySucculentCorner",
-                    style = MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = 28.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-
-                Text(
-                    text = "Business Expense & Mileage Tracker",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                )
-
-                // Clean, horizontal IRS Standard Rate Badge (never gets crushed)
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    modifier = Modifier.padding(top = 4.dp)
+                // Top Row: Month Dropdown in Center, Document Icon on Right
+                Box(
+                    modifier = Modifier.fillMaxWidth()
                 ) {
+                    // Center: Month Selector
                     Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { monthMenuExpanded = true }
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = state.selectedMonthName.ifEmpty { "November" },
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Select Month",
+                            tint = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.size(24.dp)
+                        )
+
+                        DropdownMenu(
+                            expanded = monthMenuExpanded,
+                            onDismissRequest = { monthMenuExpanded = false }
+                        ) {
+                            state.availableMonths.forEach { monthIso ->
+                                val date = try {
+                                    LocalDate.parse("$monthIso-01")
+                                } catch (_: Exception) {
+                                    LocalDate.now()
+                                }
+                                val name = date.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
+                                DropdownMenuItem(
+                                    text = { Text("$name ${date.year}") },
+                                    onClick = {
+                                        viewModel.selectMonth(monthIso)
+                                        monthMenuExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Right: Reports Document Icon
+                    IconButton(
+                        onClick = { onNavigateToReports?.invoke() },
+                        modifier = Modifier.align(Alignment.CenterEnd)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Verified,
-                            contentDescription = null,
-                            tint = SucculentPrimary,
-                            modifier = Modifier.size(16.dp)
+                            imageVector = Icons.Default.Description,
+                            contentDescription = "Reports & Tax Summary",
+                            tint = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.size(26.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                // 3-Stat Bar (DRIVES | MILES DRIVEN (Odometer) | LOGGED ($))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 1. DRIVES
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Text(
-                            text = "IRS Standard Rate: \$${String.format(Locale.US, "%.3f", state.currentRate)} / mile",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            text = state.monthDrivesCount.toString(),
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Black
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "DRIVES",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                letterSpacing = 1.2.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = SlateNeutral
+                        )
+                    }
+
+                    // 2. MILES DRIVEN (Odometer style: light gray leading zeroes + bold digits)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1.3f)
+                    ) {
+                        OdometerMilesDisplay(miles = state.monthMiles)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "MILES DRIVEN",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                letterSpacing = 1.2.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = SlateNeutral
+                        )
+                    }
+
+                    // 3. LOGGED ($ in green)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "\$${String.format(Locale.US, "%.0f", state.monthDeduction)}",
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.Black
+                            ),
+                            color = SucculentPrimary
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "LOGGED",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                letterSpacing = 1.2.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = SlateNeutral
                         )
                     }
                 }
@@ -191,40 +303,6 @@ fun DashboardScreen(
             }
         }
 
-        // Section: Financial & Mileage Overview
-        item {
-            Text(
-                text = "Financial Summary",
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                SummaryMetricCard(
-                    title = "YTD Deduction",
-                    value = "\$${String.format(Locale.US, "%,.2f", state.totalDeductionYtd)}",
-                    subtitle = "${String.format(Locale.US, "%.1f", state.totalBusinessMilesYtd)} total business mi",
-                    icon = Icons.Default.AttachMoney,
-                    accentColor = SucculentPrimary,
-                    modifier = Modifier.weight(1f)
-                )
-
-                SummaryMetricCard(
-                    title = "This Month",
-                    value = "${String.format(Locale.US, "%.1f", state.totalBusinessMilesMonth)} mi",
-                    subtitle = "≈ \$${String.format(Locale.US, "%,.2f", state.totalBusinessMilesMonth * state.currentRate)} deduction",
-                    icon = Icons.Default.Timeline,
-                    accentColor = SucculentPrimary,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
         // Section: Classification Breakdown (MySucculentCorner vs Personal)
         item {
             Text(
@@ -235,8 +313,8 @@ fun DashboardScreen(
         }
 
         item {
-            val totalLogged = (state.succulentMiles + state.personalMiles).coerceAtLeast(0.1)
-            val businessFraction = (state.succulentMiles / totalLogged).toFloat()
+            val totalLogged = (state.monthMiles + state.personalMiles).coerceAtLeast(0.1)
+            val businessFraction = (state.monthMiles / totalLogged).toFloat()
             val personalFraction = 1f - businessFraction
 
             Card(
@@ -278,8 +356,8 @@ fun DashboardScreen(
                     // MySucculentCorner Business Row
                     BreakdownRow(
                         title = "MySucculentCorner (Deductible)",
-                        miles = state.succulentMiles,
-                        deduction = state.succulentDeduction,
+                        miles = state.monthMiles,
+                        deduction = state.monthDeduction,
                         color = SucculentPrimary,
                         icon = Icons.Default.LocalFlorist
                     )
@@ -299,58 +377,37 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun SummaryMetricCard(
-    title: String,
-    value: String,
-    subtitle: String,
-    icon: ImageVector,
-    accentColor: Color,
+private fun OdometerMilesDisplay(
+    miles: Double,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = accentColor.copy(alpha = 0.15f),
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.padding(8.dp)
-                )
-            }
+    val totalInt = kotlin.math.round(miles).toInt().coerceAtLeast(0)
+    val formatted = String.format(Locale.US, "%06d", totalInt)
+    val firstNonZero = formatted.indexOfFirst { it != '0' }.let { if (it == -1) formatted.length - 1 else it }
+    val leadingZeros = formatted.substring(0, firstNonZero)
+    val activeDigits = formatted.substring(firstNonZero)
 
-            Spacer(modifier = Modifier.height(12.dp))
-
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        if (leadingZeros.isNotEmpty()) {
             Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
-
-            Text(
-                text = value,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                text = leadingZeros,
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Black,
+                    fontFamily = FontFamily.SansSerif
+                ),
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.25f)
             )
         }
+        Text(
+            text = activeDigits,
+            style = MaterialTheme.typography.headlineMedium.copy(
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Black,
+                fontFamily = FontFamily.SansSerif
+            ),
+            color = MaterialTheme.colorScheme.onBackground
+        )
     }
 }
 

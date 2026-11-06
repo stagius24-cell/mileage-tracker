@@ -13,11 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudSync
-import androidx.compose.material.icons.filled.LocalFlorist
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -26,7 +25,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -54,62 +52,7 @@ fun SettingsScreen(
         contentPadding = PaddingValues(20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        item {
-            Text(
-                text = "Settings & Integrations",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                text = "Configured exclusively for MySucculentCorner",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f)
-            )
-        }
-
-        // Active Business Profile Card
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = SucculentPrimary.copy(alpha = 0.15f),
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocalFlorist,
-                            contentDescription = null,
-                            tint = SucculentPrimary,
-                            modifier = Modifier.padding(10.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column {
-                        Text(
-                            text = "MySucculentCorner",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "Primary Business Expense Entity",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                }
-            }
-        }
-
-        // Auto Drive Detection Setting
+        // Automatic Drive Detection Setting
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -129,6 +72,7 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Low-power Activity Recognition automatically detects drives and notifies you to review.",
                             style = MaterialTheme.typography.bodySmall,
@@ -140,6 +84,45 @@ fun SettingsScreen(
                         checked = state.autoTrackingEnabled,
                         onCheckedChange = { viewModel.setAutoTrackingEnabled(it) },
                         colors = SwitchDefaults.colors(checkedThumbColor = SucculentPrimary)
+                    )
+                }
+            }
+        }
+
+        // Primary Vehicle Information Card (Tesla Model Y)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.DirectionsCar,
+                            contentDescription = null,
+                            tint = SucculentPrimary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Primary Vehicle",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = state.defaultVehicle,
+                        onValueChange = { viewModel.setDefaultVehicle(it) },
+                        label = { Text("Vehicle Description") },
+                        placeholder = { Text("Tesla Model Y") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
             }
@@ -160,7 +143,8 @@ fun SettingsScreen(
                         Icon(
                             imageVector = Icons.Default.Security,
                             contentDescription = null,
-                            tint = SucculentPrimary
+                            tint = SucculentPrimary,
+                            modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
@@ -181,7 +165,8 @@ fun SettingsScreen(
                         onValueChange = { viewModel.setCfEndpoint(it) },
                         label = { Text("API Endpoint URL") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     OutlinedTextField(
@@ -189,7 +174,8 @@ fun SettingsScreen(
                         onValueChange = { viewModel.setCfClientId(it) },
                         label = { Text("CF-Access-Client-Id") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     OutlinedTextField(
@@ -197,7 +183,8 @@ fun SettingsScreen(
                         onValueChange = { viewModel.setCfClientSecret(it) },
                         label = { Text("CF-Access-Client-Secret") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     OutlinedTextField(
@@ -205,10 +192,11 @@ fun SettingsScreen(
                         onValueChange = { viewModel.setCfBearerToken(it) },
                         label = { Text("Bearer Token (Optional)") },
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(4.dp))
 
                     Button(
                         onClick = { viewModel.triggerSyncNow() },
@@ -222,44 +210,6 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Trigger Cloud Sync Now", fontWeight = FontWeight.Bold)
                     }
-                }
-            }
-        }
-
-        // Vehicle & Custom Categories Card
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = "Vehicle & Custom Categories",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    OutlinedTextField(
-                        value = state.defaultVehicle,
-                        onValueChange = { viewModel.setDefaultVehicle(it) },
-                        label = { Text("Primary Delivery Vehicle") },
-                        placeholder = { Text("e.g. 2022 Toyota Prius") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-
-                    OutlinedTextField(
-                        value = state.customCategories,
-                        onValueChange = { viewModel.setCustomCategories(it) },
-                        label = { Text("Additional Custom Purposes (comma-separated)") },
-                        placeholder = { Text("e.g. Nursery Expo, Farmer's Market") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
                 }
             }
         }

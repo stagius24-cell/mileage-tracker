@@ -141,7 +141,7 @@ class TrackingPreferencesManager @Inject constructor(
     }
 
     val defaultVehicle: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_DEFAULT_VEHICLE] ?: "Primary Delivery Vehicle"
+        prefs[KEY_DEFAULT_VEHICLE] ?: "Tesla Model Y"
     }
 
     suspend fun setDefaultVehicle(vehicle: String) {

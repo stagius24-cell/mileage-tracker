@@ -16,19 +16,16 @@ import javax.inject.Inject
 
 data class SettingsUiState(
     val autoTrackingEnabled: Boolean = true,
-    val businessEntity: String = "MySucculentCorner",
     val cfEndpoint: String = TrackingPreferencesManager.DEFAULT_CF_ENDPOINT,
     val cfClientId: String = "",
     val cfClientSecret: String = "",
     val cfBearerToken: String = "",
-    val defaultVehicle: String = "",
-    val customCategories: String = ""
+    val defaultVehicle: String = "Tesla Model Y"
 )
 
 private data class GeneralPrefs(
     val autoTrackingEnabled: Boolean,
-    val defaultVehicle: String,
-    val customCategories: String
+    val defaultVehicle: String
 )
 
 private data class CloudflarePrefs(
@@ -46,10 +43,9 @@ class SettingsViewModel @Inject constructor(
 
     private val generalFlow = combine(
         preferencesManager.isAutoTrackingEnabled,
-        preferencesManager.defaultVehicle,
-        preferencesManager.customCategories
-    ) { autoTrack, vehicle, categories ->
-        GeneralPrefs(autoTrack, vehicle, categories)
+        preferencesManager.defaultVehicle
+    ) { autoTrack, vehicle ->
+        GeneralPrefs(autoTrack, vehicle)
     }
 
     private val cloudflareFlow = combine(
@@ -67,9 +63,7 @@ class SettingsViewModel @Inject constructor(
     ) { general, cf ->
         SettingsUiState(
             autoTrackingEnabled = general.autoTrackingEnabled,
-            businessEntity = "MySucculentCorner",
             defaultVehicle = general.defaultVehicle,
-            customCategories = general.customCategories,
             cfEndpoint = cf.endpoint,
             cfClientId = cf.clientId,
             cfClientSecret = cf.clientSecret,
@@ -114,12 +108,6 @@ class SettingsViewModel @Inject constructor(
     fun setDefaultVehicle(vehicle: String) {
         viewModelScope.launch {
             preferencesManager.setDefaultVehicle(vehicle)
-        }
-    }
-
-    fun setCustomCategories(categories: String) {
-        viewModelScope.launch {
-            preferencesManager.setCustomCategories(categories)
         }
     }
 

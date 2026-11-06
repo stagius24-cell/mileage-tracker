@@ -22,7 +22,17 @@ fun MileageNavHost(
         modifier = modifier
     ) {
         composable(Screen.Dashboard.route) {
-            DashboardScreen()
+            DashboardScreen(
+                onNavigateToReports = {
+                    navController.navigate(Screen.Reports.route) {
+                        popUpTo(Screen.Dashboard.route) {
+                            saveState = true
+                        }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
         }
         composable(Screen.TrackTrip.route) {
             TrackTripScreen()
