@@ -8,7 +8,7 @@ import androidx.work.WorkerParameters
 import androidx.work.testing.TestListenableWorkerBuilder
 import com.businesstracker.mileage.data.remote.GoogleSheetsSyncService
 import com.businesstracker.mileage.data.remote.SheetsSyncResult
-import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
@@ -70,91 +70,91 @@ class GoogleSheetsSyncWorkerTest {
     }
 
     @Test
-    fun doWork_success_returnsSuccess() = runTest {
+    fun doWork_success_returnsSuccess() = runBlocking {
         val worker = createWorker(SheetsSyncResult.Success(2, 1))
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.success(), result)
     }
 
     @Test
-    fun doWork_notConfigured_returnsSuccess() = runTest {
+    fun doWork_notConfigured_returnsSuccess() = runBlocking {
         val worker = createWorker(SheetsSyncResult.NotConfigured)
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.success(), result)
     }
 
     @Test
-    fun doWork_partialSuccess_returnsRetry() = runTest {
+    fun doWork_partialSuccess_returnsRetry() = runBlocking {
         val worker = createWorker(SheetsSyncResult.PartialSuccess(1, 1, "Partial"))
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.retry(), result)
     }
 
     @Test
-    fun doWork_rateLimited_returnsRetry() = runTest {
+    fun doWork_rateLimited_returnsRetry() = runBlocking {
         val worker = createWorker(SheetsSyncResult.RateLimited("429 Too Many Requests"))
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.retry(), result)
     }
 
     @Test
-    fun doWork_serverError_returnsRetry() = runTest {
+    fun doWork_serverError_returnsRetry() = runBlocking {
         val worker = createWorker(SheetsSyncResult.ServerError(503, "Service Unavailable"))
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.retry(), result)
     }
 
     @Test
-    fun doWork_networkError_returnsRetry() = runTest {
+    fun doWork_networkError_returnsRetry() = runBlocking {
         val worker = createWorker(SheetsSyncResult.NetworkError("Timeout", IOException("Socket timeout")))
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.retry(), result)
     }
 
     @Test
-    fun doWork_http5xx_returnsRetry() = runTest {
+    fun doWork_http5xx_returnsRetry() = runBlocking {
         val worker = createWorker(SheetsSyncResult.HttpError(502, "Bad Gateway"))
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.retry(), result)
     }
 
     @Test
-    fun doWork_http4xx_returnsFailure() = runTest {
+    fun doWork_http4xx_returnsFailure() = runBlocking {
         val worker = createWorker(SheetsSyncResult.HttpError(400, "Bad Request"))
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.failure(), result)
     }
 
     @Test
-    fun doWork_tokenExpired_returnsFailure() = runTest {
+    fun doWork_tokenExpired_returnsFailure() = runBlocking {
         val worker = createWorker(SheetsSyncResult.TokenExpired("401 Expired"))
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.failure(), result)
     }
 
     @Test
-    fun doWork_accessDenied_returnsFailure() = runTest {
+    fun doWork_accessDenied_returnsFailure() = runBlocking {
         val worker = createWorker(SheetsSyncResult.AccessDenied("403 Forbidden"))
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.failure(), result)
     }
 
     @Test
-    fun doWork_notFound_returnsFailure() = runTest {
+    fun doWork_notFound_returnsFailure() = runBlocking {
         val worker = createWorker(SheetsSyncResult.NotFound("404 Not Found"))
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.failure(), result)
     }
 
     @Test
-    fun doWork_invalidConfig_returnsFailure() = runTest {
+    fun doWork_invalidConfig_returnsFailure() = runBlocking {
         val worker = createWorker(SheetsSyncResult.InvalidConfiguration("Insecure URL"))
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.failure(), result)
     }
 
     @Test
-    fun doWork_unexpectedError_returnsFailure() = runTest {
+    fun doWork_unexpectedError_returnsFailure() = runBlocking {
         val worker = createWorker(SheetsSyncResult.UnexpectedError(IllegalArgumentException("Malformed")))
         val result = worker.doWork()
         assertEquals(ListenableWorker.Result.failure(), result)

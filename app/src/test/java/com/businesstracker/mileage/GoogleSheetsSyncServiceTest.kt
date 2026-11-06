@@ -415,7 +415,7 @@ class GoogleSheetsSyncServiceTest {
         service.client = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
-                    .body("{\"status\":\"success\"}".toResponseBody("application/json".toMediaType())).build()
+                    .body("{\"status\":\"success\",\"syncedTripIds\":[\"trip_web_1\"]}".toResponseBody("application/json".toMediaType())).build()
             }
             .build()
 
