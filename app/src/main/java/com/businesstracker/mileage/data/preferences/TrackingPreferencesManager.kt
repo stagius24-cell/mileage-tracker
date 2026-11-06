@@ -203,6 +203,12 @@ class TrackingPreferencesManager @Inject constructor(
         return prefs[KEY_IN_VEHICLE_STATE] ?: false
     }
 
+    suspend fun setInVehicleState(isInVehicle: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_IN_VEHICLE_STATE] = isInVehicle
+        }
+    }
+
     // Cloudflare D1 & Sync Preferences
     val cfEndpoint: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[KEY_CF_ENDPOINT] ?: DEFAULT_CF_ENDPOINT
