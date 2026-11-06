@@ -265,9 +265,10 @@ class GpsLocationQueueTest {
     @Test
     fun processTermination_preservesPendingFixesInPersistentStorage_forRecovery() = runBlocking {
         val tripId = "trip-process-death"
-        val initialLocations = (1..15).map { createLocation(37.0, -122.0, it * 1000L) }
+        val totalCount = 30
+        val initialLocations = (1..totalCount).map { createLocation(37.0, -122.0, it * 1000L) }
 
-        // Start first service queue session
+        // Start first service queue session with artificial delay to ensure items remain in flight
         val processedFirstSession = Collections.synchronizedList(mutableListOf<Long>())
         val queue1 = GpsLocationQueue(
             scope = testScope,
@@ -276,6 +277,7 @@ class GpsLocationQueueTest {
             tripIdProvider = { tripId },
             batchFetchLimit = 5
         ) { loc ->
+            kotlinx.coroutines.delay(20)
             processedFirstSession.add(loc.time)
         }
 
@@ -303,7 +305,7 @@ class GpsLocationQueueTest {
         queue2.drainAndClose()
 
         val totalProcessed = processedFirstSession.size + processedRecoverySession.size
-        assertEquals("Total processed fixes across process termination must equal 15", 15, totalProcessed)
+        assertEquals("Total processed fixes across process termination must equal $totalCount", totalCount, totalProcessed)
         assertEquals("Inbox must be completely clean after recovery", 0, gpsInboxDao.getPendingCount(tripId))
     }
 
