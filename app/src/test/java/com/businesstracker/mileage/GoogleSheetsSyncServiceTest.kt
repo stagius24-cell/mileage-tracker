@@ -825,7 +825,7 @@ class GoogleSheetsSyncServiceTest {
     }
 
     @Test
-    fun syncViaWebhook_partialConfirmation_marksOnlyConfirmedTrips() = runTest {
+    fun syncViaWebhook_partialConfirmation_leavesUnconfirmedPending() = runTest {
         tripsList.add(createTrip("trip_w1", "BUSINESS", 5.0))
         tripsList.add(createTrip("trip_w2", "BUSINESS", 8.0))
         configureWebhook("https://example.com/macros/exec")
