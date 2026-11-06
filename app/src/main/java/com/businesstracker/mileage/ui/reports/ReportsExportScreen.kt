@@ -22,6 +22,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.LocalFlorist
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CheckCircle
@@ -78,82 +84,223 @@ fun ReportsExportScreen(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Top Header: "All Months View" & Concise CSV Export Button
+        // Top Header: Year Selector & Export Buttons (CSV + PDF)
         item {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Year Selector / Header Title
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { yearDropdownExpanded = true }
-                        .padding(vertical = 4.dp, horizontal = 4.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "All Months View",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black
-                        ),
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        imageVector = Icons.Default.ArrowDropDown,
-                        contentDescription = "Select Year",
-                        tint = MaterialTheme.colorScheme.onBackground,
-                        modifier = Modifier.size(24.dp)
-                    )
-
-                    DropdownMenu(
-                        expanded = yearDropdownExpanded,
-                        onDismissRequest = { yearDropdownExpanded = false }
+                    // Year Selector / Header Title
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { yearDropdownExpanded = true }
+                            .padding(vertical = 4.dp, horizontal = 4.dp)
                     ) {
-                        state.availableYears.forEach { yr ->
-                            DropdownMenuItem(
-                                text = { Text("$yr Tax Year") },
-                                onClick = {
-                                    viewModel.selectYear(yr)
-                                    yearDropdownExpanded = false
+                        Text(
+                            text = "${state.selectedYear} Reports",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Black
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.ArrowDropDown,
+                            contentDescription = "Select Year",
+                            tint = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.size(24.dp)
+                        )
+
+                        DropdownMenu(
+                            expanded = yearDropdownExpanded,
+                            onDismissRequest = { yearDropdownExpanded = false }
+                        ) {
+                            state.availableYears.forEach { yr ->
+                                DropdownMenuItem(
+                                    text = { Text("$yr Tax Year") },
+                                    onClick = {
+                                        viewModel.selectYear(yr)
+                                        yearDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+
+                    // Export Buttons Row
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.exportToCsv { intent ->
+                                    context.startActivity(intent)
                                 }
-                            )
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("CSV", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold))
+                        }
+
+                        Button(
+                            onClick = {
+                                viewModel.exportToPdf { intent ->
+                                    context.startActivity(intent)
+                                }
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("PDF", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
                         }
                     }
                 }
 
-                // Concise Export Button
-                Button(
-                    onClick = {
-                        viewModel.exportToCsv { intent ->
-                            context.startActivity(intent)
-                        }
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = SucculentPrimary,
-                        contentColor = Color.White
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                // Filter Chips (Entity & Category)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val entities = listOf("ALL" to "All Entities", "MySucculentCorner" to "MySucculentCorner", "Personal" to "Personal")
+                    items(entities) { (key, label) ->
+                        val isSelected = state.selectedBusinessEntity == key
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.selectBusinessEntity(key) },
+                            label = { Text(label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = SucculentPrimary,
+                                selectedLabelColor = Color.White
+                            )
+                        )
+                    }
+                }
+
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val categories = listOf("ALL" to "All Drives", "BUSINESS" to "Business", "PERSONAL" to "Personal", "UNREVIEWED" to "Unreviewed")
+                    items(categories) { (key, label) ->
+                        val isSelected = state.selectedClassification == key
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.selectClassification(key) },
+                            label = { Text(label, fontSize = 12.sp) }
+                        )
+                    }
+                }
+            }
+        }
+
+        // Comprehensive Metrics Summary Card
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.FileDownload,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = Color.White
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Export CSV",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
+                        text = "Filtered Summary Totals",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold
                     )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Column {
+                            Text("DEDUCTION", style = MaterialTheme.typography.labelSmall, color = SlateNeutral, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "\$${String.format(Locale.US, "%,.2f", state.totalDeduction)}",
+                                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Black, color = SucculentPrimary)
+                            )
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("TOTAL MILES", style = MaterialTheme.typography.labelSmall, color = SlateNeutral, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = "${String.format(Locale.US, "%.1f", state.totalMiles)} mi",
+                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text("Business Miles", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
+                            Text("${String.format(Locale.US, "%.1f", state.businessMiles)} mi", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                        Column {
+                            Text("Personal Miles", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
+                            Text("${String.format(Locale.US, "%.1f", state.personalMiles)} mi", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                        Column {
+                            Text("Avg Distance", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
+                            Text("${String.format(Locale.US, "%.1f", state.averageDistance)} mi", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("Drives", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
+                            Text("${state.totalTrips}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Entity Breakdown Card
+        if (state.entityBreakdown.isNotEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("Business Entity Breakdown", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        state.entityBreakdown.forEach { item ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = if (item.entityName == "MySucculentCorner") Icons.Default.LocalFlorist else Icons.Default.DirectionsCar,
+                                        contentDescription = null,
+                                        tint = if (item.entityName == "MySucculentCorner") SucculentPrimary else SlateNeutral,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(item.entityName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                }
+                                Text(
+                                    text = "${String.format(Locale.US, "%.1f", item.totalMiles)} mi  (\$${String.format(Locale.US, "%.2f", item.totalDeduction)})",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
