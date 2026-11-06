@@ -7,10 +7,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
+import com.businesstracker.mileage.domain.model.DashboardSummary
+import com.businesstracker.mileage.domain.model.TimeFilter
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.domain.usecase.CalculateMileageRateUseCase
+import com.businesstracker.mileage.domain.usecase.GetDashboardSummaryUseCase
 import com.businesstracker.mileage.service.LocationTrackingService
 import com.businesstracker.mileage.service.TrackingServiceState
 import com.businesstracker.mileage.worker.MileageSyncWorker
@@ -31,72 +34,87 @@ import javax.inject.Inject
 
 data class DashboardUiState(
     val unreviewedTrips: List<TripEntity> = emptyList(),
+    val timeFilter: TimeFilter = TimeFilter.THIS_MONTH,
+    val customStartDate: String = "",
+    val customEndDate: String = "",
     val selectedMonthName: String = "",
     val availableMonths: List<String> = emptyList(),
-    val monthDrivesCount: Int = 0,
-    val monthMiles: Double = 0.0,
-    val monthDeduction: Double = 0.0,
-    val totalBusinessMilesYtd: Double = 0.0,
-    val totalDeductionYtd: Double = 0.0,
-    val personalMiles: Double = 0.0,
-    val currentRate: Double = 0.760
+    val summary: DashboardSummary = DashboardSummary(),
+    val currentRate: Double = 0.760,
+    val lastClassifiedTrip: TripEntity? = null,
+    val isUndoAvailable: Boolean = false,
+    val processingTripIds: Set<String> = emptySet()
 )
 
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val tripRepository: TripRepository,
     private val rateUseCase: CalculateMileageRateUseCase,
+    private val summaryUseCase: GetDashboardSummaryUseCase,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val now = LocalDate.now()
-    private val currentYear = now.year.toString()
-    private val currentMonthIso = now.format(DateTimeFormatter.ofPattern("yyyy-MM"))
     private val currentRate = rateUseCase.getApplicableRate(now.format(DateTimeFormatter.ISO_DATE))
+    private val currentMonthIso = now.format(DateTimeFormatter.ofPattern("yyyy-MM"))
 
+    private val _timeFilter = MutableStateFlow(TimeFilter.THIS_MONTH)
+    private val _customStartDate = MutableStateFlow("")
+    private val _customEndDate = MutableStateFlow("")
     private val _selectedMonthPrefix = MutableStateFlow(currentMonthIso)
+    private val _processingTripIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _lastClassifiedTrip = MutableStateFlow<TripEntity?>(null)
 
     val serviceState: StateFlow<TrackingServiceState> = LocationTrackingService.serviceState
 
     val uiState: StateFlow<DashboardUiState> = combine(
         tripRepository.getUnclassifiedTrips(),
         tripRepository.getAllTrips(),
-        _selectedMonthPrefix
-    ) { unreviewed, allTrips, selectedMonthPrefix ->
-        val businessTrips = allTrips.filter { it.classification == TripClassification.BUSINESS.value }
-        val personalTrips = allTrips.filter { it.classification == TripClassification.PERSONAL.value }
+        _timeFilter,
+        _customStartDate,
+        _customEndDate,
+        _selectedMonthPrefix,
+        _processingTripIds,
+        _lastClassifiedTrip
+    ) { unreviewed, allTrips, filter, customStart, customEnd, monthPrefix, processingIds, lastClassified ->
 
-        val ytdBusinessTrips = businessTrips.filter { it.date.startsWith(currentYear) }
-        val monthBusinessTrips = businessTrips.filter { it.date.startsWith(selectedMonthPrefix) }
-        val monthAllTrips = allTrips.filter { it.date.startsWith(selectedMonthPrefix) }
+        val effectiveFilter = if (filter == TimeFilter.CUSTOM && customStart.isBlank() && customEnd.isBlank()) {
+            TimeFilter.THIS_MONTH
+        } else {
+            filter
+        }
 
-        val monthMiles = monthBusinessTrips.sumOf { it.businessMiles }
-        val monthDeduction = monthBusinessTrips.sumOf { it.calculatedDeduction }
-        val monthDrivesCount = monthAllTrips.size
+        val summary = summaryUseCase.execute(
+            trips = allTrips,
+            timeFilter = effectiveFilter,
+            customStartDate = customStart.ifBlank { null },
+            customEndDate = customEnd.ifBlank { null },
+            referenceDate = now
+        )
 
-        val totalBusinessMilesYtd = ytdBusinessTrips.sumOf { it.businessMiles }
-        val totalDeductionYtd = ytdBusinessTrips.sumOf { it.calculatedDeduction }
-        val personalMiles = personalTrips.sumOf { it.totalDistanceMiles }
-
-        val monthDate = LocalDate.parse("$selectedMonthPrefix-01")
+        val monthDate = try {
+            LocalDate.parse("$monthPrefix-01")
+        } catch (_: Exception) {
+            now
+        }
         val monthDisplayName = monthDate.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
 
-        // Collect available months from data
         val availableMonths = allTrips.mapNotNull {
             if (it.date.length >= 7) it.date.substring(0, 7) else null
         }.distinct().sortedDescending().ifEmpty { listOf(currentMonthIso) }
 
         DashboardUiState(
             unreviewedTrips = unreviewed,
+            timeFilter = filter,
+            customStartDate = customStart,
+            customEndDate = customEnd,
             selectedMonthName = monthDisplayName,
             availableMonths = availableMonths,
-            monthDrivesCount = monthDrivesCount,
-            monthMiles = monthMiles,
-            monthDeduction = monthDeduction,
-            totalBusinessMilesYtd = totalBusinessMilesYtd,
-            totalDeductionYtd = totalDeductionYtd,
-            personalMiles = personalMiles,
-            currentRate = currentRate
+            summary = summary,
+            currentRate = currentRate,
+            lastClassifiedTrip = lastClassified,
+            isUndoAvailable = lastClassified != null,
+            processingTripIds = processingIds
         )
     }.stateIn(
         scope = viewModelScope,
@@ -106,11 +124,31 @@ class DashboardViewModel @Inject constructor(
         )
     )
 
-    fun selectMonth(monthPrefix: String) {
-        _selectedMonthPrefix.value = monthPrefix
+    fun setTimeFilter(filter: TimeFilter) {
+        _timeFilter.value = filter
     }
 
-    fun startManualTracking(suggestedBusiness: String = "MySucculentCorner") {
+    fun setCustomDateRange(startDate: String, endDate: String) {
+        _customStartDate.value = startDate
+        _customEndDate.value = endDate
+        _timeFilter.value = TimeFilter.CUSTOM
+    }
+
+    fun selectMonth(monthPrefix: String) {
+        _selectedMonthPrefix.value = monthPrefix
+        val parts = monthPrefix.split("-")
+        if (parts.size == 2) {
+            val year = parts[0].toIntOrNull() ?: now.year
+            val month = parts[1].toIntOrNull() ?: now.monthValue
+            val firstDay = LocalDate.of(year, month, 1)
+            val lastDay = firstDay.plusMonths(1).minusDays(1)
+            _customStartDate.value = firstDay.toString()
+            _customEndDate.value = lastDay.toString()
+            _timeFilter.value = TimeFilter.CUSTOM
+        }
+    }
+
+    fun startManualTracking(suggestedBusiness: String = BusinessEntity.MY_SUCCULENT_CORNER.displayName) {
         val intent = Intent(appContext, LocationTrackingService::class.java).apply {
             action = LocationTrackingService.ACTION_START
             putExtra(LocationTrackingService.EXTRA_TRIP_ID, UUID.randomUUID().toString())
@@ -141,27 +179,69 @@ class DashboardViewModel @Inject constructor(
         appContext.startService(intent)
     }
 
-    fun classifyTripAsBusiness(tripId: String, businessEntity: String = BusinessEntity.MY_SUCCULENT_CORNER.displayName, purpose: String) {
+    fun classifyTripAsBusiness(
+        tripId: String,
+        businessEntity: String = BusinessEntity.MY_SUCCULENT_CORNER.displayName,
+        purpose: String
+    ) {
+        if (_processingTripIds.value.contains(tripId)) return
+        _processingTripIds.value = _processingTripIds.value + tripId
+
         viewModelScope.launch {
-            tripRepository.classifyTrip(
-                tripId = tripId,
-                classification = TripClassification.BUSINESS.value,
-                businessEntity = BusinessEntity.MY_SUCCULENT_CORNER.displayName,
-                purpose = purpose,
-                notes = null
-            )
-            MileageSyncWorker.enqueueOneTimeSync(appContext)
+            try {
+                val originalTrip = tripRepository.getTripById(tripId)
+                tripRepository.classifyTrip(
+                    tripId = tripId,
+                    classification = TripClassification.BUSINESS.value,
+                    businessEntity = businessEntity,
+                    purpose = purpose,
+                    notes = originalTrip?.notes
+                )
+                if (originalTrip != null) {
+                    _lastClassifiedTrip.value = originalTrip
+                }
+                MileageSyncWorker.enqueueOneTimeSync(appContext)
+            } finally {
+                _processingTripIds.value = _processingTripIds.value - tripId
+            }
         }
     }
 
     fun classifyTripAsPersonal(tripId: String) {
+        if (_processingTripIds.value.contains(tripId)) return
+        _processingTripIds.value = _processingTripIds.value + tripId
+
+        viewModelScope.launch {
+            try {
+                val originalTrip = tripRepository.getTripById(tripId)
+                tripRepository.classifyTrip(
+                    tripId = tripId,
+                    classification = TripClassification.PERSONAL.value,
+                    businessEntity = BusinessEntity.PERSONAL.displayName,
+                    purpose = "Personal",
+                    notes = originalTrip?.notes
+                )
+                if (originalTrip != null) {
+                    _lastClassifiedTrip.value = originalTrip
+                }
+                MileageSyncWorker.enqueueOneTimeSync(appContext)
+            } finally {
+                _processingTripIds.value = _processingTripIds.value - tripId
+            }
+        }
+    }
+
+    fun undoLastClassification() {
+        val previousTrip = _lastClassifiedTrip.value ?: return
+        _lastClassifiedTrip.value = null
+
         viewModelScope.launch {
             tripRepository.classifyTrip(
-                tripId = tripId,
-                classification = TripClassification.PERSONAL.value,
-                businessEntity = BusinessEntity.PERSONAL.displayName,
-                purpose = "Personal",
-                notes = null
+                tripId = previousTrip.id,
+                classification = previousTrip.classification,
+                businessEntity = previousTrip.businessEntity,
+                purpose = previousTrip.purpose,
+                notes = previousTrip.notes
             )
             MileageSyncWorker.enqueueOneTimeSync(appContext)
         }

@@ -33,7 +33,11 @@ import androidx.compose.material.icons.filled.GpsNotFixed
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.foundation.lazy.LazyRow
+import com.businesstracker.mileage.domain.model.TimeFilter
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -170,9 +174,27 @@ fun DashboardScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // 3-Stat Bar (DRIVES | MILES DRIVEN (Odometer) | LOGGED ($))
+                    // Time Filter Chips (Today | This Week | This Month | This Year | Custom)
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(TimeFilter.entries.toTypedArray()) { filter ->
+                            FilterChip(
+                                selected = state.timeFilter == filter,
+                                onClick = { viewModel.setTimeFilter(filter) },
+                                label = { Text(filter.displayName) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = SucculentPrimary,
+                                    selectedLabelColor = Color.White
+                                )
+                            )
+                        }
+                    }
+
+                    // 3-Stat Bar (DRIVES | BUSINESS MILES (Odometer) | DEDUCTION ($))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceAround,
@@ -184,7 +206,7 @@ fun DashboardScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = state.monthDrivesCount.toString(),
+                                text = state.summary.totalTripsCount.toString(),
                                 style = MaterialTheme.typography.headlineMedium.copy(
                                     fontSize = 32.sp,
                                     fontWeight = FontWeight.Black
@@ -202,15 +224,15 @@ fun DashboardScreen(
                             )
                         }
 
-                        // 2. MILES DRIVEN (Odometer style: light gray leading zeroes + bold digits)
+                        // 2. BUSINESS MILES (Odometer style)
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             modifier = Modifier.weight(1.3f)
                         ) {
-                            OdometerMilesDisplay(miles = state.monthMiles)
+                            OdometerMilesDisplay(miles = state.summary.businessMiles)
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "MILES DRIVEN",
+                                text = "BUSINESS MI",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     letterSpacing = 1.2.sp,
                                     fontWeight = FontWeight.Bold
@@ -225,7 +247,7 @@ fun DashboardScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = "\$${String.format(Locale.US, "%.0f", state.monthDeduction)}",
+                                text = "\$${String.format(Locale.US, "%.0f", state.summary.estimatedDeduction)}",
                                 style = MaterialTheme.typography.headlineMedium.copy(
                                     fontSize = 32.sp,
                                     fontWeight = FontWeight.Black
@@ -234,7 +256,7 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "LOGGED",
+                                text = "DEDUCTION",
                                 style = MaterialTheme.typography.labelSmall.copy(
                                     letterSpacing = 1.2.sp,
                                     fontWeight = FontWeight.Bold
@@ -242,6 +264,31 @@ fun DashboardScreen(
                                 color = SlateNeutral
                             )
                         }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Secondary Summary Metrics (Total | Personal | Unreviewed)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Total: ${String.format(Locale.US, "%.1f", state.summary.totalMiles)} mi",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        )
+                        Text(
+                            text = "Personal: ${String.format(Locale.US, "%.1f", state.summary.personalMiles)} mi",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SlateNeutral
+                        )
+                        Text(
+                            text = "Unreviewed: ${String.format(Locale.US, "%.1f", state.summary.unreviewedMiles)} mi",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SpeedRed
+                        )
                     }
                 }
             }
@@ -284,6 +331,35 @@ fun DashboardScreen(
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold
                                 )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (state.isUndoAvailable && state.lastClassifiedTrip != null) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Drive classified as ${state.lastClassifiedTrip?.classification}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            TextButton(onClick = { viewModel.undoLastClassification() }) {
+                                Icon(Icons.Default.Undo, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Undo")
                             }
                         }
                     }
@@ -334,7 +410,8 @@ fun DashboardScreen(
                         },
                         onClassifyPersonal = { id ->
                             viewModel.classifyTripAsPersonal(id)
-                        }
+                        },
+                        isProcessing = state.processingTripIds.contains(trip.id)
                     )
                 }
             }
@@ -349,8 +426,10 @@ fun DashboardScreen(
             }
 
             item {
-                val totalLogged = (state.monthMiles + state.personalMiles).coerceAtLeast(0.1)
-                val businessFraction = (state.monthMiles / totalLogged).toFloat()
+                val bMiles = state.summary.businessMiles
+                val pMiles = state.summary.personalMiles
+                val totalLogged = (bMiles + pMiles).coerceAtLeast(0.1)
+                val businessFraction = (bMiles / totalLogged).toFloat()
                 val personalFraction = 1f - businessFraction
 
                 Card(
@@ -392,8 +471,8 @@ fun DashboardScreen(
                         // MySucculentCorner Business Row
                         BreakdownRow(
                             title = "MySucculentCorner (Deductible)",
-                            miles = state.monthMiles,
-                            deduction = state.monthDeduction,
+                            miles = bMiles,
+                            deduction = state.summary.estimatedDeduction,
                             color = SucculentPrimary,
                             icon = Icons.Default.LocalFlorist
                         )
@@ -401,7 +480,7 @@ fun DashboardScreen(
                         // Personal Excluded Row
                         BreakdownRow(
                             title = "Personal (Non-Deductible)",
-                            miles = state.personalMiles,
+                            miles = pMiles,
                             deduction = 0.0,
                             color = SlateNeutral,
                             icon = Icons.Default.DirectionsCar
