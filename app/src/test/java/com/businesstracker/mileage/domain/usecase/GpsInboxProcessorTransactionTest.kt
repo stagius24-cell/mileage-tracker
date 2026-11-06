@@ -127,17 +127,19 @@ class GpsInboxProcessorTransactionTest {
             )
         )
 
-        // Custom failing processor that throws before completing transaction
-        val failingProcessor = object : GpsInboxProcessor(
-            database = database,
-            activeTripDao = database.activeTripDao(),
-            gpsInboxDao = database.gpsInboxDao(),
-            filterGpsPointUseCase = FilterGpsPointUseCase()
-        ) {
-            override suspend fun processFixTransaction(fixId: Long): ProcessResult {
+        // Custom failing DAO that throws during waypoint insertion inside the transaction
+        val failingActiveTripDao = object : com.businesstracker.mileage.data.local.ActiveTripDao by database.activeTripDao() {
+            override suspend fun insertWaypoint(waypoint: com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity): Long {
                 throw java.sql.SQLException("Simulated disk error during transaction")
             }
         }
+
+        val failingProcessor = GpsInboxProcessor(
+            database = database,
+            activeTripDao = failingActiveTripDao,
+            gpsInboxDao = database.gpsInboxDao(),
+            filterGpsPointUseCase = FilterGpsPointUseCase()
+        )
 
         try {
             failingProcessor.processFixTransaction(fixId)
