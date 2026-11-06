@@ -54,14 +54,16 @@ abstract class ExpenseTrackerDatabase : RoomDatabase() {
                 // 1. Persistent trip lifecycle table
                 db.execSQL("""
                     CREATE TABLE IF NOT EXISTS `trip_lifecycle` (
-                        `tripId` TEXT PRIMARY KEY NOT NULL,
+                        `tripId` TEXT NOT NULL,
                         `state` TEXT NOT NULL,
                         `updatedAt` INTEGER NOT NULL,
-                        `reason` TEXT
+                        `reason` TEXT,
+                        PRIMARY KEY(`tripId`)
                     )
                 """.trimIndent())
 
                 // 2. Monotonic time and sequence columns for gps_inbox
+                db.execSQL("DROP INDEX IF EXISTS `index_gps_inbox_tripId_timestamp`")
                 db.execSQL("ALTER TABLE `gps_inbox` ADD COLUMN `sequenceNumber` INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE `gps_inbox` ADD COLUMN `elapsedRealtimeNanos` INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("CREATE INDEX IF NOT EXISTS `index_gps_inbox_tripId_sequenceNumber` ON `gps_inbox` (`tripId`, `sequenceNumber`)")
