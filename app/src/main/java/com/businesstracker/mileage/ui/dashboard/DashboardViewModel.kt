@@ -50,10 +50,10 @@ data class DashboardUiState(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val tripRepository: TripRepository,
-    private val activeTripRepository: ActiveTripRepository,
     private val rateUseCase: CalculateMileageRateUseCase,
     private val summaryUseCase: GetDashboardSummaryUseCase,
-    @ApplicationContext private val appContext: Context
+    @ApplicationContext private val appContext: Context,
+    private val activeTripRepository: ActiveTripRepository? = null
 ) : ViewModel() {
 
     private val now = LocalDate.now()
@@ -67,29 +67,33 @@ class DashboardViewModel @Inject constructor(
     private val _processingTripIds = MutableStateFlow<Set<String>>(emptySet())
     private val _lastClassifiedTrip = MutableStateFlow<TripEntity?>(null)
 
-    val serviceState: StateFlow<TrackingServiceState> = combine(
-        LocationTrackingService.serviceState,
-        activeTripRepository.observeActiveTrip()
-    ) { liveState, activeTrip ->
-        if (liveState.isTracking) {
-            liveState
-        } else if (activeTrip != null) {
-            TrackingServiceState(
-                isTracking = true,
-                tripId = activeTrip.id,
-                distanceMeters = activeTrip.totalDistanceMeters,
-                distanceMiles = activeTrip.totalDistanceMeters * 0.000621371,
-                isPaused = activeTrip.isPaused,
-                durationMillis = maxOf(0L, System.currentTimeMillis() - activeTrip.startTime)
-            )
-        } else {
-            liveState
-        }
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = LocationTrackingService.serviceState.value
-    )
+    val serviceState: StateFlow<TrackingServiceState> = if (activeTripRepository != null) {
+        combine(
+            LocationTrackingService.serviceState,
+            activeTripRepository.observeActiveTrip()
+        ) { liveState, activeTrip ->
+            if (liveState.isTracking) {
+                liveState
+            } else if (activeTrip != null) {
+                TrackingServiceState(
+                    isTracking = true,
+                    tripId = activeTrip.id,
+                    distanceMeters = activeTrip.totalDistanceMeters,
+                    distanceMiles = activeTrip.totalDistanceMeters * 0.000621371,
+                    isPaused = activeTrip.isPaused,
+                    durationMillis = maxOf(0L, System.currentTimeMillis() - activeTrip.startTime)
+                )
+            } else {
+                liveState
+            }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = LocationTrackingService.serviceState.value
+        )
+    } else {
+        LocationTrackingService.serviceState
+    }
 
     private data class TripFilterState(
         val unreviewed: List<TripEntity>,

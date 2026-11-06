@@ -59,7 +59,8 @@ class ReportsHistoricalDeductionTest {
             calculatedDeduction = deduction,
             notes = null,
             waypointsJson = "[]",
-            syncStatus = "PENDING"
+            syncStatus = "PENDING",
+            syncedAt = null
         )
     }
 

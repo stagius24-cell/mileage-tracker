@@ -103,10 +103,10 @@ class DashboardViewModelStateTest {
 
         val viewModel = DashboardViewModel(
             tripRepository = fakeTripRepo,
-            activeTripRepository = activeTripRepository,
             rateUseCase = CalculateMileageRateUseCase(),
-            summaryUseCase = GetDashboardSummaryUseCase(fakeTripRepo),
-            appContext = context
+            summaryUseCase = GetDashboardSummaryUseCase(),
+            appContext = context,
+            activeTripRepository = activeTripRepository
         )
         advanceUntilIdle()
 
@@ -136,10 +136,10 @@ class DashboardViewModelStateTest {
 
         val viewModel = DashboardViewModel(
             tripRepository = fakeTripRepo,
-            activeTripRepository = activeTripRepository,
             rateUseCase = CalculateMileageRateUseCase(),
-            summaryUseCase = GetDashboardSummaryUseCase(fakeTripRepo),
-            appContext = context
+            summaryUseCase = GetDashboardSummaryUseCase(),
+            appContext = context,
+            activeTripRepository = activeTripRepository
         )
         advanceUntilIdle()
 

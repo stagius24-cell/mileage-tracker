@@ -17,7 +17,6 @@ import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.FinalizeTripUseCase
 import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
-import com.businesstracker.mileage.notification.NotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -49,15 +48,14 @@ class LocationTrackingServiceNullIntentRecoveryTest {
         preferencesManager = TrackingPreferencesManager(context)
 
         val processor = GpsInboxProcessor(
-            filterUseCase = FilterGpsPointUseCase(),
+            database = database,
             activeTripDao = database.activeTripDao(),
             gpsInboxDao = database.gpsInboxDao(),
-            tripSequenceDao = database.tripSequenceDao(),
-            database = database
+            filterGpsPointUseCase = FilterGpsPointUseCase()
         )
         drainPendingGpsFixesUseCase = DrainPendingGpsFixesUseCase(
             gpsInboxDao = database.gpsInboxDao(),
-            processor = processor
+            gpsInboxProcessor = processor
         )
 
         LocationTrackingService.resetGuardForTesting()

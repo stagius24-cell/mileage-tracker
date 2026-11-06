@@ -51,7 +51,8 @@ class PdfReportGeneratorReliabilityTest {
             calculatedDeduction = 11.40,
             notes = "Test note $index",
             waypointsJson = "[]",
-            syncStatus = "SYNCED"
+            syncStatus = "SYNCED",
+            syncedAt = 1000L
         )
     }
 
