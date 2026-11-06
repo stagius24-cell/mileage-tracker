@@ -36,7 +36,7 @@ data class ActiveWaypointEntity(
     val longitude: Double,
 
     @ColumnInfo(name = "altitude")
-    val altitude: Double,
+    val altitude: Double = 0.0,
 
     @ColumnInfo(name = "accuracy")
     val accuracy: Float,

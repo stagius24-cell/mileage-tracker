@@ -127,6 +127,7 @@ class ActiveTripDaoTest {
                 tripId = testTripId,
                 latitude = 37.3382,
                 longitude = -121.8863,
+                altitude = 0.0,
                 timestamp = 1000L,
                 speed = 10.0f,
                 accuracy = 5.0f
@@ -185,6 +186,7 @@ class ActiveTripDaoTest {
                 tripId = recoveredTripId,
                 latitude = 37.3382,
                 longitude = -121.8863,
+                altitude = 0.0,
                 timestamp = initialStartTime,
                 speed = 12.0f,
                 accuracy = 4.0f
@@ -195,6 +197,7 @@ class ActiveTripDaoTest {
                 tripId = recoveredTripId,
                 latitude = 37.3500,
                 longitude = -121.8863,
+                altitude = 0.0,
                 timestamp = initialStartTime + 60000L,
                 speed = 15.0f,
                 accuracy = 4.0f
