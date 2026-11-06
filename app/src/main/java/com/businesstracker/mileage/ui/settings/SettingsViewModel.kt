@@ -16,7 +16,7 @@ import javax.inject.Inject
 
 data class SettingsUiState(
     val autoTrackingEnabled: Boolean = true,
-    val defaultBusinessEntity: String = "MySucculentCorner",
+    val businessEntity: String = "MySucculentCorner",
     val cfEndpoint: String = TrackingPreferencesManager.DEFAULT_CF_ENDPOINT,
     val cfClientId: String = "",
     val cfClientSecret: String = "",
@@ -27,7 +27,6 @@ data class SettingsUiState(
 
 private data class GeneralPrefs(
     val autoTrackingEnabled: Boolean,
-    val defaultBusinessEntity: String,
     val defaultVehicle: String,
     val customCategories: String
 )
@@ -47,11 +46,10 @@ class SettingsViewModel @Inject constructor(
 
     private val generalFlow = combine(
         preferencesManager.isAutoTrackingEnabled,
-        preferencesManager.defaultBusinessEntity,
         preferencesManager.defaultVehicle,
         preferencesManager.customCategories
-    ) { autoTrack, entity, vehicle, categories ->
-        GeneralPrefs(autoTrack, entity, vehicle, categories)
+    ) { autoTrack, vehicle, categories ->
+        GeneralPrefs(autoTrack, vehicle, categories)
     }
 
     private val cloudflareFlow = combine(
@@ -69,7 +67,7 @@ class SettingsViewModel @Inject constructor(
     ) { general, cf ->
         SettingsUiState(
             autoTrackingEnabled = general.autoTrackingEnabled,
-            defaultBusinessEntity = general.defaultBusinessEntity,
+            businessEntity = "MySucculentCorner",
             defaultVehicle = general.defaultVehicle,
             customCategories = general.customCategories,
             cfEndpoint = cf.endpoint,
@@ -86,12 +84,6 @@ class SettingsViewModel @Inject constructor(
     fun setAutoTrackingEnabled(enabled: Boolean) {
         viewModelScope.launch {
             preferencesManager.setAutoTrackingEnabled(enabled)
-        }
-    }
-
-    fun setDefaultBusinessEntity(entity: String) {
-        viewModelScope.launch {
-            preferencesManager.setDefaultBusinessEntity(entity)
         }
     }
 

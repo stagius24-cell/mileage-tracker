@@ -17,10 +17,10 @@ private val LightColorScheme = lightColorScheme(
     onPrimary = Color.White,
     primaryContainer = SucculentContainer,
     onPrimaryContainer = SucculentPrimaryVariant,
-    secondary = HaneelovePrimary,
-    onSecondary = Color.White,
-    secondaryContainer = HaneeloveContainer,
-    onSecondaryContainer = HaneelovePrimaryVariant,
+    secondary = SucculentSecondary,
+    onSecondary = SucculentPrimaryVariant,
+    secondaryContainer = SucculentContainer,
+    onSecondaryContainer = SucculentPrimaryVariant,
     tertiary = SlateNeutral,
     onTertiary = Color.White,
     background = NeutralBackgroundLight,
@@ -36,10 +36,10 @@ private val DarkColorScheme = darkColorScheme(
     onPrimary = SucculentPrimaryVariant,
     primaryContainer = SucculentPrimaryVariant,
     onPrimaryContainer = SucculentContainer,
-    secondary = HaneeloveSecondary,
-    onSecondary = HaneelovePrimaryVariant,
-    secondaryContainer = HaneelovePrimaryVariant,
-    onSecondaryContainer = HaneeloveSecondary,
+    secondary = SucculentSecondary,
+    onSecondary = SucculentPrimaryVariant,
+    secondaryContainer = SucculentPrimaryVariant,
+    onSecondaryContainer = SucculentContainer,
     tertiary = SlateLight,
     onTertiary = SlateDark,
     background = NeutralBackgroundDark,
@@ -52,17 +52,21 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun BusinessMileageTrackerTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = isSystemInDarkTheme(), // Automatically follows system Light/Dark setting
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     val view = LocalView.current
+
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as? Activity)?.window
             if (window != null) {
                 window.statusBarColor = colorScheme.background.toArgb()
-                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+                window.navigationBarColor = colorScheme.surface.toArgb()
+                val insetsController = WindowCompat.getInsetsController(window, view)
+                insetsController.isAppearanceLightStatusBars = !darkTheme
+                insetsController.isAppearanceLightNavigationBars = !darkTheme
             }
         }
     }

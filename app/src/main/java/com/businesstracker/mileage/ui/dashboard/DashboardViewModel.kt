@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.local.entity.TripEntity
-import com.businesstracker.mileage.data.local.model.BusinessEntitySummary
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.repository.TripRepository
@@ -29,8 +28,6 @@ data class DashboardUiState(
     val totalTripCount: Int = 0,
     val succulentMiles: Double = 0.0,
     val succulentDeduction: Double = 0.0,
-    val haneeloveMiles: Double = 0.0,
-    val haneeloveDeduction: Double = 0.0,
     val personalMiles: Double = 0.0,
     val currentRate: Double = 0.760
 )
@@ -63,7 +60,6 @@ class DashboardViewModel @Inject constructor(
         val totalDeductionYtd = ytdBusinessTrips.sumOf { it.calculatedDeduction }
 
         val succulentSummary = summaries.firstOrNull { it.businessEntity == BusinessEntity.MY_SUCCULENT_CORNER.displayName }
-        val haneeloveSummary = summaries.firstOrNull { it.businessEntity == BusinessEntity.HANEELOVE.displayName }
         val personalMiles = personalTrips.sumOf { it.totalDistanceMiles }
 
         DashboardUiState(
@@ -72,10 +68,8 @@ class DashboardViewModel @Inject constructor(
             totalBusinessMilesMonth = totalBusinessMilesMonth,
             totalDeductionYtd = totalDeductionYtd,
             totalTripCount = allTrips.size,
-            succulentMiles = succulentSummary?.totalBusinessMiles ?: 0.0,
-            succulentDeduction = succulentSummary?.totalDeduction ?: 0.0,
-            haneeloveMiles = haneeloveSummary?.totalBusinessMiles ?: 0.0,
-            haneeloveDeduction = haneeloveSummary?.totalDeduction ?: 0.0,
+            succulentMiles = succulentSummary?.totalBusinessMiles ?: totalBusinessMilesYtd,
+            succulentDeduction = succulentSummary?.totalDeduction ?: totalDeductionYtd,
             personalMiles = personalMiles,
             currentRate = currentRate
         )
@@ -85,16 +79,15 @@ class DashboardViewModel @Inject constructor(
         initialValue = DashboardUiState()
     )
 
-    fun classifyTripAsBusiness(tripId: String, businessEntity: String, purpose: String) {
+    fun classifyTripAsBusiness(tripId: String, businessEntity: String = BusinessEntity.MY_SUCCULENT_CORNER.displayName, purpose: String) {
         viewModelScope.launch {
             tripRepository.classifyTrip(
                 tripId = tripId,
                 classification = TripClassification.BUSINESS.value,
-                businessEntity = businessEntity,
+                businessEntity = BusinessEntity.MY_SUCCULENT_CORNER.displayName,
                 purpose = purpose,
                 notes = null
             )
-            // Trigger resilient background sync to Cloudflare D1 / Google Sheets
             MileageSyncWorker.enqueueOneTimeSync(appContext)
         }
     }

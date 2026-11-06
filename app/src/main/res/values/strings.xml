@@ -1,14 +1,13 @@
 <resources>
-    <string name="app_name">Business Mileage Tracker</string>
+    <string name="app_name">MySucculentCorner Mileage Tracker</string>
     <string name="notification_channel_tracking">Mileage Tracking Service</string>
     <string name="notification_channel_tracking_desc">Displays live miles and trip tracking controls</string>
     <string name="notification_channel_trips">Trip Alerts</string>
     <string name="notification_channel_trips_desc">Notifications for newly detected and completed trips</string>
-    <string name="tracking_notification_title">Tracking Business Mileage</string>
+    <string name="tracking_notification_title">Tracking MySucculentCorner Mileage</string>
     <string name="action_pause">Pause</string>
     <string name="action_resume">Resume</string>
     <string name="action_end_trip">End Trip</string>
     <string name="entity_succulent">MySucculentCorner</string>
-    <string name="entity_haneelove">Haneelove</string>
     <string name="entity_personal">Personal</string>
 </resources>

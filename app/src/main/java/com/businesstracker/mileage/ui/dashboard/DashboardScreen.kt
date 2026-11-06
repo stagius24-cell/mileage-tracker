@@ -22,12 +22,11 @@ import androidx.compose.material.icons.filled.AttachMoney
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.LocalFlorist
-import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.Timeline
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -44,10 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.ui.components.SwipeableTripCard
-import com.businesstracker.mileage.ui.theme.HaneeloveContainer
-import com.businesstracker.mileage.ui.theme.HaneelovePrimary
 import com.businesstracker.mileage.ui.theme.SlateNeutral
-import com.businesstracker.mileage.ui.theme.SucculentContainer
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import java.util.Locale
 
@@ -62,42 +58,54 @@ fun DashboardScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 20.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // App Header & Rate Badge
+        // App Header & Wide IRS Rate Badge
         item {
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Column {
-                    Text(
-                        text = "Business Mileage Tracker",
-                        style = MaterialTheme.typography.headlineMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "MySucculentCorner & Haneelove",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
-                    )
-                }
+                Text(
+                    text = "MySucculentCorner",
+                    style = MaterialTheme.typography.headlineMedium.copy(
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = MaterialTheme.colorScheme.onBackground
+                )
 
+                Text(
+                    text = "Business Expense & Mileage Tracker",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f)
+                )
+
+                // Clean, horizontal IRS Standard Rate Badge (never gets crushed)
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = SucculentContainer,
-                    shadowElevation = 0.dp
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.padding(top = 4.dp)
                 ) {
-                    Text(
-                        text = "IRS Rate: \$${String.format(Locale.US, "%.3f", state.currentRate)}/mi",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = SucculentPrimary
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Verified,
+                            contentDescription = null,
+                            tint = SucculentPrimary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "IRS Standard Rate: \$${String.format(Locale.US, "%.3f", state.currentRate)} / mile",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
                 }
             }
         }
@@ -211,25 +219,25 @@ fun DashboardScreen(
                     value = "${String.format(Locale.US, "%.1f", state.totalBusinessMilesMonth)} mi",
                     subtitle = "≈ \$${String.format(Locale.US, "%,.2f", state.totalBusinessMilesMonth * state.currentRate)} deduction",
                     icon = Icons.Default.Timeline,
-                    accentColor = HaneelovePrimary,
+                    accentColor = SucculentPrimary,
                     modifier = Modifier.weight(1f)
                 )
             }
         }
 
-        // Section: Segmented Entity Breakdown
+        // Section: Classification Breakdown (MySucculentCorner vs Personal)
         item {
             Text(
-                text = "Business Breakdown",
+                text = "Mileage Breakdown",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
         }
 
         item {
-            val totalLogged = (state.succulentMiles + state.haneeloveMiles + state.personalMiles).coerceAtLeast(0.1)
-            val succulentFraction = (state.succulentMiles / totalLogged).toFloat()
-            val haneeloveFraction = (state.haneeloveMiles / totalLogged).toFloat()
+            val totalLogged = (state.succulentMiles + state.personalMiles).coerceAtLeast(0.1)
+            val businessFraction = (state.succulentMiles / totalLogged).toFloat()
+            val personalFraction = 1f - businessFraction
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -242,30 +250,21 @@ fun DashboardScreen(
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Progress Bar
+                    // Proportional Mileage Bar
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(10.dp)
                             .clip(RoundedCornerShape(5.dp))
                     ) {
-                        if (succulentFraction > 0f) {
+                        if (businessFraction > 0f) {
                             Box(
                                 modifier = Modifier
-                                    .weight(succulentFraction.coerceAtLeast(0.01f))
+                                    .weight(businessFraction.coerceAtLeast(0.01f))
                                     .fillMaxSize()
                                     .background(SucculentPrimary)
                             )
                         }
-                        if (haneeloveFraction > 0f) {
-                            Box(
-                                modifier = Modifier
-                                    .weight(haneeloveFraction.coerceAtLeast(0.01f))
-                                    .fillMaxSize()
-                                    .background(HaneelovePrimary)
-                            )
-                        }
-                        val personalFraction = 1f - succulentFraction - haneeloveFraction
                         if (personalFraction > 0.01f) {
                             Box(
                                 modifier = Modifier
@@ -276,27 +275,18 @@ fun DashboardScreen(
                         }
                     }
 
-                    // MySucculentCorner row
-                    EntityBreakdownRow(
-                        entityName = "MySucculentCorner",
+                    // MySucculentCorner Business Row
+                    BreakdownRow(
+                        title = "MySucculentCorner (Deductible)",
                         miles = state.succulentMiles,
                         deduction = state.succulentDeduction,
                         color = SucculentPrimary,
                         icon = Icons.Default.LocalFlorist
                     )
 
-                    // Haneelove row
-                    EntityBreakdownRow(
-                        entityName = "Haneelove",
-                        miles = state.haneeloveMiles,
-                        deduction = state.haneeloveDeduction,
-                        color = HaneelovePrimary,
-                        icon = Icons.Default.ShoppingBag
-                    )
-
-                    // Personal excluded row
-                    EntityBreakdownRow(
-                        entityName = "Personal (Excluded)",
+                    // Personal Excluded Row
+                    BreakdownRow(
+                        title = "Personal (Non-Deductible)",
                         miles = state.personalMiles,
                         deduction = 0.0,
                         color = SlateNeutral,
@@ -365,8 +355,8 @@ private fun SummaryMetricCard(
 }
 
 @Composable
-private fun EntityBreakdownRow(
-    entityName: String,
+private fun BreakdownRow(
+    title: String,
     miles: Double,
     deduction: Double,
     color: Color,
@@ -393,7 +383,7 @@ private fun EntityBreakdownRow(
             Spacer(modifier = Modifier.width(10.dp))
             Column {
                 Text(
-                    text = entityName,
+                    text = title,
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.SemiBold
                 )

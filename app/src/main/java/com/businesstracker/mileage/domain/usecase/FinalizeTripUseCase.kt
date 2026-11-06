@@ -73,7 +73,7 @@ class FinalizeTripUseCase @Inject constructor(
             totalDistanceMiles = totalDistanceMiles,
             businessMiles = businessMiles,
             businessEntity = businessEntity,
-            purpose = TripPurpose.NURSERY_PLANT_PICKUP,
+            purpose = TripPurpose.NURSERY_PICKUP,
             trackingMethod = trackingMethod.value,
             classification = TripClassification.UNREVIEWED.value,
             applicableRate = applicableRate,

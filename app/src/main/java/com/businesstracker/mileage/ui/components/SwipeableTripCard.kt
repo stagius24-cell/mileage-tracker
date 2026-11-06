@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Person
@@ -35,8 +34,6 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -61,7 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
-import com.businesstracker.mileage.ui.theme.HaneelovePrimary
+import com.businesstracker.mileage.domain.model.TripPurpose
 import com.businesstracker.mileage.ui.theme.SlateDark
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
@@ -85,12 +82,12 @@ fun SwipeableTripCard(
         confirmValueChange = { dismissValue ->
             when (dismissValue) {
                 SwipeToDismissBoxValue.StartToEnd -> {
-                    // Swiped Right -> Business Triage Sheet
+                    // Swiped Right -> Open MySucculentCorner Triage Sheet
                     showBusinessBottomSheet = true
-                    false // Keep card visible until user confirms in bottom sheet
+                    false
                 }
                 SwipeToDismissBoxValue.EndToStart -> {
-                    // Swiped Left -> Immediate Personal Classification
+                    // Swiped Left -> Classify as Personal
                     onClassifyPersonal(trip.id)
                     true
                 }
@@ -174,29 +171,11 @@ fun SwipeableTripCard(
         TripCardContent(trip = trip)
     }
 
-    // Business Classification Modal Bottom Sheet
+    // MySucculentCorner Business Classification Bottom Sheet
     if (showBusinessBottomSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        var selectedEntity by remember {
-            mutableStateOf(BusinessEntity.MY_SUCCULENT_CORNER.displayName)
-        }
-
-        val succulentPurposes = remember {
-            listOf("Nursery Pickup", "Plant Drop", "Wholesale", "Soil/Pots", "Shipping")
-        }
-        val haneelovePurposes = remember {
-            listOf("Packaging Supplier", "Ribbon/Box Sourcing", "Photo Shoot", "Shipping")
-        }
-
-        var selectedPurpose by remember(selectedEntity) {
-            mutableStateOf(
-                if (selectedEntity == BusinessEntity.MY_SUCCULENT_CORNER.displayName) {
-                    succulentPurposes.first()
-                } else {
-                    haneelovePurposes.first()
-                }
-            )
-        }
+        val purposes = remember { TripPurpose.DEFAULT_SUCCULENT_PURPOSES }
+        var selectedPurpose by remember { mutableStateOf(purposes.first()) }
 
         ModalBottomSheet(
             onDismissRequest = {
@@ -212,103 +191,47 @@ fun SwipeableTripCard(
                     .padding(horizontal = 24.dp, vertical = 16.dp)
             ) {
                 Text(
-                    text = "Classify Business Drive",
+                    text = "MySucculentCorner Business Drive",
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
                 )
 
                 Text(
-                    text = "${String.format(Locale.US, "%.1f", trip.totalDistanceMiles)} miles • Est. Deduction: \$${String.format(Locale.US, "%.2f", trip.totalDistanceMiles * trip.applicableRate)}",
+                    text = "${String.format(Locale.US, "%.1f", trip.totalDistanceMiles)} miles • Tax Deduction: \$${String.format(Locale.US, "%.2f", trip.totalDistanceMiles * trip.applicableRate)}",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
                 )
 
                 Text(
-                    text = "Select Business Entity",
+                    text = "Select Purpose",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
 
-                // Entity Radio Selection
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        RadioButton(
-                            selected = selectedEntity == BusinessEntity.MY_SUCCULENT_CORNER.displayName,
-                            onClick = { selectedEntity = BusinessEntity.MY_SUCCULENT_CORNER.displayName },
-                            colors = RadioButtonDefaults.colors(selectedColor = SucculentPrimary)
-                        )
-                        Text(
-                            text = "MySucculentCorner",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        RadioButton(
-                            selected = selectedEntity == BusinessEntity.HANEELOVE.displayName,
-                            onClick = { selectedEntity = BusinessEntity.HANEELOVE.displayName },
-                            colors = RadioButtonDefaults.colors(selectedColor = HaneelovePrimary)
-                        )
-                        Text(
-                            text = "Haneelove",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                Text(
-                    text = "Drive Purpose",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                // Quick Tag FilterChips
+                // Quick Tag FilterChips for MySucculentCorner
                 FlowRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .padding(vertical = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    val currentPurposes = if (selectedEntity == BusinessEntity.MY_SUCCULENT_CORNER.displayName) {
-                        succulentPurposes
-                    } else {
-                        haneelovePurposes
-                    }
-
-                    currentPurposes.forEach { purpose ->
+                    purposes.forEach { purpose ->
                         FilterChip(
                             selected = selectedPurpose == purpose,
                             onClick = { selectedPurpose = purpose },
                             label = { Text(purpose) },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = if (selectedEntity == BusinessEntity.MY_SUCCULENT_CORNER.displayName) {
-                                    SucculentPrimary
-                                } else {
-                                    HaneelovePrimary
-                                },
+                                selectedContainerColor = SucculentPrimary,
                                 selectedLabelColor = Color.White
                             )
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -329,15 +252,13 @@ fun SwipeableTripCard(
                         onClick = {
                             showBusinessBottomSheet = false
                             coroutineScope.launch { dismissState.reset() }
-                            onClassifyBusiness(trip.id, selectedEntity, selectedPurpose)
+                            onClassifyBusiness(
+                                trip.id,
+                                BusinessEntity.MY_SUCCULENT_CORNER.displayName,
+                                selectedPurpose
+                            )
                         },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (selectedEntity == BusinessEntity.MY_SUCCULENT_CORNER.displayName) {
-                                SucculentPrimary
-                            } else {
-                                HaneelovePrimary
-                            }
-                        )
+                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))

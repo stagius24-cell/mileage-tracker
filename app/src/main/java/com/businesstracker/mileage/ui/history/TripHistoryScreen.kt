@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDone
@@ -51,9 +50,6 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.data.local.entity.TripEntity
-import com.businesstracker.mileage.domain.model.BusinessEntity
-import com.businesstracker.mileage.ui.theme.HaneelovePrimary
-import com.businesstracker.mileage.ui.theme.SlateDark
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
@@ -96,30 +92,26 @@ fun TripHistoryScreen(
                 singleLine = true
             )
 
-            // Business Filter Chips
+            // Classification Filter Chips
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(vertical = 4.dp)
             ) {
                 val filters = listOf(
-                    "ALL" to "All Entities",
-                    BusinessEntity.MY_SUCCULENT_CORNER.displayName to "MySucculentCorner",
-                    BusinessEntity.HANEELOVE.displayName to "Haneelove",
-                    BusinessEntity.PERSONAL.displayName to "Personal"
+                    "ALL" to "All Drives",
+                    "BUSINESS" to "Business (MySucculentCorner)",
+                    "PERSONAL" to "Personal",
+                    "UNREVIEWED" to "Unreviewed"
                 )
 
                 items(filters) { (key, label) ->
-                    val isSelected = state.selectedBusinessFilter == key
+                    val isSelected = state.selectedClassificationFilter == key
                     FilterChip(
                         selected = isSelected,
-                        onClick = { viewModel.setBusinessFilter(key) },
+                        onClick = { viewModel.setClassificationFilter(key) },
                         label = { Text(label) },
                         colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = when (key) {
-                                BusinessEntity.MY_SUCCULENT_CORNER.displayName -> SucculentPrimary
-                                BusinessEntity.HANEELOVE.displayName -> HaneelovePrimary
-                                else -> SlateDark
-                            },
+                            selectedContainerColor = if (key == "BUSINESS") SucculentPrimary else MaterialTheme.colorScheme.primary,
                             selectedLabelColor = Color.White
                         )
                     )
@@ -175,11 +167,8 @@ private fun ExpandableTripItem(
         "${timeFormatter.format(Date(trip.startTime))} – ${timeFormatter.format(Date(trip.endTime))}"
     }
 
-    val entityColor = when (trip.businessEntity) {
-        BusinessEntity.MY_SUCCULENT_CORNER.displayName -> SucculentPrimary
-        BusinessEntity.HANEELOVE.displayName -> HaneelovePrimary
-        else -> SlateNeutral
-    }
+    val isBusiness = trip.classification == "BUSINESS"
+    val classificationColor = if (isBusiness) SucculentPrimary else SlateNeutral
 
     Card(
         modifier = Modifier
@@ -202,14 +191,14 @@ private fun ExpandableTripItem(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
                             shape = RoundedCornerShape(8.dp),
-                            color = entityColor.copy(alpha = 0.15f)
+                            color = classificationColor.copy(alpha = 0.15f)
                         ) {
                             Text(
-                                text = trip.businessEntity,
+                                text = if (isBusiness) "MySucculentCorner" else trip.classification,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = entityColor
+                                color = classificationColor
                             )
                         }
 
@@ -239,7 +228,7 @@ private fun ExpandableTripItem(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
-                    if (trip.classification == "BUSINESS") {
+                    if (isBusiness) {
                         Text(
                             text = "\$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}",
                             style = MaterialTheme.typography.bodySmall,

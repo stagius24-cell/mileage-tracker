@@ -16,7 +16,6 @@ import javax.inject.Inject
 data class TripHistoryUiState(
     val trips: List<TripEntity> = emptyList(),
     val searchQuery: String = "",
-    val selectedBusinessFilter: String = "ALL", // "ALL", "MySucculentCorner", "Haneelove", "Personal"
     val selectedClassificationFilter: String = "ALL", // "ALL", "BUSINESS", "PERSONAL", "UNREVIEWED"
     val selectedYearFilter: String = "ALL" // "ALL", "2026", "2025"
 )
@@ -27,17 +26,15 @@ class TripHistoryViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
-    private val _businessFilter = MutableStateFlow("ALL")
     private val _classificationFilter = MutableStateFlow("ALL")
     private val _yearFilter = MutableStateFlow("ALL")
 
     val uiState: StateFlow<TripHistoryUiState> = combine(
         tripRepository.getAllTrips(),
         _searchQuery,
-        _businessFilter,
         _classificationFilter,
         _yearFilter
-    ) { allTrips, query, business, classification, year ->
+    ) { allTrips, query, classification, year ->
         val filtered = allTrips.filter { trip ->
             val matchesQuery = query.isBlank() ||
                     (trip.purpose.contains(query, ignoreCase = true)) ||
@@ -45,17 +42,15 @@ class TripHistoryViewModel @Inject constructor(
                     (trip.endAddress?.contains(query, ignoreCase = true) == true) ||
                     (trip.date.contains(query, ignoreCase = true))
 
-            val matchesBusiness = business == "ALL" || trip.businessEntity.equals(business, ignoreCase = true)
             val matchesClassification = classification == "ALL" || trip.classification.equals(classification, ignoreCase = true)
             val matchesYear = year == "ALL" || trip.date.startsWith(year)
 
-            matchesQuery && matchesBusiness && matchesClassification && matchesYear
+            matchesQuery && matchesClassification && matchesYear
         }
 
         TripHistoryUiState(
             trips = filtered,
             searchQuery = query,
-            selectedBusinessFilter = business,
             selectedClassificationFilter = classification,
             selectedYearFilter = year
         )
@@ -67,10 +62,6 @@ class TripHistoryViewModel @Inject constructor(
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
-    }
-
-    fun setBusinessFilter(filter: String) {
-        _businessFilter.value = filter
     }
 
     fun setClassificationFilter(filter: String) {

@@ -141,7 +141,7 @@ class NotificationHelper @Inject constructor(
 
         val notification = NotificationCompat.Builder(context, CHANNEL_TRIPS_ID)
             .setContentTitle("New trip detected (${String.format(Locale.US, "%.1f", distanceMiles)} mi)")
-            .setContentText("Tap to classify for MySucculentCorner or Haneelove.")
+            .setContentText("Tap to classify for MySucculentCorner.")
             .setSmallIcon(android.R.drawable.ic_menu_directions)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
