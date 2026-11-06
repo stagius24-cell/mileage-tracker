@@ -77,10 +77,10 @@ class DashboardViewModel @Inject constructor(
             TrackingServiceState(
                 isTracking = true,
                 tripId = activeTrip.id,
+                distanceMeters = activeTrip.totalDistanceMeters,
                 distanceMiles = activeTrip.totalDistanceMeters * 0.000621371,
                 isPaused = activeTrip.isPaused,
-                durationMillis = maxOf(0L, System.currentTimeMillis() - activeTrip.startTime),
-                trackingMethod = TrackingMethod.fromString(activeTrip.trackingMethod)
+                durationMillis = maxOf(0L, System.currentTimeMillis() - activeTrip.startTime)
             )
         } else {
             liveState
