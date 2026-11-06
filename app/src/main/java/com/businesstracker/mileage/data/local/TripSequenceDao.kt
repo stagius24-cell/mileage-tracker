@@ -43,9 +43,16 @@ interface TripSequenceDao {
         return next
     }
 
+    /**
+     * Advances the persistent sequence number for the given trip.
+     * Compares against the existing sequence-table value (trip_sequence.lastSequenceNumber)
+     * so that inserting inbox fixes prior to calling advanceSequence does not cause
+     * sequence advancement to be skipped.
+     * Ensures sequence numbers never move backward.
+     */
     @Transaction
     suspend fun advanceSequence(tripId: String, lastAssigned: Long) {
-        val current = getReconciledMaxSequence(tripId)
+        val current = getLastSequenceNumber(tripId) ?: 0L
         if (lastAssigned > current) {
             insertOrUpdate(TripSequenceEntity(tripId = tripId, lastSequenceNumber = lastAssigned))
         }

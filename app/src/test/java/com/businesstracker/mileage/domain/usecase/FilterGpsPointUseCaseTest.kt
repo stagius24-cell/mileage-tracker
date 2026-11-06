@@ -189,6 +189,33 @@ class FilterGpsPointUseCaseTest {
         assertTrue("Must safely process fix using monotonic elapsed time when bootCount is unavailable", result is FilterResult.Accepted)
     }
 
+    // REGRESSION TEST 5B: When boot identifier is unavailable (bootCount == 0), fallback does not calculate cross-boot delta on monotonic reset
+    @Test
+    fun unavailableBootIdentifier_fallbackDoesNotCalculateCrossBootDelta_whenRebootIdentifiedByMonotonicReset() {
+        val lastWaypoint = Waypoint(
+            latitude = 37.3382,
+            longitude = -121.8863,
+            timestamp = 100_000L,
+            elapsedRealtimeNanos = 50L * 3600L * 1_000_000_000L, // 50 hours
+            bootCount = 0 // Unavailable
+        )
+
+        // Monotonic nanos resets to 10s (< 50h), simulating reboot when BOOT_COUNT is absent
+        val newLocation = createLocation(
+            lat = 37.3391, // ~100m displacement
+            lng = -121.8863,
+            timeMillis = 110_000L,
+            elapsedRealtimeNanos = 10_000_000_000L, // 10s
+            speedMps = 15.0f // Doppler sensor speed = 15 m/s (~33.5 mph)
+        )
+
+        val result = filterGpsPointUseCase.filter(newLocation, lastWaypoint, currentBootCount = 0)
+        assertTrue("Must detect reboot via monotonic reset fallback and accept fix without calculating cross-boot delta", result is FilterResult.Accepted)
+        val accepted = result as FilterResult.Accepted
+        assertEquals(0, accepted.waypoint.bootCount)
+        assertEquals("Speed must re-baseline to Doppler sensor speed (~33.55 mph)", 15.0 * 2.23694, accepted.speedMph, 0.5)
+    }
+
     // REGRESSION TEST 6: Existing reboot regression test continues passing
     @Test
     fun existingMonotonicReset_rebootScenario_continuesPassing() {

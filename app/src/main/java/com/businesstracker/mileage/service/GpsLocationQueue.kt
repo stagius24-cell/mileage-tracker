@@ -209,7 +209,7 @@ class GpsLocationQueue(
                 }.thenBy { it.time }
             )
 
-            val currentBoot = bootCountProvider?.getBootCount() ?: 1
+            val currentBoot = bootCountProvider?.getBootCount() ?: 0
             val entities = sorted.map { loc ->
                 val monotonicTime = if (loc.elapsedRealtimeNanos != 0L) {
                     loc.elapsedRealtimeNanos
@@ -253,7 +253,7 @@ class GpsLocationQueue(
                 }.thenBy { it.time }
             )
 
-            val currentBoot = bootCountProvider?.getBootCount() ?: 1
+            val currentBoot = bootCountProvider?.getBootCount() ?: 0
             val entities = sorted.map { loc ->
                 val monotonicTime = if (loc.elapsedRealtimeNanos != 0L) {
                     loc.elapsedRealtimeNanos

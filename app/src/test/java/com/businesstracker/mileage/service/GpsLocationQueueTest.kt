@@ -729,4 +729,83 @@ class GpsLocationQueueTest {
         val currentSeq = tripSequenceDao.getReconciledMaxSequence(tripId)
         assertTrue("Sequence state must not reset to 0 on failure, was $currentSeq", currentSeq >= 15L)
     }
+
+    // REGRESSION TEST 7: Rejected-only batch still persists sequence to trip_sequence, and restart does not reuse it
+    @Test
+    fun rejectedOnlyBatch_stillPersistsSequence_andRestartDoesNotReuseIt() = runBlocking {
+        val tripId = "trip-rejected-batch"
+        val queue1 = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = tripSequenceDao.getReconciledMaxSequence(tripId),
+            database = database,
+            batchFetchLimit = 10
+        ) { loc ->
+            // Fix is consumed/deleted from inbox, but no waypoint is inserted (simulating rejection)
+        }
+
+        // 1. Enqueue a batch
+        queue1.enqueueBatchSync(listOf(
+            createLocation(37.33, -121.88, 1000L),
+            createLocation(37.34, -121.89, 2000L)
+        ))
+
+        // 2. Process and delete every inbox fix without creating any waypoint
+        queue1.drainAndClose()
+        assertEquals("Inbox must have 0 pending fixes after drain", 0, gpsInboxDao.getPendingCount(tripId))
+        assertEquals("No waypoints should have been inserted into active_waypoints", 0, database.activeTripDao().getWaypointsForTrip(tripId).size)
+
+        // 3. Verify trip_sequence.lastSequenceNumber still records the batch sequence
+        val storedSeq = tripSequenceDao.getLastSequenceNumber(tripId)
+        assertEquals("trip_sequence must record batch sequence 1 even when all fixes were rejected", 1L, storedSeq)
+
+        // 4. Recreate the queue using the reconciled sequence
+        val queue2 = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = tripSequenceDao.getReconciledMaxSequence(tripId),
+            database = database,
+            batchFetchLimit = 10
+        )
+
+        // 5. Verify the next sequence is strictly greater than the previous sequence
+        val nextSeq = queue2.admissionBarrier.acquireSequenceOrNull()
+        assertNotNull(nextSeq)
+        assertTrue("Next sequence ($nextSeq) must be strictly greater than previous sequence (1L)", nextSeq!! > 1L)
+        assertEquals(2L, nextSeq)
+    }
+
+    // DIRECT DAO TEST: advanceSequence writes sequence table even when corresponding inbox record already exists
+    @Test
+    fun advanceSequence_persistsSequence_evenWhenInboxRecordAlreadyExists() = runBlocking {
+        val tripId = "trip-advance-seq-dao"
+        // 1. Insert an inbox record with sequence 5
+        gpsInboxDao.insertFix(
+            com.businesstracker.mileage.data.local.entity.GpsInboxEntity(
+                tripId = tripId,
+                sequenceNumber = 5L,
+                elapsedRealtimeNanos = 5000L,
+                latitude = 37.33,
+                longitude = -121.88,
+                timestamp = 5000L
+            )
+        )
+
+        // trip_sequence table initially has null/no record
+        val seqBefore = tripSequenceDao.getLastSequenceNumber(tripId)
+        assertEquals(null, seqBefore)
+
+        // 2. Call advanceSequence(tripId, 5L)
+        tripSequenceDao.advanceSequence(tripId, 5L)
+
+        // 3. Verify advanceSequence actually wrote 5L to trip_sequence table
+        val seqAfter = tripSequenceDao.getLastSequenceNumber(tripId)
+        assertEquals("advanceSequence must write to trip_sequence table even when inbox record already exists with sequence 5", 5L, seqAfter)
+    }
 }

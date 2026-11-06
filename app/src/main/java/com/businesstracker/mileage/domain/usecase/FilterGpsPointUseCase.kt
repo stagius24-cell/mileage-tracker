@@ -94,6 +94,14 @@ class FilterGpsPointUseCase @Inject constructor(
         //
         // Case B: Either point lacks a valid boot identifier (<= 0), e.g. legacy persisted records or unit tests.
         // Fall back to detecting monotonic counter reset: new.elapsedRealtimeNanos < last.elapsedRealtimeNanos.
+        //
+        // Documented Unavoidable Limitation:
+        // When the system boot identifier is unavailable (bootCount <= 0), reboot detection relies solely on
+        // monotonic clock reset (new.elapsedRealtimeNanos < last.elapsedRealtimeNanos). If a device reboots
+        // without a system boot identifier and the new boot session has already been running longer than the
+        // previous session, hardware monotonic counters cannot distinguish the reboot from uninterrupted uptime.
+        // In this edge case, physical velocity thresholds (MAX_SPEED_MPH = 110 mph) and minimum displacement
+        // constraints continue to prevent false high-speed jump accumulation.
         val hasKnownBoots = effectiveBootCount > 0 && lastAcceptedWaypoint.bootCount > 0
         val isBootMismatch = hasKnownBoots && (effectiveBootCount != lastAcceptedWaypoint.bootCount)
 
