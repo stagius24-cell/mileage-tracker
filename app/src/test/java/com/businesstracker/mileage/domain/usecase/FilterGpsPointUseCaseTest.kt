@@ -15,8 +15,8 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class FilterGpsPointUseCaseTest {
 
-    private class TestBootCountProvider(var bootCount: Int = 1) : BootCountProvider {
-        override fun getBootCount(): Int = bootCount
+    private class TestBootCountProvider(var currentBootCount: Int = 1) : BootCountProvider {
+        override fun getBootCount(): Int = currentBootCount
     }
 
     private lateinit var bootCountProvider: TestBootCountProvider
@@ -24,7 +24,7 @@ class FilterGpsPointUseCaseTest {
 
     @Before
     fun setUp() {
-        bootCountProvider = TestBootCountProvider(bootCount = 1)
+        bootCountProvider = TestBootCountProvider(currentBootCount = 1)
         filterGpsPointUseCase = FilterGpsPointUseCase(bootCountProvider)
     }
 
@@ -58,7 +58,7 @@ class FilterGpsPointUseCaseTest {
         )
 
         // 5 seconds later in same boot session (bootCount = 1)
-        bootCountProvider.bootCount = 1
+        bootCountProvider.currentBootCount = 1
         val newLocation = createLocation(
             lat = 37.3391, // ~100m displacement
             lng = -121.8863,
@@ -88,7 +88,7 @@ class FilterGpsPointUseCaseTest {
         )
 
         // Phone rebooted! Current boot is boot 2, and new boot has already been running for 60 hours
-        bootCountProvider.bootCount = 2
+        bootCountProvider.currentBootCount = 2
         val newLocation = createLocation(
             lat = 37.3391, // ~100m displacement
             lng = -121.8863,
@@ -121,7 +121,7 @@ class FilterGpsPointUseCaseTest {
         )
 
         // Boot 2: 30 seconds after reboot
-        bootCountProvider.bootCount = 2
+        bootCountProvider.currentBootCount = 2
         val newLocation = createLocation(
             lat = 37.3391,
             lng = -121.8863,
@@ -149,7 +149,7 @@ class FilterGpsPointUseCaseTest {
         )
 
         // New fix arrives with valid bootCount = 3, but monotonic clock reset to 10s
-        bootCountProvider.bootCount = 3
+        bootCountProvider.currentBootCount = 3
         val newLocation = createLocation(
             lat = 37.3391,
             lng = -121.8863,
