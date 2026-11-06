@@ -12,6 +12,7 @@ import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.ServiceCompat
+import com.businesstracker.mileage.data.local.GpsInboxDao
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.coordinator.TripFinalizationCoordinator
 import com.businesstracker.mileage.domain.model.FilterResult
@@ -90,6 +91,7 @@ class LocationTrackingService : Service() {
     @Inject lateinit var finalizeTripUseCase: FinalizeTripUseCase
     @Inject lateinit var notificationHelper: NotificationHelper
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
+    @Inject lateinit var gpsInboxDao: GpsInboxDao
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -171,13 +173,14 @@ class LocationTrackingService : Service() {
                 foregroundType
             )
 
-            // Initialize serialized GPS location queue with non-loss backpressure
-            gpsLocationQueue?.cancelEmergency()
+            // Initialize durable Room-backed GPS location queue
+            gpsLocationQueue?.stopConsumer()
             gpsLocationQueue = GpsLocationQueue(
                 scope = serviceScope,
                 dispatcher = ioDispatcher,
-                maxCapacity = 1000,
-                bufferDir = cacheDir
+                gpsInboxDao = gpsInboxDao,
+                tripIdProvider = { currentTripId },
+                batchFetchLimit = 100
             ) { location ->
                 handleLocationSerialized(location)
             }
@@ -490,7 +493,7 @@ class LocationTrackingService : Service() {
         isStartingOrRunning.set(false)
         isStopping.set(false)
         isDrainingGps.set(false)
-        gpsLocationQueue?.cancelEmergency()
+        gpsLocationQueue?.stopConsumer()
         tickerJob?.cancel()
         try {
             fusedLocationClient.removeLocationUpdates(locationCallback)

@@ -79,6 +79,7 @@ class TripFinalizationCoordinator @Inject constructor(
             if (totalDistanceMiles < 0.12 && activeTrip.totalDistanceMeters < 200.0) {
                 activeTripRepository.clearActiveTrip(activeTrip.id)
                 preferencesManager.clearActiveTripId(activeTrip.id)
+                preferencesManager.recordDiscardedTrip(activeTrip.id)
                 return@withLock null
             }
 
@@ -151,6 +152,7 @@ class TripFinalizationCoordinator @Inject constructor(
             try {
                 activeTripRepository.clearActiveTrip(tripId)
                 preferencesManager.clearActiveTripId(tripId)
+                preferencesManager.recordDiscardedTrip(tripId)
             } catch (e: Exception) {
                 Log.e("TripFinalizationCoordinator", "Error discarding false trip: ${e.message}", e)
             }

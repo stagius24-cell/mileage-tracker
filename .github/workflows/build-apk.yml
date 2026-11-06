@@ -32,10 +32,10 @@ jobs:
           gradle-version: '8.10.2'
 
       - name: Run Unit Tests
-        run: gradle test --stacktrace
+        run: ./gradlew testDebugUnitTest testReleaseUnitTest --stacktrace
 
       - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Locate Generated APK
         id: find_apk

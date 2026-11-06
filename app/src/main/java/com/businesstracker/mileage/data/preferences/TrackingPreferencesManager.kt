@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -36,6 +37,7 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_VEHICLE_ANCHOR_TIME = longPreferencesKey("vehicle_anchor_time")
         private val KEY_IN_VEHICLE_STATE = booleanPreferencesKey("in_vehicle_state")
         private val KEY_ACTIVE_TRIP_ID = stringPreferencesKey("active_trip_id")
+        private val KEY_DISCARDED_TRIP_IDS = stringSetPreferencesKey("discarded_trip_ids")
 
         // Cloudflare D1 & Sync Configuration
         private val KEY_CF_ENDPOINT = stringPreferencesKey("cf_endpoint")
@@ -192,6 +194,18 @@ class TrackingPreferencesManager @Inject constructor(
                 prefs.remove(KEY_ACTIVE_TRIP_ID)
             }
         }
+    }
+
+    suspend fun recordDiscardedTrip(tripId: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_DISCARDED_TRIP_IDS] ?: emptySet()
+            prefs[KEY_DISCARDED_TRIP_IDS] = current + tripId
+        }
+    }
+
+    suspend fun isTripDiscarded(tripId: String): Boolean {
+        val prefs = context.dataStore.data.first()
+        return (prefs[KEY_DISCARDED_TRIP_IDS] ?: emptySet()).contains(tripId)
     }
 
     suspend fun setVehicleAnchor(latitude: Double, longitude: Double, timestamp: Long) {

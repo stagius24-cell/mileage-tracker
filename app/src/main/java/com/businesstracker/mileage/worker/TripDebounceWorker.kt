@@ -88,14 +88,12 @@ class TripDebounceWorker @AssistedInject constructor(
                 }
 
                 // Wait for service to finish draining all GPS fixes and finalize the trip
-                var finalizedInDb = false
+                var isTerminated = false
                 var attempts = 0
                 while (attempts < 20) { // Poll up to 4 seconds
                     delay(200L)
-                    val finalized = tripRepository.getTripById(activeTrip.id)
-                    val activeInDb = activeTripRepository.getActiveTrip()
-                    if (finalized != null || activeInDb == null) {
-                        finalizedInDb = true
+                    if (isTripTerminated(activeTrip.id)) {
+                        isTerminated = true
                         break
                     }
                     if (!LocationTrackingService.isTrackingRunning() && !LocationTrackingService.isDraining()) {
@@ -104,7 +102,7 @@ class TripDebounceWorker @AssistedInject constructor(
                     attempts++
                 }
 
-                if (!finalizedInDb) {
+                if (!isTerminated) {
                     // Service is still actively running or draining GPS points.
                     // The worker MUST NOT finalize prematurely while GPS points are draining.
                     // Return Result.retry() and preserve the active trip and its preferences.
@@ -120,11 +118,8 @@ class TripDebounceWorker @AssistedInject constructor(
 
             // 4. Safe recovery path ONLY when service is completely inactive (killed by OS or device rebooted)
             val finalizedTrip = finalizeTripUseCase.execute(activeTrip.id, method)
-            val isConfirmed = finalizedTrip != null ||
-                    tripRepository.getTripById(activeTrip.id) != null ||
-                    activeTripRepository.getActiveTrip() == null
-
-            if (!isConfirmed) {
+            if (!isTripTerminated(activeTrip.id)) {
+                // Ambiguous recovery: preserve active state and return retry
                 return Result.retry()
             }
 
@@ -144,5 +139,11 @@ class TripDebounceWorker @AssistedInject constructor(
             Log.e("TripDebounceWorker", "Recoverable failure during trip debounce finalization", e)
             Result.retry()
         }
+    }
+
+    private suspend fun isTripTerminated(tripId: String): Boolean {
+        val isFinalized = tripRepository.getTripById(tripId) != null
+        val isDiscarded = preferencesManager.isTripDiscarded(tripId)
+        return isFinalized || isDiscarded
     }
 }

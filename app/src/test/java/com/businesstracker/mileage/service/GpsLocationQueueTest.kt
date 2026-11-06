@@ -1,16 +1,21 @@
 package com.businesstracker.mileage.service
 
+import android.content.Context
 import android.location.Location
+import androidx.room.Room
+import androidx.test.core.app.ApplicationProvider
+import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
+import com.businesstracker.mileage.data.local.GpsInboxDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -20,11 +25,23 @@ import java.util.concurrent.atomic.AtomicInteger
 @RunWith(RobolectricTestRunner::class)
 class GpsLocationQueueTest {
 
+    private lateinit var database: ExpenseTrackerDatabase
+    private lateinit var gpsInboxDao: GpsInboxDao
     private val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    @Before
+    fun setUp() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        database = Room.inMemoryDatabaseBuilder(context, ExpenseTrackerDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        gpsInboxDao = database.gpsInboxDao()
+    }
 
     @After
     fun tearDown() {
         testScope.cancel()
+        database.close()
     }
 
     private fun createLocation(lat: Double, lng: Double, timeMillis: Long): Location {
@@ -36,90 +53,243 @@ class GpsLocationQueueTest {
         }
     }
 
-    // Regression Test 1: More than 1,000 incoming GPS fixes without data loss and bounded memory
+    // BLOCKER 1 & 5: Failure on first fix preserves all fixes and allows lossless retry
     @Test
-    fun moreThan1000GpsFixes_processedWithoutDataLoss_withBoundedMemory() = runBlocking {
-        val processedTimestamps = Collections.synchronizedList(mutableListOf<Long>())
-        val totalLocations = 1200
-        val boundedCapacity = 150 // Strict memory limit
+    fun failureOnFirstFix_preservesAllPendingFixes_andAllowsLosslessRetry() = runBlocking {
+        val tripId = "trip-fail-first"
+        var shouldFail = true
+        val processedFixes = Collections.synchronizedList(mutableListOf<Long>())
 
         val queue = GpsLocationQueue(
             scope = testScope,
             dispatcher = Dispatchers.Default,
-            maxCapacity = boundedCapacity
-        ) { location ->
-            processedTimestamps.add(location.time)
-        }
-
-        // Enqueue 1,200 locations in chunks
-        for (chunkStart in 1..totalLocations step 100) {
-            val chunk = (chunkStart until chunkStart + 100).map { i ->
-                createLocation(37.3382, -121.8863, i * 1000L)
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            batchFetchLimit = 10
+        ) { loc ->
+            if (shouldFail && loc.time == 1000L) {
+                throw java.sql.SQLException("Disk write error on first fix")
             }
-            queue.enqueueBatch(chunk)
+            processedFixes.add(loc.time)
         }
 
-        queue.drainAndClose()
+        val locations = (1..5).map { createLocation(37.0, -122.0, it * 1000L) }
+        queue.enqueueBatchSync(locations)
 
-        assertEquals("Exactly 1,200 GPS fixes must be consumed without any loss", totalLocations, processedTimestamps.size)
-        assertEquals("Spillover count must be 0 after draining", 0, queue.getSpilloverCount())
+        try {
+            queue.drainAndClose()
+            fail("drainAndClose must throw when first fix processing fails")
+        } catch (_: IllegalStateException) {}
 
-        // Verify order across entire 1,200 locations
-        for (i in 0 until totalLocations) {
-            assertEquals((i + 1) * 1000L, processedTimestamps[i])
+        // Assert all 5 fixes remain intact in the Room inbox
+        assertEquals("All 5 fixes must remain in database after first-fix failure", 5, gpsInboxDao.getPendingCount(tripId))
+        assertEquals("No fixes should have been recorded as processed", 0, processedFixes.size)
+
+        // Retry with error resolved
+        shouldFail = false
+        val retryQueue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            batchFetchLimit = 10
+        ) { loc ->
+            processedFixes.add(loc.time)
         }
+
+        retryQueue.drainAndClose()
+
+        assertEquals("All 5 fixes must be successfully processed on retry", 5, processedFixes.size)
+        assertEquals("Database inbox must be 0 after successful retry", 0, gpsInboxDao.getPendingCount(tripId))
     }
 
-    // Regression Test 2: Multiple batches with overlapping or out-of-order timestamps
+    // BLOCKER 1 & 5: Failure on middle fix preserves unprocessed fixes and avoids duplicate insertion on retry
     @Test
-    fun multipleBatches_withOverlappingTimestamps_processedInStrictTimestampOrder() = runBlocking {
+    fun failureOnMiddleFix_preservesUnprocessedFixes_andAvoidsDuplicatesOnRetry() = runBlocking {
+        val tripId = "trip-fail-middle"
+        var shouldFail = true
+        val processedFixes = Collections.synchronizedList(mutableListOf<Long>())
+
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            batchFetchLimit = 10
+        ) { loc ->
+            if (shouldFail && loc.time == 3000L) {
+                throw java.sql.SQLException("Simulated waypoint persistence failure on middle fix")
+            }
+            processedFixes.add(loc.time)
+        }
+
+        val locations = (1..6).map { createLocation(37.0, -122.0, it * 1000L) }
+        queue.enqueueBatchSync(locations)
+
+        try {
+            queue.drainAndClose()
+            fail("drainAndClose must throw when middle fix fails")
+        } catch (_: IllegalStateException) {}
+
+        // Fixes 1000L and 2000L were processed and deleted from inbox
+        // Fixes 3000L, 4000L, 5000L, 6000L (4 fixes) must remain safely in the inbox
+        assertEquals("Fixes 1 and 2 must have been processed", 2, processedFixes.size)
+        assertEquals("4 unprocessed fixes must remain in database", 4, gpsInboxDao.getPendingCount(tripId))
+
+        // Recreate queue / retry: should process only remaining fixes (no duplicates for 1 and 2)
+        shouldFail = false
+        val retryQueue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            batchFetchLimit = 10
+        ) { loc ->
+            processedFixes.add(loc.time)
+        }
+
+        retryQueue.drainAndClose()
+
+        assertEquals("Total processed count must equal 6 fixes without duplicates", 6, processedFixes.size)
+        assertEquals("Inbox must be completely drained", 0, gpsInboxDao.getPendingCount(tripId))
+        assertEquals(listOf(1000L, 2000L, 3000L, 4000L, 5000L, 6000L), processedFixes.toList())
+    }
+
+    // BLOCKER 1 & 5: Failure on final fix preserves it in inbox
+    @Test
+    fun failureOnFinalFix_preservesFinalFixInDatabase() = runBlocking {
+        val tripId = "trip-fail-final"
+        val processedFixes = Collections.synchronizedList(mutableListOf<Long>())
+
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            batchFetchLimit = 10
+        ) { loc ->
+            if (loc.time == 4000L) {
+                throw java.sql.SQLException("Final fix failure")
+            }
+            processedFixes.add(loc.time)
+        }
+
+        val locations = (1..4).map { createLocation(37.0, -122.0, it * 1000L) }
+        queue.enqueueBatchSync(locations)
+
+        try {
+            queue.drainAndClose()
+            fail("drainAndClose must throw when final fix fails")
+        } catch (_: IllegalStateException) {}
+
+        assertEquals("1 final fix must remain safely in database", 1, gpsInboxDao.getPendingCount(tripId))
+        assertEquals("3 preceding fixes processed successfully", 3, processedFixes.size)
+    }
+
+    // BLOCKER 2: Global timestamp ordering across multiple overlapping batches
+    @Test
+    fun globalTimestampOrdering_enforcedAcrossOverlappingBatches() = runBlocking {
+        val tripId = "trip-global-ordering"
         val processedTimestamps = Collections.synchronizedList(mutableListOf<Long>())
 
         val queue = GpsLocationQueue(
             scope = testScope,
             dispatcher = Dispatchers.Default,
-            maxCapacity = 50
-        ) { location ->
-            delay(5)
-            processedTimestamps.add(location.time)
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            batchFetchLimit = 20
+        ) { loc ->
+            processedTimestamps.add(loc.time)
         }
 
-        // Three overlapping batches arriving concurrently / out-of-order
+        // Multiple overlapping batches arriving in interleaved fashion
         val batch1 = listOf(1000L, 4000L, 7000L).map { createLocation(37.0, -122.0, it) }
         val batch2 = listOf(2000L, 5000L, 8000L).map { createLocation(37.0, -122.0, it) }
         val batch3 = listOf(500L, 3000L, 6000L).map { createLocation(37.0, -122.0, it) }
 
-        queue.enqueueBatch(batch1)
-        queue.enqueueBatch(batch2)
-        queue.enqueueBatch(batch3)
+        queue.enqueueBatchSync(batch1)
+        queue.enqueueBatchSync(batch2)
+        queue.enqueueBatchSync(batch3)
 
         queue.drainAndClose()
 
         val expected = listOf(500L, 1000L, 2000L, 3000L, 4000L, 5000L, 6000L, 7000L, 8000L)
-        assertEquals("Consumer must receive points in strictly ascending timestamp order across all batches", expected, processedTimestamps)
+        assertEquals("Queue must process items in strictly ascending global timestamp order", expected, processedTimestamps.toList())
     }
 
-    // Regression Test: GPS persistence failure prevents premature finalization
+    // BLOCKER 1 & 2: 1,000+ fixes processed with strictly bounded memory (batchFetchLimit)
     @Test
-    fun gpsPersistenceFailure_haltsProcessingAndSurfacesErrorOnDrain() = runBlocking {
+    fun moreThan1000Fixes_processedWithoutLoss_underBoundedBatchLimit() = runBlocking {
+        val tripId = "trip-large-volume"
+        val totalFixes = 1100
+        val batchLimit = 50 // In-memory batch limit strictly enforced
+        val processedCount = AtomicInteger(0)
+
         val queue = GpsLocationQueue(
             scope = testScope,
             dispatcher = Dispatchers.Default,
-            maxCapacity = 100
-        ) { location ->
-            if (location.time >= 5000L) {
-                throw java.sql.SQLException("Simulated SQLite disk/constraint failure")
-            }
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            batchFetchLimit = batchLimit
+        ) {
+            processedCount.incrementAndGet()
         }
 
-        val locations = (1..10).map { createLocation(37.0, -122.0, it * 1000L) }
-        queue.enqueueBatch(locations)
-
-        try {
-            queue.drainAndClose()
-            fail("drainAndClose must throw when waypoint persistence fails")
-        } catch (e: IllegalStateException) {
-            assertTrue("Exception message must detail persistence failure", e.message?.contains("Waypoint processing failed") == true)
+        // Insert 1,100 fixes in chunks into database inbox
+        for (i in 1..totalFixes step 100) {
+            val chunk = (i until i + 100).map { createLocation(37.3382, -121.8863, it * 1000L) }
+            queue.enqueueBatchSync(chunk)
         }
+
+        queue.drainAndClose()
+
+        assertEquals("All 1,100 fixes must be consumed without any loss", totalFixes, processedCount.get())
+        assertEquals("Database inbox must be empty after drain", 0, gpsInboxDao.getPendingCount(tripId))
+    }
+
+    // BLOCKER 4: Process termination preserves fixes in Room inbox for recovery
+    @Test
+    fun processTermination_preservesPendingFixesInPersistentStorage_forRecovery() = runBlocking {
+        val tripId = "trip-process-death"
+        val initialLocations = (1..15).map { createLocation(37.0, -122.0, it * 1000L) }
+
+        // Start first service queue session
+        val processedFirstSession = Collections.synchronizedList(mutableListOf<Long>())
+        val queue1 = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            batchFetchLimit = 5
+        ) { loc ->
+            processedFirstSession.add(loc.time)
+        }
+
+        queue1.enqueueBatchSync(initialLocations)
+
+        // Simulate sudden process termination / service onDestroy(): stop consumer without drain
+        queue1.stopConsumer()
+
+        // Persistent storage in Room must contain all remaining unprocessed fixes
+        val remainingInDb = gpsInboxDao.getPendingCount(tripId)
+        assertTrue("Unprocessed fixes must remain in SQLite inbox after service termination", remainingInDb > 0)
+
+        // Simulate service recreation and recovery
+        val processedRecoverySession = Collections.synchronizedList(mutableListOf<Long>())
+        val queue2 = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            batchFetchLimit = 5
+        ) { loc ->
+            processedRecoverySession.add(loc.time)
+        }
+
+        queue2.drainAndClose()
+
+        val totalProcessed = processedFirstSession.size + processedRecoverySession.size
+        assertEquals("Total processed fixes across process termination must equal 15", 15, totalProcessed)
+        assertEquals("Inbox must be completely clean after recovery", 0, gpsInboxDao.getPendingCount(tripId))
     }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.businesstracker.mileage.data.local.ActiveTripDao
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
+import com.businesstracker.mileage.data.local.GpsInboxDao
 import com.businesstracker.mileage.data.local.TripDao
 import dagger.Module
 import dagger.Provides
@@ -25,7 +26,9 @@ object DatabaseModule {
             context,
             ExpenseTrackerDatabase::class.java,
             ExpenseTrackerDatabase.DATABASE_NAME
-        ).build()
+        )
+        .addMigrations(ExpenseTrackerDatabase.MIGRATION_1_2)
+        .build()
     }
 
     @Provides
@@ -38,5 +41,11 @@ object DatabaseModule {
     @Singleton
     fun provideActiveTripDao(database: ExpenseTrackerDatabase): ActiveTripDao {
         return database.activeTripDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideGpsInboxDao(database: ExpenseTrackerDatabase): GpsInboxDao {
+        return database.gpsInboxDao()
     }
 }
