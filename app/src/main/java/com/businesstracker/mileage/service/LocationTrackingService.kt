@@ -115,6 +115,11 @@ class LocationTrackingService : Service() {
         method: TrackingMethod,
         suggestedBusiness: String
     ) {
+        if (_serviceState.value.isTracking && currentTripId.isNotEmpty()) {
+            // Prevent duplicate service starts for the same running trip
+            return
+        }
+
         currentTripId = tripId
         trackingMethod = method
         isPaused = false
@@ -140,15 +145,15 @@ class LocationTrackingService : Service() {
         )
 
         serviceScope.launch(ioDispatcher) {
-            preferencesManager.setActiveTripId(currentTripId)
-
             // Interruption Recovery: Check if active trip already exists in Room
             val existingTrip = activeTripRepository.getActiveTrip()
-            if (existingTrip != null && existingTrip.id == tripId) {
-                // Resume in-progress trip after process termination
+            if (existingTrip != null) {
+                // Resume in-progress trip after process termination or system recovery
+                currentTripId = existingTrip.id
+                preferencesManager.setActiveTripId(currentTripId)
                 tripStartTime = existingTrip.startTime
                 totalDistanceMeters = existingTrip.totalDistanceMeters
-                val recoveredWaypoints = activeTripRepository.getWaypoints(tripId)
+                val recoveredWaypoints = activeTripRepository.getWaypoints(currentTripId)
                 waypointCount = recoveredWaypoints.size
                 lastAcceptedWaypoint = recoveredWaypoints.lastOrNull() ?: Waypoint(
                     latitude = existingTrip.lastLatitude,
@@ -157,6 +162,7 @@ class LocationTrackingService : Service() {
                 )
             } else {
                 // New tracking session
+                preferencesManager.setActiveTripId(currentTripId)
                 tripStartTime = System.currentTimeMillis()
                 totalDistanceMeters = 0.0
                 waypointCount = 0

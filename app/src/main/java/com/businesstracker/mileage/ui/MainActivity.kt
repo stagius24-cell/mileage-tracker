@@ -30,9 +30,28 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var activityTransitionManager: ActivityTransitionManager
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
 
+    private val backgroundLocationLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        checkAndRegisterTransitions()
+    }
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { _ ->
+    ) { permissions ->
+        val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+        // Request background location progressively on Android 10+ once foreground location is granted
+        if (fineLocationGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val bgLocationGranted = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!bgLocationGranted) {
+                backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                return@registerForActivityResult
+            }
+        }
         checkAndRegisterTransitions()
     }
 
@@ -69,11 +88,28 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             try {
                 val autoTrackEnabled = preferencesManager.isAutoTrackingEnabled.first()
-                if (autoTrackEnabled && hasActivityRecognitionPermission()) {
+                if (autoTrackEnabled && hasRequiredPermissions()) {
                     activityTransitionManager.registerTransitions()
+                } else if (!autoTrackEnabled) {
+                    activityTransitionManager.unregisterTransitions()
                 }
             } catch (_: Exception) {}
         }
+    }
+
+    private fun hasRequiredPermissions(): Boolean {
+        val hasFine = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasActivity = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACTIVITY_RECOGNITION
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+        return hasFine && hasActivity
     }
 
     private fun hasActivityRecognitionPermission(): Boolean {

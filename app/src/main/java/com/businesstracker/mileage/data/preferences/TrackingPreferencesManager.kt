@@ -18,6 +18,12 @@ import javax.inject.Singleton
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "tracking_prefs")
 
+data class VehicleAnchor(
+    val latitude: Double,
+    val longitude: Double,
+    val timestamp: Long
+)
+
 @Singleton
 class TrackingPreferencesManager @Inject constructor(
     @ApplicationContext private val context: Context
@@ -185,7 +191,6 @@ class TrackingPreferencesManager @Inject constructor(
             prefs[KEY_VEHICLE_ANCHOR_LAT] = latitude
             prefs[KEY_VEHICLE_ANCHOR_LNG] = longitude
             prefs[KEY_VEHICLE_ANCHOR_TIME] = timestamp
-            prefs[KEY_IN_VEHICLE_STATE] = true
         }
     }
 
@@ -194,8 +199,15 @@ class TrackingPreferencesManager @Inject constructor(
             prefs.remove(KEY_VEHICLE_ANCHOR_LAT)
             prefs.remove(KEY_VEHICLE_ANCHOR_LNG)
             prefs.remove(KEY_VEHICLE_ANCHOR_TIME)
-            prefs[KEY_IN_VEHICLE_STATE] = false
         }
+    }
+
+    suspend fun getVehicleAnchor(): VehicleAnchor? {
+        val prefs = context.dataStore.data.first()
+        val lat = prefs[KEY_VEHICLE_ANCHOR_LAT] ?: return null
+        val lng = prefs[KEY_VEHICLE_ANCHOR_LNG] ?: return null
+        val time = prefs[KEY_VEHICLE_ANCHOR_TIME] ?: 0L
+        return VehicleAnchor(lat, lng, time)
     }
 
     suspend fun isInVehicle(): Boolean {

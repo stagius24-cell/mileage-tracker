@@ -37,6 +37,14 @@ class ActivityTransitionManager @Inject constructor(
 
     @SuppressLint("MissingPermission")
     suspend fun registerTransitions(): Boolean {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            val granted = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.ACTIVITY_RECOGNITION
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (!granted) return false
+        }
+
         val transitions = listOf(
             // In-vehicle enter (user starts driving)
             ActivityTransition.Builder()

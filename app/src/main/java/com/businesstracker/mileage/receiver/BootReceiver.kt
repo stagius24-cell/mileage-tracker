@@ -31,7 +31,14 @@ class BootReceiver : BroadcastReceiver() {
             receiverScope.launch {
                 try {
                     val isAutoTrackingEnabled = preferencesManager.isAutoTrackingEnabled.first()
-                    if (isAutoTrackingEnabled) {
+                    val hasActivityRecognition = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        androidx.core.content.ContextCompat.checkSelfPermission(
+                            context,
+                            android.Manifest.permission.ACTIVITY_RECOGNITION
+                        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    } else true
+
+                    if (isAutoTrackingEnabled && hasActivityRecognition) {
                         activityTransitionManager.registerTransitions()
                     }
                 } finally {
