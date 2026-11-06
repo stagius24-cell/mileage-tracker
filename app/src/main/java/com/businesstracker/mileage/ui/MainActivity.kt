@@ -1,15 +1,27 @@
 package com.businesstracker.mileage.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -19,6 +31,7 @@ import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.ui.navigation.MileageBottomBar
 import com.businesstracker.mileage.ui.navigation.MileageNavHost
 import com.businesstracker.mileage.ui.theme.BusinessMileageTrackerTheme
+import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -30,9 +43,16 @@ class MainActivity : ComponentActivity() {
     @Inject lateinit var activityTransitionManager: ActivityTransitionManager
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
 
+    private var hasPromptedBackgroundLocation = false
+    private var showBackgroundSettingsDialog by mutableStateOf(false)
+
     private val backgroundLocationLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { _ ->
+    ) { isGranted ->
+        if (!isGranted && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && !hasPromptedBackgroundLocation) {
+            hasPromptedBackgroundLocation = true
+            showBackgroundSettingsDialog = true
+        }
         checkAndRegisterTransitions()
     }
 
@@ -47,7 +67,8 @@ class MainActivity : ComponentActivity() {
             val bgLocationGranted = ContextCompat.checkSelfPermission(
                 this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
             ) == PackageManager.PERMISSION_GRANTED
-            if (!bgLocationGranted) {
+            if (!bgLocationGranted && !hasPromptedBackgroundLocation) {
+                hasPromptedBackgroundLocation = true
                 backgroundLocationLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                 return@registerForActivityResult
             }
@@ -74,6 +95,36 @@ class MainActivity : ComponentActivity() {
                         navController = navController,
                         modifier = Modifier.padding(innerPadding)
                     )
+
+                    if (showBackgroundSettingsDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showBackgroundSettingsDialog = false },
+                            title = { Text("Allow Background Location") },
+                            text = {
+                                Text("To detect drives automatically while your phone is in your pocket or vehicle, please select 'Allow all the time' in Android Location Settings.")
+                            },
+                            confirmButton = {
+                                Button(
+                                    onClick = {
+                                        showBackgroundSettingsDialog = false
+                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                            data = Uri.fromParts("package", packageName, null)
+                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                                        }
+                                        startActivity(intent)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                                ) {
+                                    Text("Open Settings")
+                                }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showBackgroundSettingsDialog = false }) {
+                                    Text("Not Now")
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }

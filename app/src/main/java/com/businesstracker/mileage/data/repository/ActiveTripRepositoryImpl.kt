@@ -33,14 +33,8 @@ class ActiveTripRepositoryImpl @Inject constructor(
         trackingMethod: String,
         suggestedBusiness: String
     ): ActiveTripEntity = withContext(ioDispatcher) {
-        // Database-backed guard: ensure only one active trip can exist
-        val existing = activeTripDao.getActiveTrip()
-        if (existing != null) {
-            return@withContext existing
-        }
-
         val now = System.currentTimeMillis()
-        val activeTrip = ActiveTripEntity(
+        val candidateTrip = ActiveTripEntity(
             id = tripId,
             startTime = now,
             startLatitude = latitude,
@@ -54,8 +48,11 @@ class ActiveTripRepositoryImpl @Inject constructor(
             pausedDurationMillis = 0L,
             suggestedBusiness = suggestedBusiness
         )
-        activeTripDao.insertActiveTrip(activeTrip)
-        if (latitude != 0.0 || longitude != 0.0) {
+
+        // Atomic Room @Transaction operation ensures concurrent callers receive the same active trip
+        val activeTrip = activeTripDao.getOrCreateActiveTrip(candidateTrip)
+
+        if (activeTrip.id == tripId && (latitude != 0.0 || longitude != 0.0)) {
             activeTripDao.insertWaypoint(
                 ActiveWaypointEntity(
                     tripId = tripId,

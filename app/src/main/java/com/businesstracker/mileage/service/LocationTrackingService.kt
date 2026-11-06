@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.util.Log
 import androidx.core.app.ServiceCompat
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.model.FilterResult
@@ -30,6 +31,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -75,6 +77,8 @@ class LocationTrackingService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var wakeLock: PowerManager.WakeLock? = null
     private var tickerJob: Job? = null
+    private val locationChannel = Channel<Location>(capacity = Channel.BUFFERED)
+    private var locationConsumerJob: Job? = null
 
     private var currentTripId: String = ""
     private var trackingMethod: TrackingMethod = TrackingMethod.AUTO_DETECTED
@@ -89,8 +93,10 @@ class LocationTrackingService : Service() {
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             if (isPaused) return
-            for (location in result.locations) {
-                processLocation(location)
+            // Sort by fix timestamp to ensure serialized in-order processing
+            val sorted = result.locations.sortedBy { it.time }
+            for (location in sorted) {
+                locationChannel.trySend(location)
             }
         }
     }
@@ -125,69 +131,93 @@ class LocationTrackingService : Service() {
             return
         }
 
-        currentTripId = tripId
-        trackingMethod = method
-        isPaused = false
-
-        // Start Foreground immediately with initial notification
-        val initialNotification = notificationHelper.buildTrackingNotification(
-            distanceMiles = 0.0,
-            durationMillis = 0L,
+        try {
+            currentTripId = tripId
+            trackingMethod = method
             isPaused = false
-        )
 
-        val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-        } else {
-            0
-        }
-
-        ServiceCompat.startForeground(
-            this,
-            NotificationHelper.NOTIFICATION_TRACKING_ID,
-            initialNotification,
-            foregroundType
-        )
-
-        serviceScope.launch(ioDispatcher) {
-            // Database-backed guard ensures only one active trip exists
-            val activeTrip = activeTripRepository.createActiveTrip(
-                tripId = currentTripId,
-                latitude = 0.0,
-                longitude = 0.0,
-                trackingMethod = trackingMethod.value,
-                suggestedBusiness = suggestedBusiness
+            // Start Foreground immediately with initial notification
+            val initialNotification = notificationHelper.buildTrackingNotification(
+                distanceMiles = 0.0,
+                durationMillis = 0L,
+                isPaused = false
             )
-            currentTripId = activeTrip.id
-            preferencesManager.setActiveTripId(currentTripId)
 
-            val existingTrip = if (activeTrip.totalDistanceMeters > 0.0 || activeTrip.id != tripId) activeTrip else null
-
-            if (existingTrip != null) {
-                // Resume in-progress trip after process termination or system recovery
-                tripStartTime = existingTrip.startTime
-                totalDistanceMeters = existingTrip.totalDistanceMeters
-                if (totalDistanceMeters >= 200.0) {
-                    isDisplacementConfirmed = true
-                }
-                val recoveredWaypoints = activeTripRepository.getWaypoints(currentTripId)
-                waypointCount = recoveredWaypoints.size
-                lastAcceptedWaypoint = recoveredWaypoints.lastOrNull()
-                anchorWaypoint = recoveredWaypoints.firstOrNull()
+            val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             } else {
-                // New tracking session
-                tripStartTime = activeTrip.startTime
-                totalDistanceMeters = 0.0
-                waypointCount = 0
-                lastAcceptedWaypoint = null
-                anchorWaypoint = null
-                isDisplacementConfirmed = false
+                0
             }
 
-            startLocationUpdates()
-            startDurationTicker()
-            updateServiceState()
+            ServiceCompat.startForeground(
+                this,
+                NotificationHelper.NOTIFICATION_TRACKING_ID,
+                initialNotification,
+                foregroundType
+            )
+
+            startLocationConsumer()
+
+            serviceScope.launch(ioDispatcher) {
+                try {
+                    // Database-backed guard ensures only one active trip exists
+                    val activeTrip = activeTripRepository.createActiveTrip(
+                        tripId = currentTripId,
+                        latitude = 0.0,
+                        longitude = 0.0,
+                        trackingMethod = trackingMethod.value,
+                        suggestedBusiness = suggestedBusiness
+                    )
+                    currentTripId = activeTrip.id
+                    preferencesManager.setActiveTripId(currentTripId)
+
+                    val existingTrip = if (activeTrip.totalDistanceMeters > 0.0 || activeTrip.id != tripId) activeTrip else null
+
+                    if (existingTrip != null) {
+                        // Resume in-progress trip after process termination or system recovery
+                        tripStartTime = existingTrip.startTime
+                        totalDistanceMeters = existingTrip.totalDistanceMeters
+                        if (totalDistanceMeters >= 200.0) {
+                            isDisplacementConfirmed = true
+                        }
+                        val recoveredWaypoints = activeTripRepository.getWaypoints(currentTripId)
+                        waypointCount = recoveredWaypoints.size
+                        lastAcceptedWaypoint = recoveredWaypoints.lastOrNull()
+                        anchorWaypoint = recoveredWaypoints.firstOrNull()
+                    } else {
+                        // New tracking session
+                        tripStartTime = activeTrip.startTime
+                        totalDistanceMeters = 0.0
+                        waypointCount = 0
+                        lastAcceptedWaypoint = null
+                        anchorWaypoint = null
+                        isDisplacementConfirmed = false
+                    }
+
+                    startLocationUpdates()
+                    startDurationTicker()
+                    updateServiceState()
+                } catch (e: Exception) {
+                    Log.e("LocationTrackingService", "Failed to initialize active trip in database", e)
+                    cleanupFailedStartup()
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("LocationTrackingService", "Failed to start foreground tracking service", e)
+            cleanupFailedStartup()
         }
+    }
+
+    private fun cleanupFailedStartup() {
+        isStartingOrRunning.set(false)
+        locationConsumerJob?.cancel()
+        tickerJob?.cancel()
+        try {
+            fusedLocationClient.removeLocationUpdates(locationCallback)
+        } catch (_: Exception) {}
+        _serviceState.value = TrackingServiceState(isTracking = false)
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        stopSelf()
     }
 
     @SuppressLint("MissingPermission")
@@ -206,55 +236,65 @@ class LocationTrackingService : Service() {
                 locationCallback,
                 Looper.getMainLooper()
             )
-        } catch (_: SecurityException) {
-            // Handled by permission guards in UI/Receiver
+        } catch (e: SecurityException) {
+            Log.e("LocationTrackingService", "Location permission missing when requesting updates", e)
         }
     }
 
-    private fun processLocation(location: Location) {
-        serviceScope.launch(ioDispatcher) {
-            when (val filterResult = filterGpsPointUseCase.filter(location, lastAcceptedWaypoint)) {
-                is FilterResult.Accepted -> {
-                    val acceptedWaypoint = filterResult.waypoint
-                    totalDistanceMeters += filterResult.deltaDistanceMeters
-                    lastAcceptedWaypoint = acceptedWaypoint
-                    waypointCount++
+    private fun startLocationConsumer() {
+        locationConsumerJob?.cancel()
+        locationConsumerJob = serviceScope.launch(ioDispatcher) {
+            for (location in locationChannel) {
+                if (!isActive) break
+                handleLocationSerialized(location)
+            }
+        }
+    }
 
-                    if (anchorWaypoint == null) {
-                        anchorWaypoint = acceptedWaypoint
-                    }
+    private suspend fun handleLocationSerialized(location: Location) {
+        if (isPaused) return
 
-                    // Continuous drive displacement verification:
-                    // Verifies movement >= 200m during an uninterrupted drive
-                    if (!isDisplacementConfirmed) {
-                        val distanceResults = FloatArray(1)
-                        Location.distanceBetween(
-                            anchorWaypoint!!.latitude,
-                            anchorWaypoint!!.longitude,
-                            acceptedWaypoint.latitude,
-                            acceptedWaypoint.longitude,
-                            distanceResults
-                        )
-                        if (distanceResults[0] >= 200.0f || totalDistanceMeters >= 200.0) {
-                            isDisplacementConfirmed = true
-                        }
-                    }
+        when (val filterResult = filterGpsPointUseCase.filter(location, lastAcceptedWaypoint)) {
+            is FilterResult.Accepted -> {
+                val acceptedWaypoint = filterResult.waypoint
+                totalDistanceMeters += filterResult.deltaDistanceMeters
+                lastAcceptedWaypoint = acceptedWaypoint
+                waypointCount++
 
-                    // Interruption Recovery: Persist waypoint and progress directly to Room
-                    activeTripRepository.recordWaypoint(currentTripId, acceptedWaypoint)
-                    activeTripRepository.updateTripProgress(
-                        tripId = currentTripId,
-                        distanceMeters = totalDistanceMeters,
-                        latitude = acceptedWaypoint.latitude,
-                        longitude = acceptedWaypoint.longitude,
-                        timestamp = acceptedWaypoint.timestamp
+                if (anchorWaypoint == null) {
+                    anchorWaypoint = acceptedWaypoint
+                }
+
+                // Continuous drive displacement verification:
+                // Verifies movement >= 200m during an uninterrupted drive
+                if (!isDisplacementConfirmed) {
+                    val distanceResults = FloatArray(1)
+                    Location.distanceBetween(
+                        anchorWaypoint!!.latitude,
+                        anchorWaypoint!!.longitude,
+                        acceptedWaypoint.latitude,
+                        acceptedWaypoint.longitude,
+                        distanceResults
                     )
+                    if (distanceResults[0] >= 200.0f || totalDistanceMeters >= 200.0) {
+                        isDisplacementConfirmed = true
+                    }
+                }
 
-                    updateNotificationAndState(filterResult.speedMph)
-                }
-                is FilterResult.Rejected -> {
-                    // Ignore stationary jitter or inaccurate points without corrupting mileage
-                }
+                // Interruption Recovery: Persist waypoint and progress directly to Room
+                activeTripRepository.recordWaypoint(currentTripId, acceptedWaypoint)
+                activeTripRepository.updateTripProgress(
+                    tripId = currentTripId,
+                    distanceMeters = totalDistanceMeters,
+                    latitude = acceptedWaypoint.latitude,
+                    longitude = acceptedWaypoint.longitude,
+                    timestamp = acceptedWaypoint.timestamp
+                )
+
+                updateNotificationAndState(filterResult.speedMph)
+            }
+            is FilterResult.Rejected -> {
+                // Ignore stationary jitter or inaccurate points without corrupting mileage
             }
         }
     }
@@ -281,6 +321,7 @@ class LocationTrackingService : Service() {
                 fusedLocationClient.removeLocationUpdates(locationCallback)
             } catch (_: Exception) {}
 
+            locationConsumerJob?.cancel()
             tickerJob?.cancel()
 
             // False trip prevention: if movement is under 200m and not confirmed, discard without polluting DB
@@ -381,6 +422,7 @@ class LocationTrackingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         isStartingOrRunning.set(false)
+        locationConsumerJob?.cancel()
         tickerJob?.cancel()
         try {
             fusedLocationClient.removeLocationUpdates(locationCallback)

@@ -16,6 +16,19 @@ interface ActiveTripDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertActiveTrip(activeTrip: ActiveTripEntity)
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertActiveTripIgnore(activeTrip: ActiveTripEntity): Long
+
+    @Transaction
+    suspend fun getOrCreateActiveTrip(activeTrip: ActiveTripEntity): ActiveTripEntity {
+        val existing = getActiveTrip()
+        if (existing != null) {
+            return existing
+        }
+        insertActiveTripIgnore(activeTrip)
+        return getActiveTrip() ?: activeTrip
+    }
+
     @Update
     suspend fun updateActiveTrip(activeTrip: ActiveTripEntity)
 

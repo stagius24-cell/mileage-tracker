@@ -25,9 +25,7 @@ object DatabaseModule {
             context,
             ExpenseTrackerDatabase::class.java,
             ExpenseTrackerDatabase.DATABASE_NAME
-        )
-        .fallbackToDestructiveMigration()
-        .build()
+        ).build()
     }
 
     @Provides
