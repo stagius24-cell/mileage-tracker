@@ -12,6 +12,7 @@ import com.google.gson.JsonObject
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -141,14 +142,15 @@ open class GoogleSheetsSyncService @Inject constructor(
                 preferencesManager.setSheetsLastError(err)
                 return@withLock SheetsSyncResult.TokenExpired(err)
             }
-            syncViaSheetsApi(spreadsheetId, authToken, eligibleTrips)
+            syncViaSheetsApi(spreadsheetId, authToken, eligibleTrips, isRetryAfterRefresh = false)
         }
     }
 
     private suspend fun syncViaSheetsApi(
         spreadsheetId: String,
         authToken: String,
-        trips: List<TripEntity>
+        trips: List<TripEntity>,
+        isRetryAfterRefresh: Boolean = false
     ): SheetsSyncResult {
         try {
             // Step 1: Read existing Column A to map existing trip IDs to their 1-based row numbers
@@ -166,11 +168,17 @@ open class GoogleSheetsSyncService @Inject constructor(
             client.newCall(readRequest).execute().use { response ->
                 when (response.code) {
                     401 -> {
-                        val refreshed = googleAuthManager?.refreshOAuthToken()
-                        if (refreshed != null && refreshed != authToken) {
-                            return syncViaSheetsApi(spreadsheetId, refreshed, trips)
+                        if (!isRetryAfterRefresh) {
+                            val refreshed = googleAuthManager?.refreshOAuthToken()
+                            if (refreshed != null && refreshed != authToken) {
+                                return syncViaSheetsApi(spreadsheetId, refreshed, trips, isRetryAfterRefresh = true)
+                            }
                         }
-                        val msg = "Google authorization expired (401). Please reconnect your account."
+                        val msg = if (isRetryAfterRefresh) {
+                            "Google authorization expired (401) after token refresh. Please reconnect your account."
+                        } else {
+                            "Google authorization expired (401). Please reconnect your account."
+                        }
                         preferencesManager.setSheetsLastError(msg)
                         return SheetsSyncResult.TokenExpired(msg)
                     }
@@ -513,10 +521,11 @@ open class GoogleSheetsSyncService @Inject constructor(
         }
     }
 
-    private suspend fun syncViaWebhook(webhookUrl: String, trips: List<TripEntity>): SheetsSyncResult {
-        // Enforce HTTPS validation
-        if (!webhookUrl.startsWith("https://", ignoreCase = true)) {
-            val err = "Insecure Webhook URL: must use HTTPS protocol."
+    internal suspend fun syncViaWebhook(webhookUrl: String, trips: List<TripEntity>): SheetsSyncResult {
+        // Enforce HTTPS validation using OkHttp HttpUrl
+        val parsedUrl = webhookUrl.toHttpUrlOrNull()
+        if (parsedUrl == null || !parsedUrl.isHttps || parsedUrl.host.isBlank()) {
+            val err = "Invalid Webhook URL: must be a valid URL using HTTPS protocol."
             preferencesManager.setSheetsLastError(err)
             return SheetsSyncResult.InvalidConfiguration(err)
         }

@@ -221,7 +221,10 @@ class SecureStorageManager @Inject constructor(
             val decryptedBytes = cipher.doFinal(encryptedBytes)
             String(decryptedBytes, Charsets.UTF_8)
         } catch (_: Exception) {
-            // AEADBadTagException, KeyPermanentlyInvalidatedException, or corrupt data
+            // Decryption failure (AEADBadTagException, KeyPermanentlyInvalidatedException,
+            // or restore without original hardware Keystore key). Purge corrupted/un-decryptable
+            // ciphertext to guarantee a clean reconnect-required state.
+            prefs.edit().remove(dataKey).remove(ivKey).commit()
             null
         }
     }

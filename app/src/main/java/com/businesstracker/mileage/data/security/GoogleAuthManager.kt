@@ -41,7 +41,7 @@ data class DisconnectResult(
  * - Awaits Google sign-out and revoke-access operations during disconnect.
  */
 @Singleton
-class GoogleAuthManager @Inject constructor(
+open class GoogleAuthManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val secureStorageManager: SecureStorageManager,
     private val preferencesManager: TrackingPreferencesManager
@@ -124,7 +124,7 @@ class GoogleAuthManager @Inject constructor(
      * If refresh fails, purges stale credentials and updates connection state to ensure
      * the UI does not falsely display an active connection.
      */
-    suspend fun refreshOAuthToken(): String? = withContext(Dispatchers.IO) {
+    open suspend fun refreshOAuthToken(): String? = withContext(Dispatchers.IO) {
         try {
             val currentToken = secureStorageManager.getOAuthToken()
             if (!currentToken.isNullOrBlank()) {

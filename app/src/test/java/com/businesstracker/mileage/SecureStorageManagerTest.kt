@@ -192,6 +192,30 @@ class SecureStorageManagerTest {
     }
 
     @Test
+    fun restoreWithoutOriginalKeystoreKey_purgesCorruptedData_andForcesReconnect() {
+        val originalToken = "original_secret_token_123"
+        secureStorageManager.saveOAuthToken(originalToken)
+        assertTrue(secureStorageManager.hasOAuthToken())
+        assertEquals(originalToken, secureStorageManager.getOAuthToken())
+
+        val rawPrefs = context.getSharedPreferences("mileage_secure_credentials", Context.MODE_PRIVATE)
+        assertNotNull(rawPrefs.getString("enc_oauth_token", null))
+
+        // Simulate restore of SharedPreferences onto a new device where Keystore key is different/missing
+        val kgen = KeyGenerator.getInstance("AES")
+        kgen.init(256)
+        val newDeviceKey: SecretKey = kgen.generateKey()
+        testKeyProvider.setKey(newDeviceKey)
+
+        // Retrieval must fail closed, return null, purge corrupted entry, and report hasOAuthToken == false
+        val restoredToken = secureStorageManager.getOAuthToken()
+        assertNull("Restoring data without original key must fail closed and return null", restoredToken)
+        assertFalse("Must require reconnect when credentials cannot be decrypted", secureStorageManager.hasOAuthToken())
+        assertNull("Corrupted/un-decryptable ciphertext must be wiped from preferences", rawPrefs.getString("enc_oauth_token", null))
+        assertNull("Corrupted/un-decryptable IV must be wiped from preferences", rawPrefs.getString("oauth_token_iv", null))
+    }
+
+    @Test
     fun productionProvider_failsClosed_whenAndroidKeyStoreFails_withoutSoftwareFallback() {
         // A provider simulating production AndroidKeyStore failure
         val failingProductionProvider = object : SecureKeyProvider {

@@ -1,9 +1,11 @@
 package com.businesstracker.mileage
 
+import android.content.Context
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.data.remote.GoogleSheetsSyncService
 import com.businesstracker.mileage.data.remote.SheetsSyncResult
+import com.businesstracker.mileage.data.security.GoogleAuthManager
 import com.businesstracker.mileage.data.security.SecureStorageManager
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.google.gson.Gson
@@ -30,6 +32,7 @@ import java.io.IOException
 @RunWith(RobolectricTestRunner::class)
 class GoogleSheetsSyncServiceTest {
 
+    private lateinit var context: Context
     private lateinit var preferencesManager: TrackingPreferencesManager
     private lateinit var secureStorageManager: SecureStorageManager
     private val markedSyncedTripIds = mutableListOf<String>()
@@ -112,7 +115,7 @@ class GoogleSheetsSyncServiceTest {
         markedSyncedTripIds.clear()
         tripsList.clear()
 
-        val context = RuntimeEnvironment.getApplication()
+        context = RuntimeEnvironment.getApplication()
         preferencesManager = TrackingPreferencesManager(context)
         val testKeyProvider = com.businesstracker.mileage.data.security.TestSoftwareKeyProvider()
         secureStorageManager = SecureStorageManager(context, testKeyProvider)
@@ -131,8 +134,8 @@ class GoogleSheetsSyncServiceTest {
         secureStorageManager.clearAllCredentials()
     }
 
-    private fun createService(): GoogleSheetsSyncService {
-        return GoogleSheetsSyncService(preferencesManager, fakeRepo, secureStorageManager, Gson())
+    private fun createService(authManager: GoogleAuthManager? = null): GoogleSheetsSyncService {
+        return GoogleSheetsSyncService(preferencesManager, fakeRepo, secureStorageManager, authManager, Gson())
     }
 
     @Test
@@ -293,11 +296,101 @@ class GoogleSheetsSyncServiceTest {
     }
 
     @Test
-    fun syncViaSheetsApi_tokenExpired_returnsTokenExpiredAndPreservesData() = runTest {
-        tripsList.add(createTrip("trip_1", "BUSINESS", 10.0))
+    fun syncViaSheetsApi_initialRequestSucceeds_noRefreshAttempted() = runTest {
+        tripsList.add(createTrip("trip_success_1", "BUSINESS", 12.0))
+        configureSheetsApi("test_sheet", "valid_tok")
+
+        var refreshCallCount = 0
+        val fakeAuthManager = object : GoogleAuthManager(context, secureStorageManager, preferencesManager) {
+            override suspend fun refreshOAuthToken(): String? {
+                refreshCallCount++
+                return "should_not_be_called"
+            }
+        }
+
+        val service = createService(fakeAuthManager)
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                if (chain.request().method == "GET") {
+                    val body = "{\"values\":[[\"Trip ID\"]]}"
+                    Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                        .body(body.toResponseBody("application/json".toMediaType())).build()
+                } else {
+                    val body = "{\"updates\":{\"updatedRows\":1}}"
+                    Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                        .body(body.toResponseBody("application/json".toMediaType())).build()
+                }
+            }
+            .build()
+
+        val result = service.syncPendingTrips()
+        assertTrue(result is SheetsSyncResult.Success)
+        assertEquals(0, refreshCallCount)
+        assertEquals(listOf("trip_success_1"), markedSyncedTripIds)
+        assertEquals("SYNCED", tripsList[0].syncStatus)
+    }
+
+    @Test
+    fun syncViaSheetsApi_initial401_refreshSucceeds_retrySucceeds() = runTest {
+        tripsList.add(createTrip("trip_refresh_1", "BUSINESS", 15.0))
+        configureSheetsApi("test_sheet_refresh", "expired_token_1")
+
+        var refreshCallCount = 0
+        val fakeAuthManager = object : GoogleAuthManager(context, secureStorageManager, preferencesManager) {
+            override suspend fun refreshOAuthToken(): String? {
+                refreshCallCount++
+                secureStorageManager.saveOAuthToken("refreshed_valid_token")
+                return "refreshed_valid_token"
+            }
+        }
+
+        val service = createService(fakeAuthManager)
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val authHeader = chain.request().header("Authorization").orEmpty()
+                if (authHeader.contains("expired_token_1")) {
+                    Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(401)
+                        .message("Unauthorized")
+                        .body("{\"error\": \"Invalid Credentials\"}".toResponseBody("application/json".toMediaType()))
+                        .build()
+                } else if (authHeader.contains("refreshed_valid_token")) {
+                    if (chain.request().method == "GET") {
+                        val body = "{\"values\":[[\"Trip ID\"]]}"
+                        Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                            .body(body.toResponseBody("application/json".toMediaType())).build()
+                    } else {
+                        val body = "{\"updates\":{\"updatedRows\":1}}"
+                        Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                            .body(body.toResponseBody("application/json".toMediaType())).build()
+                    }
+                } else {
+                    Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(400).message("Bad Request")
+                        .body("{}".toResponseBody("application/json".toMediaType())).build()
+                }
+            }
+            .build()
+
+        val result = service.syncPendingTrips()
+        assertTrue("Sync must succeed after token refresh", result is SheetsSyncResult.Success)
+        assertEquals("Refresh must be called exactly once", 1, refreshCallCount)
+        assertEquals(listOf("trip_refresh_1"), markedSyncedTripIds)
+        assertEquals("SYNCED", tripsList[0].syncStatus)
+    }
+
+    @Test
+    fun syncViaSheetsApi_initial401_refreshFails_returnsTokenExpired() = runTest {
+        tripsList.add(createTrip("trip_refresh_null", "BUSINESS", 10.0))
         configureSheetsApi("test_sheet", "expired_tok")
 
-        val service = createService()
+        var refreshCallCount = 0
+        val fakeAuthManager = object : GoogleAuthManager(context, secureStorageManager, preferencesManager) {
+            override suspend fun refreshOAuthToken(): String? {
+                refreshCallCount++
+                return null // Refresh failed
+            }
+        }
+
+        val service = createService(fakeAuthManager)
         service.client = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(401)
@@ -309,8 +402,47 @@ class GoogleSheetsSyncServiceTest {
 
         val result = service.syncPendingTrips()
         assertTrue(result is SheetsSyncResult.TokenExpired)
+        assertEquals(1, refreshCallCount)
         assertEquals(0, markedSyncedTripIds.size)
         assertEquals("PENDING", tripsList[0].syncStatus)
+    }
+
+    @Test
+    fun syncViaSheetsApi_initial401_refreshSucceeds_retryAlsoReturns401_stopsImmediately() = runTest {
+        tripsList.add(createTrip("trip_refresh_fail", "BUSINESS", 15.0))
+        configureSheetsApi("test_sheet_refresh", "expired_token_1")
+
+        var refreshCallCount = 0
+        var httpRequestsCount = 0
+        val fakeAuthManager = object : GoogleAuthManager(context, secureStorageManager, preferencesManager) {
+            override suspend fun refreshOAuthToken(): String? {
+                refreshCallCount++
+                secureStorageManager.saveOAuthToken("second_expired_token")
+                return "second_expired_token"
+            }
+        }
+
+        val service = createService(fakeAuthManager)
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                httpRequestsCount++
+                Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(401)
+                    .message("Unauthorized")
+                    .body("{\"error\": \"Invalid Credentials Repeated\"}".toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+
+        val result = service.syncPendingTrips()
+        assertTrue("Must return TokenExpired when retry fails", result is SheetsSyncResult.TokenExpired)
+        assertTrue(
+            "Message must specify expiration after refresh",
+            (result as SheetsSyncResult.TokenExpired).message.contains("after token refresh")
+        )
+        assertEquals("Must stop at exactly one refresh attempt and never loop indefinitely", 1, refreshCallCount)
+        assertEquals("Must execute exactly 2 HTTP requests (1 initial + 1 retry)", 2, httpRequestsCount)
+        assertEquals("No trips marked synced when refresh also fails", 0, markedSyncedTripIds.size)
+        assertEquals("Trip must remain pending", "PENDING", tripsList[0].syncStatus)
     }
 
     @Test
@@ -395,12 +527,60 @@ class GoogleSheetsSyncServiceTest {
     }
 
     @Test
-    fun syncViaWebhook_insecureHttp_returnsInvalidConfiguration() = runTest {
-        tripsList.add(createTrip("trip_1", "BUSINESS", 10.0))
-        configureWebhook("http://insecure.example.com/sync") // Insecure HTTP
+    fun syncViaWebhook_httpUrl_returnsInvalidConfiguration() = runTest {
+        tripsList.add(createTrip("trip_http", "BUSINESS", 10.0))
+        configureWebhook("http://insecure.example.com/sync") // Insecure HTTP scheme
         val service = createService()
 
         val result = service.syncPendingTrips()
+        assertTrue(result is SheetsSyncResult.InvalidConfiguration)
+        assertEquals(0, markedSyncedTripIds.size)
+    }
+
+    @Test
+    fun syncViaWebhook_malformedUrl_returnsInvalidConfiguration() = runTest {
+        tripsList.add(createTrip("trip_malformed", "BUSINESS", 10.0))
+        val service = createService()
+
+        configureWebhook("this is not a url")
+        var result = service.syncPendingTrips()
+        assertTrue(result is SheetsSyncResult.InvalidConfiguration)
+        assertEquals(0, markedSyncedTripIds.size)
+
+        configureWebhook("https://")
+        result = service.syncPendingTrips()
+        assertTrue(result is SheetsSyncResult.InvalidConfiguration)
+        assertEquals(0, markedSyncedTripIds.size)
+    }
+
+    @Test
+    fun syncViaWebhook_missingHostname_returnsInvalidConfiguration() = runTest {
+        tripsList.add(createTrip("trip_no_host", "BUSINESS", 10.0))
+        val service = createService()
+
+        configureWebhook("https:///path/only")
+        val result = service.syncPendingTrips()
+        assertTrue(result is SheetsSyncResult.InvalidConfiguration)
+        assertEquals(0, markedSyncedTripIds.size)
+    }
+
+    @Test
+    fun syncViaWebhook_invalidPort_returnsInvalidConfiguration() = runTest {
+        tripsList.add(createTrip("trip_invalid_port", "BUSINESS", 10.0))
+        val service = createService()
+
+        configureWebhook("https://example.com:99999/exec")
+        val result = service.syncPendingTrips()
+        assertTrue(result is SheetsSyncResult.InvalidConfiguration)
+        assertEquals(0, markedSyncedTripIds.size)
+    }
+
+    @Test
+    fun syncViaWebhook_emptyUrl_returnsInvalidConfiguration() = runTest {
+        val trips = listOf(createTrip("trip_empty_url", "BUSINESS", 10.0))
+        val service = createService()
+
+        val result = service.syncViaWebhook("", trips)
         assertTrue(result is SheetsSyncResult.InvalidConfiguration)
         assertEquals(0, markedSyncedTripIds.size)
     }
