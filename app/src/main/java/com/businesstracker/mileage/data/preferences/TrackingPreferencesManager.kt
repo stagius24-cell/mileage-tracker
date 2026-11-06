@@ -47,6 +47,16 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_DEFAULT_VEHICLE = stringPreferencesKey("default_vehicle")
         private val KEY_CUSTOM_CATEGORIES = stringPreferencesKey("custom_categories")
 
+        // Google Sheets Sync Configuration
+        private val KEY_SHEETS_CONNECTED = booleanPreferencesKey("sheets_connected")
+        private val KEY_SHEETS_SPREADSHEET_ID = stringPreferencesKey("sheets_spreadsheet_id")
+        private val KEY_SHEETS_SPREADSHEET_NAME = stringPreferencesKey("sheets_spreadsheet_name")
+        private val KEY_SHEETS_AUTH_TOKEN = stringPreferencesKey("sheets_auth_token")
+        private val KEY_SHEETS_WEBHOOK_URL = stringPreferencesKey("sheets_webhook_url")
+        private val KEY_SHEETS_LAST_SYNC_TIME = longPreferencesKey("sheets_last_sync_time")
+        private val KEY_SHEETS_LAST_ERROR = stringPreferencesKey("sheets_last_error")
+        private val KEY_SHEETS_AUTO_SYNC_ENABLED = booleanPreferencesKey("sheets_auto_sync_enabled")
+
         // Work Schedule & Auto-Classification Keys
         private val KEY_SCHEDULE_FILTERING_ENABLED = booleanPreferencesKey("schedule_filtering_enabled")
         private val KEY_WORK_DAYS = stringPreferencesKey("work_days")
@@ -301,6 +311,91 @@ class TrackingPreferencesManager @Inject constructor(
     suspend fun setCustomCategories(categories: String) {
         context.dataStore.edit { prefs ->
             prefs[KEY_CUSTOM_CATEGORIES] = categories
+        }
+    }
+
+    // Google Sheets Sync Flow & Functions
+    val isSheetsConnected: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SHEETS_CONNECTED] ?: false
+    }
+
+    suspend fun setSheetsConnected(connected: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SHEETS_CONNECTED] = connected
+        }
+    }
+
+    val sheetsSpreadsheetId: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SHEETS_SPREADSHEET_ID] ?: ""
+    }
+
+    suspend fun setSheetsSpreadsheetId(id: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SHEETS_SPREADSHEET_ID] = id
+        }
+    }
+
+    val sheetsSpreadsheetName: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SHEETS_SPREADSHEET_NAME] ?: "Business Mileage Tracker"
+    }
+
+    suspend fun setSheetsSpreadsheetName(name: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SHEETS_SPREADSHEET_NAME] = name
+        }
+    }
+
+    val sheetsAuthToken: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SHEETS_AUTH_TOKEN] ?: ""
+    }
+
+    suspend fun setSheetsAuthToken(token: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SHEETS_AUTH_TOKEN] = token
+        }
+    }
+
+    val sheetsWebhookUrl: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SHEETS_WEBHOOK_URL] ?: ""
+    }
+
+    suspend fun setSheetsWebhookUrl(url: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SHEETS_WEBHOOK_URL] = url
+        }
+    }
+
+    val sheetsLastSyncTime: Flow<Long> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SHEETS_LAST_SYNC_TIME] ?: 0L
+    }
+
+    suspend fun setSheetsLastSyncTime(time: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SHEETS_LAST_SYNC_TIME] = time
+        }
+    }
+
+    val sheetsLastError: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SHEETS_LAST_ERROR]
+    }
+
+    suspend fun setSheetsLastError(error: String?) {
+        context.dataStore.edit { prefs ->
+            if (error != null) {
+                prefs[KEY_SHEETS_LAST_ERROR] = error
+            } else {
+                prefs.remove(KEY_SHEETS_LAST_ERROR)
+            }
+        }
+    }
+
+    val isSheetsAutoSyncEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SHEETS_AUTO_SYNC_ENABLED] ?: true
+    }
+
+    suspend fun setSheetsAutoSyncEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SHEETS_AUTO_SYNC_ENABLED] = enabled
         }
     }
 }
