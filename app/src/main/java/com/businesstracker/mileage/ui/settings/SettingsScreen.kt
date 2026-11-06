@@ -686,7 +686,7 @@ fun SettingsScreen(
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Icon(
-                                            imageVector = if (state.hasOAuthCredential) Icons.Default.CheckCircle else Icons.Default.Lock,
+                                            imageVector = if (state.hasOAuthCredential) Icons.Default.CheckCircle else Icons.Default.Security,
                                             contentDescription = null,
                                             tint = if (state.hasOAuthCredential) SucculentPrimary else SlateNeutral,
                                             modifier = Modifier.size(24.dp)
