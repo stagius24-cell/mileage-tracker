@@ -25,31 +25,57 @@ data class SettingsUiState(
     val customCategories: String = ""
 )
 
+private data class GeneralPrefs(
+    val autoTrackingEnabled: Boolean,
+    val defaultBusinessEntity: String,
+    val defaultVehicle: String,
+    val customCategories: String
+)
+
+private data class CloudflarePrefs(
+    val endpoint: String,
+    val clientId: String,
+    val clientSecret: String,
+    val bearerToken: String
+)
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val preferencesManager: TrackingPreferencesManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
-    val uiState: StateFlow<SettingsUiState> = combine(
+    private val generalFlow = combine(
         preferencesManager.isAutoTrackingEnabled,
         preferencesManager.defaultBusinessEntity,
+        preferencesManager.defaultVehicle,
+        preferencesManager.customCategories
+    ) { autoTrack, entity, vehicle, categories ->
+        GeneralPrefs(autoTrack, entity, vehicle, categories)
+    }
+
+    private val cloudflareFlow = combine(
         preferencesManager.cfEndpoint,
         preferencesManager.cfClientId,
         preferencesManager.cfClientSecret,
-        preferencesManager.cfBearerToken,
-        preferencesManager.defaultVehicle,
-        preferencesManager.customCategories
-    ) { autoTrack, entity, endpoint, clientId, secret, token, vehicle, categories ->
+        preferencesManager.cfBearerToken
+    ) { endpoint, clientId, secret, token ->
+        CloudflarePrefs(endpoint, clientId, secret, token)
+    }
+
+    val uiState: StateFlow<SettingsUiState> = combine(
+        generalFlow,
+        cloudflareFlow
+    ) { general, cf ->
         SettingsUiState(
-            autoTrackingEnabled = autoTrack,
-            defaultBusinessEntity = entity,
-            cfEndpoint = endpoint,
-            cfClientId = clientId,
-            cfClientSecret = secret,
-            cfBearerToken = token,
-            defaultVehicle = vehicle,
-            customCategories = categories
+            autoTrackingEnabled = general.autoTrackingEnabled,
+            defaultBusinessEntity = general.defaultBusinessEntity,
+            defaultVehicle = general.defaultVehicle,
+            customCategories = general.customCategories,
+            cfEndpoint = cf.endpoint,
+            cfClientId = cf.clientId,
+            cfClientSecret = cf.clientSecret,
+            cfBearerToken = cf.bearerToken
         )
     }.stateIn(
         scope = viewModelScope,
