@@ -62,7 +62,7 @@ sealed class SheetsSyncResult {
  *    array confirming individual trip IDs. Trips are never marked synced on HTTP 200 alone.
  */
 @Singleton
-class GoogleSheetsSyncService @Inject constructor(
+open class GoogleSheetsSyncService @Inject constructor(
     private val preferencesManager: TrackingPreferencesManager,
     private val tripRepository: TripRepository,
     private val secureStorageManager: SecureStorageManager,
@@ -113,7 +113,7 @@ class GoogleSheetsSyncService @Inject constructor(
      * Executes synchronization of all pending reviewed trips with Google Sheets.
      * Serialized with an in-process Mutex to eliminate local race conditions.
      */
-    suspend fun syncPendingTrips(): SheetsSyncResult = syncMutex.withLock {
+    open suspend fun syncPendingTrips(): SheetsSyncResult = syncMutex.withLock {
         val spreadsheetId = preferencesManager.sheetsSpreadsheetId.first().trim()
         val webhookUrl = preferencesManager.sheetsWebhookUrl.first().trim()
 
