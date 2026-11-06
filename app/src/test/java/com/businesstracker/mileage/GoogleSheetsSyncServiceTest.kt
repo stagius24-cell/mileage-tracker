@@ -117,6 +117,18 @@ class GoogleSheetsSyncServiceTest {
         secureStorageManager.clearAllCredentials()
     }
 
+    private suspend fun configureSheetsApi(sheetId: String = "test_sheet_123", token: String = "test_valid_token") {
+        preferencesManager.setSheetsSpreadsheetId(sheetId)
+        preferencesManager.setSheetsWebhookUrl("")
+        secureStorageManager.saveOAuthToken(token)
+    }
+
+    private suspend fun configureWebhook(url: String = "https://example.com/macros/exec") {
+        preferencesManager.setSheetsSpreadsheetId("")
+        preferencesManager.setSheetsWebhookUrl(url)
+        secureStorageManager.clearAllCredentials()
+    }
+
     private fun createService(): GoogleSheetsSyncService {
         return GoogleSheetsSyncService(preferencesManager, fakeRepo, secureStorageManager, Gson())
     }
@@ -159,8 +171,7 @@ class GoogleSheetsSyncServiceTest {
     @Test
     fun syncPendingTrips_unreviewedTripsAreNeverUploaded() = runTest {
         tripsList.add(createTrip("unreviewed_1", "UNREVIEWED", 15.0))
-        preferencesManager.setSheetsSpreadsheetId("test_sheet_id")
-        secureStorageManager.saveOAuthToken("valid_test_token")
+        configureSheetsApi("test_sheet_id", "valid_test_token")
         val service = createService()
 
         val result = service.syncPendingTrips()
@@ -173,16 +184,13 @@ class GoogleSheetsSyncServiceTest {
     fun syncViaSheetsApi_allWritesSuccessful_appendsRowsAndMarksSynced() = runTest {
         tripsList.add(createTrip("trip_1", "BUSINESS", 10.0))
         tripsList.add(createTrip("trip_2", "PERSONAL", 5.0))
-
-        preferencesManager.setSheetsSpreadsheetId("test_sheet_123")
-        secureStorageManager.saveOAuthToken("test_valid_token")
+        configureSheetsApi("test_sheet_123", "test_valid_token")
 
         val service = createService()
         service.client = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val req = chain.request()
                 if (req.method == "GET") {
-                    // Empty sheet with header
                     val body = "{\"values\":[[\"Trip ID\"]]}"
                     Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                         .body(body.toResponseBody("application/json".toMediaType())).build()
@@ -206,9 +214,7 @@ class GoogleSheetsSyncServiceTest {
     fun syncViaSheetsApi_oneRowAppendFails_returnsPartialSuccessAndPreservesFailed() = runTest {
         tripsList.add(createTrip("trip_ok", "BUSINESS", 10.0))
         tripsList.add(createTrip("trip_fail", "BUSINESS", 12.0))
-
-        preferencesManager.setSheetsSpreadsheetId("test_sheet_123")
-        secureStorageManager.saveOAuthToken("test_valid_token")
+        configureSheetsApi("test_sheet_123", "test_valid_token")
 
         val service = createService()
         service.client = OkHttpClient.Builder()
@@ -219,7 +225,6 @@ class GoogleSheetsSyncServiceTest {
                     Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                         .body(body.toResponseBody("application/json".toMediaType())).build()
                 } else {
-                    // Check if request body contains "trip_fail"
                     val buffer = okio.Buffer()
                     req.body?.writeTo(buffer)
                     val bodyStr = buffer.readUtf8()
@@ -240,7 +245,6 @@ class GoogleSheetsSyncServiceTest {
         assertEquals(1, partial.successCount)
         assertEquals(1, partial.failedCount)
 
-        // Only trip_ok is marked synced; trip_fail remains PENDING!
         assertEquals(listOf("trip_ok"), markedSyncedTripIds)
         assertEquals("SYNCED", tripsList.first { it.id == "trip_ok" }.syncStatus)
         assertEquals("PENDING", tripsList.first { it.id == "trip_fail" }.syncStatus)
@@ -250,22 +254,18 @@ class GoogleSheetsSyncServiceTest {
     fun syncViaSheetsApi_oneRowUpdateFails_preservesFailedRowAsPending() = runTest {
         tripsList.add(createTrip("trip_exist_1", "BUSINESS", 10.0))
         tripsList.add(createTrip("trip_exist_2", "BUSINESS", 20.0))
-
-        preferencesManager.setSheetsSpreadsheetId("test_sheet_123")
-        secureStorageManager.saveOAuthToken("test_valid_token")
+        configureSheetsApi("test_sheet_123", "test_valid_token")
 
         val service = createService()
         service.client = OkHttpClient.Builder()
             .addInterceptor { chain ->
                 val req = chain.request()
                 if (req.method == "GET") {
-                    // Both exist in Column A: row 2 and row 3
                     val body = "{\"values\":[[\"Trip ID\"],[\"trip_exist_1\"],[\"trip_exist_2\"]]}"
                     Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                         .body(body.toResponseBody("application/json".toMediaType())).build()
                 } else if (req.method == "PUT") {
                     if (req.url.toString().contains("A3:P3")) {
-                        // Fail row 3 update
                         Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(400).message("Bad Request")
                             .body("Cell error".toResponseBody("text/plain".toMediaType())).build()
                     } else {
@@ -293,8 +293,7 @@ class GoogleSheetsSyncServiceTest {
     @Test
     fun syncViaSheetsApi_tokenExpired_returnsTokenExpiredAndPreservesData() = runTest {
         tripsList.add(createTrip("trip_1", "BUSINESS", 10.0))
-        preferencesManager.setSheetsSpreadsheetId("test_sheet")
-        secureStorageManager.saveOAuthToken("expired_tok")
+        configureSheetsApi("test_sheet", "expired_tok")
 
         val service = createService()
         service.client = OkHttpClient.Builder()
@@ -315,8 +314,7 @@ class GoogleSheetsSyncServiceTest {
     @Test
     fun syncViaSheetsApi_accessDenied403_returnsAccessDenied() = runTest {
         tripsList.add(createTrip("trip_1", "BUSINESS", 10.0))
-        preferencesManager.setSheetsSpreadsheetId("test_sheet")
-        secureStorageManager.saveOAuthToken("valid_tok")
+        configureSheetsApi("test_sheet", "valid_tok")
 
         val service = createService()
         service.client = OkHttpClient.Builder()
@@ -336,8 +334,7 @@ class GoogleSheetsSyncServiceTest {
     @Test
     fun syncViaSheetsApi_notFound404_returnsNotFound() = runTest {
         tripsList.add(createTrip("trip_1", "BUSINESS", 10.0))
-        preferencesManager.setSheetsSpreadsheetId("nonexistent_id")
-        secureStorageManager.saveOAuthToken("valid_tok")
+        configureSheetsApi("nonexistent_id", "valid_tok")
 
         val service = createService()
         service.client = OkHttpClient.Builder()
@@ -357,8 +354,7 @@ class GoogleSheetsSyncServiceTest {
     @Test
     fun syncViaSheetsApi_rateLimited429_returnsRateLimited() = runTest {
         tripsList.add(createTrip("trip_1", "BUSINESS", 10.0))
-        preferencesManager.setSheetsSpreadsheetId("test_sheet")
-        secureStorageManager.saveOAuthToken("valid_tok")
+        configureSheetsApi("test_sheet", "valid_tok")
 
         val service = createService()
         service.client = OkHttpClient.Builder()
@@ -378,8 +374,7 @@ class GoogleSheetsSyncServiceTest {
     @Test
     fun syncViaSheetsApi_serverError500_returnsServerError() = runTest {
         tripsList.add(createTrip("trip_1", "BUSINESS", 10.0))
-        preferencesManager.setSheetsSpreadsheetId("test_sheet")
-        secureStorageManager.saveOAuthToken("valid_tok")
+        configureSheetsApi("test_sheet", "valid_tok")
 
         val service = createService()
         service.client = OkHttpClient.Builder()
@@ -400,7 +395,7 @@ class GoogleSheetsSyncServiceTest {
     @Test
     fun syncViaWebhook_insecureHttp_returnsInvalidConfiguration() = runTest {
         tripsList.add(createTrip("trip_1", "BUSINESS", 10.0))
-        preferencesManager.setSheetsWebhookUrl("http://insecure.example.com/sync") // Insecure HTTP!
+        configureWebhook("http://insecure.example.com/sync") // Insecure HTTP
         val service = createService()
 
         val result = service.syncPendingTrips()
@@ -412,8 +407,7 @@ class GoogleSheetsSyncServiceTest {
     fun syncViaWebhook_success_marksTripsSynced() = runTest {
         val trip = createTrip("trip_web_1", "BUSINESS", 20.0)
         tripsList.add(trip)
-
-        preferencesManager.setSheetsWebhookUrl("https://example.com/macros/exec")
+        configureWebhook("https://example.com/macros/exec")
 
         val service = createService()
         service.client = OkHttpClient.Builder()
@@ -433,7 +427,7 @@ class GoogleSheetsSyncServiceTest {
     @Test
     fun syncViaWebhook_malformedJson_returnsUnexpectedErrorAndPreservesData() = runTest {
         tripsList.add(createTrip("trip_1", "BUSINESS", 10.0))
-        preferencesManager.setSheetsWebhookUrl("https://example.com/macros/exec")
+        configureWebhook("https://example.com/macros/exec")
 
         val service = createService()
         service.client = OkHttpClient.Builder()
@@ -452,7 +446,7 @@ class GoogleSheetsSyncServiceTest {
     @Test
     fun syncViaWebhook_applicationLevelFailureWithHttp200_doesNotMarkSynced() = runTest {
         tripsList.add(createTrip("trip_1", "BUSINESS", 10.0))
-        preferencesManager.setSheetsWebhookUrl("https://example.com/macros/exec")
+        configureWebhook("https://example.com/macros/exec")
 
         val service = createService()
         service.client = OkHttpClient.Builder()
@@ -474,7 +468,7 @@ class GoogleSheetsSyncServiceTest {
     fun syncViaWebhook_partialConfirmation_marksOnlyConfirmedTrips() = runTest {
         tripsList.add(createTrip("trip_a", "BUSINESS", 10.0))
         tripsList.add(createTrip("trip_b", "BUSINESS", 15.0))
-        preferencesManager.setSheetsWebhookUrl("https://example.com/macros/exec")
+        configureWebhook("https://example.com/macros/exec")
 
         val service = createService()
         service.client = OkHttpClient.Builder()
@@ -496,16 +490,12 @@ class GoogleSheetsSyncServiceTest {
 
     @Test
     fun syncViaSheetsApi_editedTripResyncsIdempotently_updatesRowWithoutDuplication() = runTest {
-        // Initially synced trip
         val trip = createTrip("trip_edit", "BUSINESS", 10.0, syncStatus = "SYNCED")
         tripsList.add(trip)
 
-        // User edits trip classification/notes in app, setting syncStatus back to PENDING
         fakeRepo.updateTripDetails("trip_edit", "BUSINESS", "MySucculentCorner", "Client Delivery", "Updated note")
         assertEquals("PENDING", tripsList[0].syncStatus)
-
-        preferencesManager.setSheetsSpreadsheetId("test_sheet")
-        secureStorageManager.saveOAuthToken("valid_tok")
+        configureSheetsApi("test_sheet", "valid_tok")
 
         var putUrlCalled: String? = null
         var postCalled = false
@@ -515,7 +505,6 @@ class GoogleSheetsSyncServiceTest {
             .addInterceptor { chain ->
                 val req = chain.request()
                 if (req.method == "GET") {
-                    // Column A already has "trip_edit" at row 4
                     val body = "{\"values\":[[\"Trip ID\"],[\"other_1\"],[\"other_2\"],[\"trip_edit\"]]}"
                     Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                         .body(body.toResponseBody("application/json".toMediaType())).build()
@@ -547,8 +536,7 @@ class GoogleSheetsSyncServiceTest {
     @Test
     fun syncPendingTrips_concurrentInvocations_serializedByMutexWithoutDuplicateRows() = runTest {
         tripsList.add(createTrip("trip_concurrent", "BUSINESS", 8.0))
-        preferencesManager.setSheetsSpreadsheetId("test_sheet")
-        secureStorageManager.saveOAuthToken("valid_tok")
+        configureSheetsApi("test_sheet", "valid_tok")
 
         var appendCallCount = 0
 
@@ -571,7 +559,6 @@ class GoogleSheetsSyncServiceTest {
             }
             .build()
 
-        // Launch two concurrent sync operations simultaneously
         val deferred1 = async { service.syncPendingTrips() }
         val deferred2 = async { service.syncPendingTrips() }
 
@@ -581,7 +568,6 @@ class GoogleSheetsSyncServiceTest {
         assertTrue(res1 is SheetsSyncResult.Success)
         assertTrue(res2 is SheetsSyncResult.Success)
 
-        // Mutex ensures only one append occurred; second sync saw 0 pending trips!
         assertEquals(1, appendCallCount)
         assertEquals(listOf("trip_concurrent"), markedSyncedTripIds)
     }
