@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -151,35 +152,50 @@ class SettingsViewModel @Inject constructor(
         return hasFine && hasActivity && hasBackgroundLocationPermission()
     }
 
-    val uiState: StateFlow<SettingsUiState> = combine(
+    private data class ConfigState(
+        val general: GeneralPrefs,
+        val schedule: SchedulePrefs,
+        val cloudflare: CloudflarePrefs
+    )
+
+    private val configFlow = combine(
         generalFlow,
         scheduleFlow,
-        cloudflareFlow,
+        cloudflareFlow
+    ) { general, schedule, cf ->
+        ConfigState(general, schedule, cf)
+    }
+
+    private val pendingCountFlow = tripRepository.getAllTrips().map { allTrips ->
+        allTrips.count { it.syncStatus == "PENDING" && it.classification != "UNREVIEWED" }
+    }
+
+    val uiState: StateFlow<SettingsUiState> = combine(
+        configFlow,
         sheetsFlow,
-        tripRepository.getAllTrips(),
+        pendingCountFlow,
         _isSyncing
-    ) { general, schedule, cf, sheets, allTrips, isSyncing ->
+    ) { config, sheets, pendingCount, isSyncing ->
         val hasBg = hasBackgroundLocationPermission()
-        val isReady = general.autoTrackingEnabled && hasRequiredPermissions()
-        val pendingCount = allTrips.count { it.syncStatus == "PENDING" && it.classification != "UNREVIEWED" }
+        val isReady = config.general.autoTrackingEnabled && hasRequiredPermissions()
 
         val hasOAuth = secureStorageManager.hasOAuthToken()
         val isConnected = (hasOAuth && sheets.spreadsheetId.isNotBlank()) || sheets.webhookUrl.isNotBlank()
 
         SettingsUiState(
-            autoTrackingEnabled = general.autoTrackingEnabled,
+            autoTrackingEnabled = config.general.autoTrackingEnabled,
             hasBackgroundLocationPermission = hasBg,
             isAutoTrackingReady = isReady,
-            scheduleFilteringEnabled = schedule.filteringEnabled,
-            workDays = schedule.workDays,
-            workHoursStart = schedule.startTime,
-            workHoursEnd = schedule.endTime,
-            outsideScheduleBehavior = schedule.behavior,
-            defaultVehicle = general.defaultVehicle,
-            cfEndpoint = cf.endpoint,
-            cfClientId = cf.clientId,
-            cfClientSecret = cf.clientSecret,
-            cfBearerToken = cf.bearerToken,
+            scheduleFilteringEnabled = config.schedule.filteringEnabled,
+            workDays = config.schedule.workDays,
+            workHoursStart = config.schedule.startTime,
+            workHoursEnd = config.schedule.endTime,
+            outsideScheduleBehavior = config.schedule.behavior,
+            defaultVehicle = config.general.defaultVehicle,
+            cfEndpoint = config.cloudflare.endpoint,
+            cfClientId = config.cloudflare.clientId,
+            cfClientSecret = config.cloudflare.clientSecret,
+            cfBearerToken = config.cloudflare.bearerToken,
             isSheetsConnected = isConnected,
             hasOAuthCredential = hasOAuth,
             sheetsSpreadsheetId = sheets.spreadsheetId,
