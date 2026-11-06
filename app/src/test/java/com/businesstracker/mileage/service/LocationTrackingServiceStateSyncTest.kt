@@ -395,7 +395,7 @@ class LocationTrackingServiceStateSyncTest {
     @Test
     fun queueShutdown_andTransactionalProcessing_remainIntact() = runBlocking {
         val tripId = "trip-shutdown-intact"
-        activeTripRepository.createActiveTrip(tripId, 37.3382, -121.8863, "AUTO_DETECTED", "MySucculentCorner")
+        activeTripRepository.createActiveTrip(tripId, 0.0, 0.0, "AUTO_DETECTED", "MySucculentCorner")
         service.setTrackingStateForTesting(tripId = tripId, distanceMeters = 0.0, waypoints = 0)
 
         val queue = GpsLocationQueue(
