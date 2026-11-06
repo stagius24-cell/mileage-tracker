@@ -294,11 +294,15 @@ fun SettingsScreen(
                                     .fillMaxWidth()
                                     .height(50.dp),
                                 shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = SucculentPrimary,
+                                    contentColor = Color.White
+                                ),
+                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                             ) {
-                                Icon(Icons.Default.CloudSync, contentDescription = null)
+                                Icon(Icons.Default.CloudSync, contentDescription = null, tint = Color.White)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Trigger Cloud Sync Now", fontWeight = FontWeight.Bold)
+                                Text("Trigger Cloud Sync Now", fontWeight = FontWeight.Bold, color = Color.White)
                             }
                         }
                     }

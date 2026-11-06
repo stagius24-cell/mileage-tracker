@@ -620,16 +620,26 @@ private fun DriveTrackingTable(
                     onClick = onStart,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
+                        .height(50.dp),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SucculentPrimary,
+                        contentColor = Color.White
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                 ) {
-                    Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(20.dp))
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = Color.White
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Start Manual Drive",
                         style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
                     )
                 }
             } else {
@@ -641,21 +651,25 @@ private fun DriveTrackingTable(
                         onClick = { if (serviceState.isPaused) onResume() else onPause() },
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp),
+                            .height(50.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = if (serviceState.isPaused) SucculentPrimary else SlateNeutral
-                        )
+                            containerColor = if (serviceState.isPaused) SucculentPrimary else SlateNeutral,
+                            contentColor = Color.White
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                     ) {
                         Icon(
                             imageVector = if (serviceState.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
+                            tint = Color.White
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (serviceState.isPaused) "Resume" else "Pause",
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                     }
 
@@ -663,19 +677,25 @@ private fun DriveTrackingTable(
                         onClick = onEnd,
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp),
+                            .height(50.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SpeedRed,
+                            contentColor = Color.White
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Stop,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(18.dp),
+                            tint = Color.White
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "End Trip",
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                     }
                 }

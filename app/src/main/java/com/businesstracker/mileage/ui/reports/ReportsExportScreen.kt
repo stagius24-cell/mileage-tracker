@@ -135,18 +135,24 @@ fun ReportsExportScreen(
                         }
                     },
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SucculentPrimary,
+                        contentColor = Color.White
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.FileDownload,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(18.dp),
+                        tint = Color.White
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "Export CSV",
-                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
                     )
                 }
             }

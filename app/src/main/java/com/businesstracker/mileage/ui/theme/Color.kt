@@ -2,12 +2,12 @@ package com.businesstracker.mileage.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// MySucculentCorner - Botanical Sage / Forest Green palette
-val SucculentPrimary = Color(0xFF2D5A43)
-val SucculentPrimaryVariant = Color(0xFF1B3D2C)
-val SucculentSecondary = Color(0xFF88B296)
-val SucculentBackgroundSoft = Color(0xFFE8F2EC)
-val SucculentContainer = Color(0xFFD4E7DC)
+// MySucculentCorner - Fresh Vibrant Botanical Green palette (High contrast, energetic, never muted)
+val SucculentPrimary = Color(0xFF16A34A)
+val SucculentPrimaryVariant = Color(0xFF15803D)
+val SucculentSecondary = Color(0xFF4ADE80)
+val SucculentBackgroundSoft = Color(0xFFF0FDF4)
+val SucculentContainer = Color(0xFFDCFCE7)
 
 // Haneelove - Dusty Rose / Soft Blush secondary palette
 val HaneelovePrimary = Color(0xFFC27D88)

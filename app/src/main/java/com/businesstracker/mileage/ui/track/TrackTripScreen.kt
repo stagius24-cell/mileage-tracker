@@ -210,14 +210,24 @@ fun TrackTripScreen(
                             .fillMaxWidth()
                             .height(58.dp),
                         shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SucculentPrimary,
+                            contentColor = Color.White
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(24.dp))
+                        Icon(
+                            imageVector = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                            tint = Color.White
+                        )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = "Start Manual Drive",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
                         )
                     }
                 } else {

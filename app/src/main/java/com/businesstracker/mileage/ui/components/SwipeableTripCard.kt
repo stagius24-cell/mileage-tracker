@@ -267,11 +267,24 @@ fun SwipeableTripCard(
                                 selectedPurpose
                             )
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SucculentPrimary,
+                            contentColor = Color.White
+                        ),
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
                     ) {
-                        Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = Color.White
+                        )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Save & Sync")
+                        Text(
+                            text = "Save & Sync",
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
                     }
                 }
 
