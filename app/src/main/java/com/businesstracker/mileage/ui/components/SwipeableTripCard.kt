@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
@@ -36,6 +37,8 @@ import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
@@ -66,10 +69,9 @@ import androidx.compose.ui.unit.sp
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.TripPurpose
-import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SlateNeutral
+import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
-import com.businesstracker.mileage.ui.theme.SucculentSecondary
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import java.text.SimpleDateFormat
@@ -82,16 +84,18 @@ fun SwipeableTripCard(
     trip: TripEntity,
     onClassifyBusiness: (tripId: String, businessEntity: String, purpose: String) -> Unit,
     onClassifyPersonal: (tripId: String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isProcessing: Boolean = false
 ) {
     val coroutineScope = rememberCoroutineScope()
     var showBusinessBottomSheet by remember { mutableStateOf(false) }
 
     val dismissState = rememberSwipeToDismissBoxState(
         confirmValueChange = { dismissValue ->
+            if (isProcessing) return@rememberSwipeToDismissBoxState false
             when (dismissValue) {
                 SwipeToDismissBoxValue.StartToEnd -> {
-                    // Swiped Right -> Open MySucculentCorner Triage Sheet
+                    // Swiped Right -> Open Business Triage Sheet
                     showBusinessBottomSheet = true
                     false
                 }
@@ -177,14 +181,26 @@ fun SwipeableTripCard(
             }
         }
     ) {
-        TripCardContent(trip = trip)
+        TripCardContent(
+            trip = trip,
+            onTapBusiness = {
+                if (!isProcessing) showBusinessBottomSheet = true
+            },
+            onTapPersonal = {
+                if (!isProcessing) onClassifyPersonal(trip.id)
+            },
+            isProcessing = isProcessing
+        )
     }
 
-    // MySucculentCorner Business Classification Bottom Sheet
+    // Business Classification Bottom Sheet
     if (showBusinessBottomSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val purposes = remember { TripPurpose.DEFAULT_SUCCULENT_PURPOSES }
+        var selectedEntity by remember { mutableStateOf(BusinessEntity.MY_SUCCULENT_CORNER.displayName) }
         var selectedPurpose by remember { mutableStateOf(purposes.first()) }
+        var customPurposeText by remember { mutableStateOf("") }
+        var isCustomPurpose by remember { mutableStateOf(false) }
 
         ModalBottomSheet(
             onDismissRequest = {
@@ -197,10 +213,11 @@ fun SwipeableTripCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "MySucculentCorner Business Drive",
+                    text = "Approve Business Drive",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -209,28 +226,46 @@ fun SwipeableTripCard(
                 Text(
                     text = "${String.format(Locale.US, "%.1f", trip.totalDistanceMiles)} miles • Tax Deduction: \$${String.format(Locale.US, "%.2f", trip.totalDistanceMiles * trip.applicableRate)}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
                 )
 
                 Text(
-                    text = "Select Purpose",
-                    style = MaterialTheme.typography.titleMedium,
+                    text = "Business Entity",
+                    style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
 
-                // Quick Tag FilterChips for MySucculentCorner
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = selectedEntity == BusinessEntity.MY_SUCCULENT_CORNER.displayName,
+                        onClick = { selectedEntity = BusinessEntity.MY_SUCCULENT_CORNER.displayName },
+                        label = { Text(BusinessEntity.MY_SUCCULENT_CORNER.displayName) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = SucculentPrimary,
+                            selectedLabelColor = Color.White
+                        )
+                    )
+                }
+
+                Text(
+                    text = "Select Purpose",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                // Quick Tag FilterChips for Purposes
                 FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 12.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     purposes.forEach { purpose ->
                         FilterChip(
-                            selected = selectedPurpose == purpose,
-                            onClick = { selectedPurpose = purpose },
+                            selected = !isCustomPurpose && selectedPurpose == purpose,
+                            onClick = {
+                                selectedPurpose = purpose
+                                isCustomPurpose = false
+                            },
                             label = { Text(purpose) },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = SucculentPrimary,
@@ -238,9 +273,28 @@ fun SwipeableTripCard(
                             )
                         )
                     }
+                    FilterChip(
+                        selected = isCustomPurpose,
+                        onClick = { isCustomPurpose = true },
+                        label = { Text("Custom...") },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = SucculentPrimary,
+                            selectedLabelColor = Color.White
+                        )
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                if (isCustomPurpose) {
+                    OutlinedTextField(
+                        value = customPurposeText,
+                        onValueChange = { customPurposeText = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        placeholder = { Text("Enter custom business purpose") },
+                        singleLine = true
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -259,13 +313,14 @@ fun SwipeableTripCard(
 
                     Button(
                         onClick = {
+                            val finalPurpose = if (isCustomPurpose && customPurposeText.isNotBlank()) {
+                                customPurposeText.trim()
+                            } else {
+                                selectedPurpose
+                            }
                             showBusinessBottomSheet = false
                             coroutineScope.launch { dismissState.reset() }
-                            onClassifyBusiness(
-                                trip.id,
-                                BusinessEntity.MY_SUCCULENT_CORNER.displayName,
-                                selectedPurpose
-                            )
+                            onClassifyBusiness(trip.id, selectedEntity, finalPurpose)
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = SucculentPrimary,
@@ -281,14 +336,14 @@ fun SwipeableTripCard(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Save & Sync",
+                            text = "Approve Business",
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(16.dp))
             }
         }
     }
@@ -297,6 +352,9 @@ fun SwipeableTripCard(
 @Composable
 fun TripCardContent(
     trip: TripEntity,
+    onTapBusiness: (() -> Unit)? = null,
+    onTapPersonal: (() -> Unit)? = null,
+    isProcessing: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
@@ -321,13 +379,12 @@ fun TripCardContent(
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Row 1: Left (Icon + Date & Time on 2 lines) | Right (Miles & Potential Deduction)
+            // Row 1: Left (Icon + Date & Time) | Right (Miles & Potential Deduction)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left Column: Date & Time well divided
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
@@ -346,7 +403,6 @@ fun TripCardContent(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        // Date on top line
                         Text(
                             text = formattedDate,
                             style = MaterialTheme.typography.titleMedium.copy(
@@ -355,7 +411,6 @@ fun TripCardContent(
                             ),
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        // Time range underneath on 2nd line
                         Text(
                             text = timeRangeStr,
                             style = MaterialTheme.typography.bodySmall.copy(
@@ -372,7 +427,6 @@ fun TripCardContent(
                     }
                 }
 
-                // Right Column: Total Miles Drive + Potential Deduction
                 Column(
                     horizontalAlignment = Alignment.End,
                     modifier = Modifier.padding(start = 12.dp)
@@ -402,10 +456,10 @@ fun TripCardContent(
                 }
             }
 
-            // In Between: Display a Summary Map Showing that Trip
+            // Route Map: Only renders actual coordinates; does NOT fabricate fake curves
             TripSummaryMap(trip = trip)
 
-            // Separate Lines for Start Location and Ending Location with Icons
+            // Start & End Locations
             Column(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -439,7 +493,7 @@ fun TripCardContent(
                             color = SlateNeutral
                         )
                         Text(
-                            text = trip.startAddress ?: "Start Location (San Jose, CA)",
+                            text = trip.startAddress ?: "Recorded GPS (${String.format(Locale.US, "%.4f", trip.startLatitude)}, ${String.format(Locale.US, "%.4f", trip.startLongitude)})",
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
@@ -478,7 +532,7 @@ fun TripCardContent(
                             color = SlateNeutral
                         )
                         Text(
-                            text = trip.endAddress ?: "Ending Location",
+                            text = trip.endAddress ?: "Recorded GPS (${String.format(Locale.US, "%.4f", trip.endLatitude)}, ${String.format(Locale.US, "%.4f", trip.endLongitude)})",
                             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
@@ -487,19 +541,62 @@ fun TripCardContent(
                     }
                 }
             }
+
+            // Tap Action Buttons (For users who prefer tapping over swiping)
+            if (onTapBusiness != null && onTapPersonal != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onTapPersonal,
+                        enabled = !isProcessing,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SlateNeutral)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Personal", fontWeight = FontWeight.SemiBold)
+                    }
+
+                    Button(
+                        onClick = onTapBusiness,
+                        enabled = !isProcessing,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SucculentPrimary,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Business", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun TripSummaryMap(
+fun TripSummaryMap(
     trip: TripEntity,
     modifier: Modifier = Modifier
 ) {
     // Parse coordinates from waypointsJson or fallback to start/end lat/long
     val coordinates = remember(trip.waypointsJson, trip.startLatitude, trip.endLatitude) {
         val list = mutableListOf<Pair<Double, Double>>()
-        if (!trip.waypointsJson.isNullOrEmpty()) {
+        if (!trip.waypointsJson.isNullOrEmpty() && trip.waypointsJson != "[]") {
             try {
                 val array = JSONArray(trip.waypointsJson)
                 for (i in 0 until array.length()) {
@@ -509,10 +606,10 @@ private fun TripSummaryMap(
             } catch (_: Exception) {}
         }
         if (list.isEmpty()) {
-            if (trip.startLatitude != 0.0 || trip.startLongitude != 0.0) {
+            if ((trip.startLatitude != 0.0 || trip.startLongitude != 0.0) &&
+                (trip.endLatitude != 0.0 || trip.endLongitude != 0.0) &&
+                (trip.startLatitude != trip.endLatitude || trip.startLongitude != trip.endLongitude)) {
                 list.add(Pair(trip.startLatitude, trip.startLongitude))
-            }
-            if (trip.endLatitude != 0.0 || trip.endLongitude != 0.0) {
                 list.add(Pair(trip.endLatitude, trip.endLongitude))
             }
         }
@@ -526,35 +623,34 @@ private fun TripSummaryMap(
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
     ) {
-        // Native canvas rendering trip polyline & GPS track
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val width = size.width
-            val height = size.height
+        if (coordinates.size >= 2) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val width = size.width
+                val height = size.height
 
-            // Subtle background grid
-            val gridStep = 24.dp.toPx()
-            var x = 0f
-            while (x < width) {
-                drawLine(
-                    color = Color.Gray.copy(alpha = 0.06f),
-                    start = Offset(x, 0f),
-                    end = Offset(x, height),
-                    strokeWidth = 1f
-                )
-                x += gridStep
-            }
-            var y = 0f
-            while (y < height) {
-                drawLine(
-                    color = Color.Gray.copy(alpha = 0.06f),
-                    start = Offset(0f, y),
-                    end = Offset(width, y),
-                    strokeWidth = 1f
-                )
-                y += gridStep
-            }
+                // Subtle grid
+                val gridStep = 24.dp.toPx()
+                var x = 0f
+                while (x < width) {
+                    drawLine(
+                        color = Color.Gray.copy(alpha = 0.06f),
+                        start = Offset(x, 0f),
+                        end = Offset(x, height),
+                        strokeWidth = 1f
+                    )
+                    x += gridStep
+                }
+                var y = 0f
+                while (y < height) {
+                    drawLine(
+                        color = Color.Gray.copy(alpha = 0.06f),
+                        start = Offset(0f, y),
+                        end = Offset(width, y),
+                        strokeWidth = 1f
+                    )
+                    y += gridStep
+                }
 
-            if (coordinates.size >= 2) {
                 val minLat = coordinates.minOf { it.first }
                 val maxLat = coordinates.maxOf { it.first }
                 val minLng = coordinates.minOf { it.second }
@@ -601,65 +697,55 @@ private fun TripSummaryMap(
                 // End Marker (Red destination)
                 drawCircle(color = SpeedRed, radius = 9f, center = points.last())
                 drawCircle(color = Color.White, radius = 4f, center = points.last())
-            } else {
-                // Aesthetic schematic curve for drive with no waypoints recorded yet
-                val padX = 28.dp.toPx()
-                val startOffset = Offset(padX, height * 0.70f)
-                val endOffset = Offset(width - padX, height * 0.30f)
+            }
 
-                val path = Path().apply {
-                    moveTo(startOffset.x, startOffset.y)
-                    cubicTo(
-                        width * 0.35f, height * 0.85f,
-                        width * 0.65f, height * 0.15f,
-                        endOffset.x, endOffset.y
+            // Top-right Map Badge
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp),
+                shape = RoundedCornerShape(8.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Map,
+                        contentDescription = null,
+                        tint = SucculentPrimary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "GPS Route (${coordinates.size} pts)",
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                 }
-
-                drawPath(
-                    path = path,
-                    color = SucculentPrimary.copy(alpha = 0.25f),
-                    style = Stroke(width = 10f, cap = StrokeCap.Round)
-                )
-                drawPath(
-                    path = path,
-                    color = SucculentPrimary,
-                    style = Stroke(width = 5f, cap = StrokeCap.Round)
-                )
-
-                drawCircle(color = SucculentPrimary, radius = 9f, center = startOffset)
-                drawCircle(color = Color.White, radius = 4f, center = startOffset)
-
-                drawCircle(color = SpeedRed, radius = 9f, center = endOffset)
-                drawCircle(color = Color.White, radius = 4f, center = endOffset)
             }
-        }
-
-        // Top-right Map Badge
-        Surface(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(8.dp),
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically
+        } else {
+            // Honest state when waypoint information is unavailable: do NOT fabricate a route
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Map,
-                    contentDescription = null,
-                    tint = SucculentPrimary,
-                    modifier = Modifier.size(12.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "GPS Route",
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        tint = SlateNeutral,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Route map unavailable (insufficient GPS waypoints)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SlateNeutral
+                    )
+                }
             }
         }
     }
