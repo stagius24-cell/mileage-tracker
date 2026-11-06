@@ -18,7 +18,6 @@ sealed class Screen(val route: String, val title: String, val icon: ImageVector)
     companion object {
         val bottomNavItems = listOf(
             Dashboard,
-            TrackTrip,
             History,
             Reports,
             Settings
