@@ -315,12 +315,6 @@ class LocationTrackingService : Service() {
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        isStartingOrRunning.set(false)
-        releaseWakeLock()
-    }
-
     private fun startDurationTicker() {
         tickerJob?.cancel()
         tickerJob = serviceScope.launch {
@@ -386,6 +380,7 @@ class LocationTrackingService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isStartingOrRunning.set(false)
         tickerJob?.cancel()
         try {
             fusedLocationClient.removeLocationUpdates(locationCallback)
