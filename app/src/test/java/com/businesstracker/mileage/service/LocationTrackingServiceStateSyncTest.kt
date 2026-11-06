@@ -335,7 +335,7 @@ class LocationTrackingServiceStateSyncTest {
 
         // Enqueue two consecutive fixes
         val loc1 = createLocation(37.3400, -121.8863, 10_000L, spd = 20.0f)
-        val loc2 = createLocation(37.3450, -121.8863, 20_000L, spd = 20.0f)
+        val loc2 = createLocation(37.3418, -121.8863, 20_000L, spd = 20.0f)
         queue.enqueueBatchSync(listOf(loc1, loc2))
         queue.drainAndClose()
 
@@ -414,7 +414,7 @@ class LocationTrackingServiceStateSyncTest {
         )
 
         val batch = (1..5).map {
-            createLocation(37.3382 + (it * 0.002), -121.8863, it * 5000L, spd = 15.0f)
+            createLocation(37.3382 + (it * 0.001), -121.8863, it * 5000L, spd = 15.0f)
         }
         queue.enqueueBatch(batch)
         queue.drainAndClose()

@@ -34,7 +34,8 @@ class DrainPendingGpsFixesUseCase @Inject constructor(
             if (pendingFixes.isEmpty()) {
                 val remainingCount = gpsInboxDao.getPendingCount(tripId)
                 if (remainingCount > 0) {
-                    throw IllegalStateException("Queue drain verification failed: $remainingCount fixes remain pending in Room inbox for trip $tripId")
+                    // Fixes arrived concurrently or were committed during check; loop again to process them
+                    continue
                 }
                 break
             }
@@ -68,7 +69,42 @@ class DrainPendingGpsFixesUseCase @Inject constructor(
             }
         }
 
-        val finalCheck = gpsInboxDao.getPendingCount(tripId)
+        var finalCheck = gpsInboxDao.getPendingCount(tripId)
+        var drainRetry = 0
+        while (finalCheck > 0 && drainRetry < 3) {
+            val remainingFixes = gpsInboxDao.getPendingFixes(tripId, batchLimit)
+            if (remainingFixes.isEmpty()) break
+            for (fix in remainingFixes) {
+                val result = gpsInboxProcessor.processFixTransaction(fix.id)
+                when (result) {
+                    is GpsInboxProcessor.ProcessResult.Accepted -> {
+                        totalProcessed++
+                        onFixProcessed?.invoke(result)
+                    }
+                    is GpsInboxProcessor.ProcessResult.AlreadyConsumed -> {
+                        totalProcessed++
+                        onFixProcessed?.invoke(result)
+                    }
+                    is GpsInboxProcessor.ProcessResult.Rejected -> {
+                        totalProcessed++
+                        onFixProcessed?.invoke(result)
+                    }
+                    is GpsInboxProcessor.ProcessResult.StaleOrphanAcknowledged -> {
+                        totalProcessed++
+                        onFixProcessed?.invoke(result)
+                    }
+                    is GpsInboxProcessor.ProcessResult.UnresolvedOrphan -> {
+                        throw IllegalStateException("Drain halted: Unresolved orphan fix ${result.fixId} for trip ${result.tripId} (${result.reason}). Fix preserved in inbox.")
+                    }
+                    is GpsInboxProcessor.ProcessResult.TripNotFound -> {
+                        throw IllegalStateException("Drain halted: Fix ${fix.id} referenced missing trip ${result.tripId}. Preserved in inbox.")
+                    }
+                }
+            }
+            finalCheck = gpsInboxDao.getPendingCount(tripId)
+            drainRetry++
+        }
+
         if (finalCheck > 0) {
             throw IllegalStateException("Queue drain verification failed: $finalCheck fixes remain pending after drain loop for trip $tripId")
         }
