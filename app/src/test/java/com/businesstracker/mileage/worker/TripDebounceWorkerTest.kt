@@ -183,25 +183,25 @@ class TripDebounceWorkerTest {
                     id = 101,
                     tripId = tripId,
                     sequenceNumber = 1,
-                    elapsedRealtimeNanos = 2000L * 1_000_000L,
+                    elapsedRealtimeNanos = 10000L * 1_000_000L,
                     latitude = 37.3400,
                     longitude = -121.8863,
                     altitude = 0.0,
                     accuracy = 5f,
-                    speed = 15f,
-                    timestamp = 2000L
+                    speed = 22.2f,
+                    timestamp = 10000L
                 ),
                 GpsInboxEntity(
                     id = 102,
                     tripId = tripId,
                     sequenceNumber = 2,
-                    elapsedRealtimeNanos = 3000L * 1_000_000L,
+                    elapsedRealtimeNanos = 30000L * 1_000_000L,
                     latitude = 37.3450, // Final fix > 700m away
                     longitude = -121.8863,
                     altitude = 0.0,
                     accuracy = 5f,
-                    speed = 15f,
-                    timestamp = 3000L
+                    speed = 27.7f,
+                    timestamp = 30000L
                 )
             )
         )

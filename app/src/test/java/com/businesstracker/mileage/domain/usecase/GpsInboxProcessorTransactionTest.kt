@@ -70,13 +70,13 @@ class GpsInboxProcessorTransactionTest {
             GpsInboxEntity(
                 tripId = tripId,
                 sequenceNumber = 1,
-                elapsedRealtimeNanos = 2000L * 1_000_000L,
+                elapsedRealtimeNanos = 10000L * 1_000_000L,
                 latitude = 37.3400,
                 longitude = -121.8863,
                 altitude = 0.0,
                 accuracy = 5f,
-                speed = 10f,
-                timestamp = 2000L
+                speed = 22.2f,
+                timestamp = 10000L
             )
         )
 
@@ -119,11 +119,12 @@ class GpsInboxProcessorTransactionTest {
             GpsInboxEntity(
                 tripId = tripId,
                 sequenceNumber = 1,
-                elapsedRealtimeNanos = 2000L * 1_000_000L,
+                elapsedRealtimeNanos = 10000L * 1_000_000L,
                 latitude = 37.3400,
                 longitude = -121.8863,
                 accuracy = 5f,
-                timestamp = 2000L
+                speed = 22.2f,
+                timestamp = 10000L
             )
         )
 
@@ -174,12 +175,12 @@ class GpsInboxProcessorTransactionTest {
             GpsInboxEntity(
                 tripId = tripId,
                 sequenceNumber = 1,
-                elapsedRealtimeNanos = 2000L * 1_000_000L,
+                elapsedRealtimeNanos = 10000L * 1_000_000L,
                 latitude = 37.3400,
                 longitude = -121.8863,
                 accuracy = 5f,
-                speed = 10f,
-                timestamp = 2000L
+                speed = 22.2f,
+                timestamp = 10000L
             )
         )
 
@@ -195,12 +196,12 @@ class GpsInboxProcessorTransactionTest {
                 id = fixId,
                 tripId = tripId,
                 sequenceNumber = 1,
-                elapsedRealtimeNanos = 2000L * 1_000_000L,
+                elapsedRealtimeNanos = 10000L * 1_000_000L,
                 latitude = 37.3400,
                 longitude = -121.8863,
                 accuracy = 5f,
-                speed = 10f,
-                timestamp = 2000L
+                speed = 22.2f,
+                timestamp = 10000L
             )
         )
 
