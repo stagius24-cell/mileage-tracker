@@ -65,6 +65,17 @@ class GpsInboxProcessorTransactionTest {
                 trackingMethod = "AUTO_DETECTED"
             )
         )
+        // Initial waypoint at start of trip
+        database.activeTripDao().insertWaypoint(
+            com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity(
+                tripId = tripId,
+                latitude = 37.3382,
+                longitude = -121.8863,
+                accuracy = 5f,
+                speed = 0f,
+                timestamp = 1000L
+            )
+        )
 
         val fixId = database.gpsInboxDao().insertFix(
             GpsInboxEntity(
@@ -85,8 +96,8 @@ class GpsInboxProcessorTransactionTest {
 
         // 1. Waypoint inserted with sourceFixId matching fixId
         val waypoints = database.activeTripDao().getWaypointsForTrip(tripId)
-        assertEquals(1, waypoints.size)
-        assertEquals(fixId, waypoints[0].sourceFixId)
+        assertEquals(2, waypoints.size)
+        assertEquals(fixId, waypoints[1].sourceFixId)
 
         // 2. Active trip mileage updated
         val activeTrip = database.activeTripDao().getActiveTripById(tripId)
@@ -112,6 +123,17 @@ class GpsInboxProcessorTransactionTest {
                 lastTimestamp = 1000L,
                 totalDistanceMeters = 0.0,
                 trackingMethod = "AUTO_DETECTED"
+            )
+        )
+        // Initial waypoint
+        database.activeTripDao().insertWaypoint(
+            com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity(
+                tripId = tripId,
+                latitude = 37.3382,
+                longitude = -121.8863,
+                accuracy = 5f,
+                speed = 0f,
+                timestamp = 1000L
             )
         )
 
@@ -147,9 +169,9 @@ class GpsInboxProcessorTransactionTest {
             fail("Must throw SQLException")
         } catch (_: java.sql.SQLException) {}
 
-        // Assert transaction rolled back: fix is intact, zero waypoints inserted, zero distance change
+        // Assert transaction rolled back: fix is intact, only initial waypoint remains, zero distance change
         assertEquals(1, database.gpsInboxDao().getPendingCount(tripId))
-        assertEquals(0, database.activeTripDao().getWaypointsForTrip(tripId).size)
+        assertEquals(1, database.activeTripDao().getWaypointsForTrip(tripId).size)
         assertEquals(0.0, database.activeTripDao().getActiveTripById(tripId)!!.totalDistanceMeters, 0.001)
     }
 
@@ -168,6 +190,17 @@ class GpsInboxProcessorTransactionTest {
                 lastTimestamp = 1000L,
                 totalDistanceMeters = 0.0,
                 trackingMethod = "AUTO_DETECTED"
+            )
+        )
+        // Initial waypoint
+        database.activeTripDao().insertWaypoint(
+            com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity(
+                tripId = tripId,
+                latitude = 37.3382,
+                longitude = -121.8863,
+                accuracy = 5f,
+                speed = 0f,
+                timestamp = 1000L
             )
         )
 
@@ -210,7 +243,7 @@ class GpsInboxProcessorTransactionTest {
         val distanceAfterRetry = database.activeTripDao().getActiveTripById(tripId)!!.totalDistanceMeters
 
         assertEquals("Mileage must not be counted twice on retry of the same fix", distanceAfterFirst, distanceAfterRetry, 0.001)
-        assertEquals("Waypoint count must remain 1", 1, database.activeTripDao().getWaypointsForTrip(tripId).size)
+        assertEquals("Waypoint count must remain 2", 2, database.activeTripDao().getWaypointsForTrip(tripId).size)
         assertEquals(0, database.gpsInboxDao().getPendingCount(tripId))
     }
 
