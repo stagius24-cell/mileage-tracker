@@ -80,7 +80,14 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val localContext = androidx.compose.ui.platform.LocalContext.current
     var isD1Expanded by remember { mutableStateOf(false) }
+
+    val googleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        viewModel.handleGoogleSignInResult(result.data)
+    }
 
     LazyColumn(
         modifier = modifier
@@ -667,10 +674,7 @@ fun SettingsScreen(
                                 }
                             }
 
-                            // Secure OAuth 2.0 Credential Status Card
-                            var showTokenInputDialog by remember { mutableStateOf(false) }
-                            var inputTokenText by remember { mutableStateOf("") }
-
+                            // Secure Google OAuth 2.0 Authorization Card (Google Play Services Integration)
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = if (state.hasOAuthCredential) SucculentPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
@@ -694,64 +698,57 @@ fun SettingsScreen(
                                         Spacer(modifier = Modifier.width(10.dp))
                                         Column {
                                             Text(
-                                                text = if (state.hasOAuthCredential) "Google Account Authenticated" else "Google OAuth 2.0 Authorization",
+                                                text = if (state.hasOAuthCredential) "Google Account Connected" else "Google OAuth 2.0 Authorization",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.Bold
                                             )
+                                            val accountSubtitle = if (state.hasOAuthCredential) {
+                                                state.connectedAccountEmail ?: "Tokens encrypted in Android Keystore"
+                                            } else {
+                                                "Scope: sheets.googleapis.com (Keystore AES-GCM)"
+                                            }
                                             Text(
-                                                text = if (state.hasOAuthCredential) "Tokens encrypted in Android Keystore" else "Scope: sheets.googleapis.com",
+                                                text = accountSubtitle,
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = SlateNeutral
                                             )
                                         }
                                     }
 
-                                    OutlinedButton(
-                                        onClick = { showTokenInputDialog = true },
-                                        shape = RoundedCornerShape(8.dp),
-                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                    ) {
-                                        Text(if (state.hasOAuthCredential) "Update" else "Connect", style = MaterialTheme.typography.labelSmall)
-                                    }
-                                }
-                            }
-
-                            if (showTokenInputDialog) {
-                                androidx.compose.material3.AlertDialog(
-                                    onDismissRequest = { showTokenInputDialog = false },
-                                    title = { Text("Secure OAuth Authorization") },
-                                    text = {
-                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                            Text("Authorize Google Sheets API. The access token is encrypted in Android Keystore and never stored in plain text.")
-                                            OutlinedTextField(
-                                                value = inputTokenText,
-                                                onValueChange = { inputTokenText = it },
-                                                label = { Text("OAuth Access Token") },
-                                                placeholder = { Text("ya29....") },
-                                                singleLine = true,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
+                                    if (state.hasOAuthCredential) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    val client = viewModel.getGoogleSignInClient()
+                                                    googleSignInLauncher.launch(client.signInIntent)
+                                                },
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                            ) {
+                                                Text("Switch", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                            OutlinedButton(
+                                                onClick = { viewModel.disconnectSheets() },
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                            ) {
+                                                Text("Disconnect", color = SpeedRed, style = MaterialTheme.typography.labelSmall)
+                                            }
                                         }
-                                    },
-                                    confirmButton = {
+                                    } else {
                                         Button(
                                             onClick = {
-                                                if (inputTokenText.isNotBlank()) {
-                                                    viewModel.saveOAuthToken(inputTokenText.trim())
-                                                }
-                                                inputTokenText = ""
-                                                showTokenInputDialog = false
-                                            }
+                                                val client = viewModel.getGoogleSignInClient()
+                                                googleSignInLauncher.launch(client.signInIntent)
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
                                         ) {
-                                            Text("Save Securely")
-                                        }
-                                    },
-                                    dismissButton = {
-                                        TextButton(onClick = { showTokenInputDialog = false }) {
-                                            Text("Cancel")
+                                            Text("Connect", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                                         }
                                     }
-                                )
+                                }
                             }
 
                             OutlinedTextField(

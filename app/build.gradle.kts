@@ -102,8 +102,9 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
-    // Google Play Services Location & Activity Recognition
+    // Google Play Services Location & Activity Recognition & Auth
     implementation(libs.play.services.location)
+    implementation(libs.play.services.auth)
 
     // Dependency Injection - Hilt
     implementation(libs.hilt.android)

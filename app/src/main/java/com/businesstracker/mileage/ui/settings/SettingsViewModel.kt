@@ -41,6 +41,7 @@ data class SettingsUiState(
     // Google Sheets Sync State - No raw tokens exposed in UI state
     val isSheetsConnected: Boolean = false,
     val hasOAuthCredential: Boolean = false,
+    val connectedAccountEmail: String? = null,
     val sheetsSpreadsheetId: String = "",
     val sheetsSpreadsheetName: String = "Business Mileage Tracker",
     val sheetsWebhookUrl: String = "",
@@ -85,6 +86,7 @@ class SettingsViewModel @Inject constructor(
     private val tripRepository: TripRepository,
     private val sheetsSyncService: GoogleSheetsSyncService,
     private val secureStorageManager: SecureStorageManager,
+    private val googleAuthManager: com.businesstracker.mileage.data.security.GoogleAuthManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -180,6 +182,7 @@ class SettingsViewModel @Inject constructor(
         val isReady = config.general.autoTrackingEnabled && hasRequiredPermissions()
 
         val hasOAuth = secureStorageManager.hasOAuthToken()
+        val accountEmail = secureStorageManager.getAccountEmail()
         val isConnected = (hasOAuth && sheets.spreadsheetId.isNotBlank()) || sheets.webhookUrl.isNotBlank()
 
         SettingsUiState(
@@ -198,6 +201,7 @@ class SettingsViewModel @Inject constructor(
             cfBearerToken = config.cloudflare.bearerToken,
             isSheetsConnected = isConnected,
             hasOAuthCredential = hasOAuth,
+            connectedAccountEmail = accountEmail,
             sheetsSpreadsheetId = sheets.spreadsheetId,
             sheetsSpreadsheetName = sheets.spreadsheetName,
             sheetsWebhookUrl = sheets.webhookUrl,
@@ -326,14 +330,24 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun getGoogleSignInClient() = googleAuthManager.getSignInClient(context)
+
+    fun handleGoogleSignInResult(data: android.content.Intent?) {
+        viewModelScope.launch {
+            val result = googleAuthManager.handleSignInResult(data)
+            if (result.isSuccess) {
+                val id = uiState.value.sheetsSpreadsheetId
+                if (id.isNotBlank()) {
+                    GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
+                    GoogleSheetsSyncWorker.enqueuePeriodicSync(context)
+                }
+            }
+        }
+    }
+
     fun disconnectSheets() {
         viewModelScope.launch {
-            secureStorageManager.clearAllCredentials()
-            preferencesManager.setSheetsAuthToken("")
-            preferencesManager.setSheetsConnected(false)
-            preferencesManager.setSheetsSpreadsheetId("")
-            preferencesManager.setSheetsWebhookUrl("")
-            preferencesManager.setSheetsLastError(null)
+            googleAuthManager.disconnect(context)
         }
     }
 

@@ -345,14 +345,54 @@ class TrackingPreferencesManager @Inject constructor(
         }
     }
 
+    /**
+     * Legacy token flow - marked internal/deprecated. Plaintext tokens should not be stored.
+     * Use [migrateLegacyAuthToken] to transition existing installations to SecureStorageManager.
+     */
+    @Deprecated("Use SecureStorageManager for secure credential handling", ReplaceWith("secureStorageManager.getOAuthToken()"))
     val sheetsAuthToken: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[KEY_SHEETS_AUTH_TOKEN] ?: ""
     }
 
+    @Deprecated("Use SecureStorageManager for secure credential handling", ReplaceWith("secureStorageManager.saveOAuthToken(token)"))
     suspend fun setSheetsAuthToken(token: String) {
         context.dataStore.edit { prefs ->
-            prefs[KEY_SHEETS_AUTH_TOKEN] = token
+            if (token.isBlank()) {
+                prefs.remove(KEY_SHEETS_AUTH_TOKEN)
+            } else {
+                prefs[KEY_SHEETS_AUTH_TOKEN] = token
+            }
         }
+    }
+
+    /**
+     * Safely migrates legacy plaintext OAuth token from unencrypted DataStore into [com.businesstracker.mileage.data.security.SecureStorageManager].
+     *
+     * In accordance with security audit requirements:
+     * 1. Reads plaintext token from DataStore (if any).
+     * 2. If present and non-blank, attempts to save into Keystore-backed SecureStorageManager.
+     * 3. Verifies retrieval: secureStorage.getOAuthToken() == plainToken.
+     * 4. Permanently removes the plaintext preference key from DataStore.
+     * 5. If verification fails, flags reconnect required and does not leave plaintext token.
+     */
+    suspend fun migrateLegacyAuthToken(secureStorage: com.businesstracker.mileage.data.security.SecureStorageManager): Boolean {
+        val prefs = context.dataStore.data.first()
+        val legacyToken = prefs[KEY_SHEETS_AUTH_TOKEN]?.trim().orEmpty()
+        if (legacyToken.isBlank()) {
+            return true
+        }
+
+        val saved = secureStorage.saveOAuthToken(legacyToken)
+        val verified = saved && (secureStorage.getOAuthToken() == legacyToken)
+
+        context.dataStore.edit { editPrefs ->
+            editPrefs.remove(KEY_SHEETS_AUTH_TOKEN)
+            if (!verified) {
+                editPrefs[KEY_SHEETS_LAST_ERROR] = "Failed to securely migrate credentials. Please reconnect your account."
+                editPrefs[KEY_SHEETS_CONNECTED] = false
+            }
+        }
+        return verified
     }
 
     val sheetsWebhookUrl: Flow<String> = context.dataStore.data.map { prefs ->

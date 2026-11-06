@@ -8,6 +8,7 @@ import com.businesstracker.mileage.data.security.SecureStorageManager
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.google.gson.Gson
 import kotlinx.coroutines.async
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
@@ -570,5 +571,66 @@ class GoogleSheetsSyncServiceTest {
 
         assertEquals(1, appendCallCount)
         assertEquals(listOf("trip_concurrent"), markedSyncedTripIds)
+    }
+
+    @Test
+    fun legacyTokenMigration_migratesToKeystore_and_removesPlaintextFromDataStore() = runTest {
+        val legacySecret = "legacy_bearer_token_xyz_999"
+        @Suppress("DEPRECATION")
+        preferencesManager.setSheetsAuthToken(legacySecret)
+
+        // Ensure Keystore is empty before migration
+        secureStorageManager.clearAllCredentials()
+        assertFalse(secureStorageManager.hasOAuthToken())
+
+        val success = preferencesManager.migrateLegacyAuthToken(secureStorageManager)
+        assertTrue("Migration must report success", success)
+
+        // Verify token is securely stored in Keystore
+        assertTrue(secureStorageManager.hasOAuthToken())
+        assertEquals(legacySecret, secureStorageManager.getOAuthToken())
+
+        // Verify plaintext preference is permanently wiped from DataStore
+        @Suppress("DEPRECATION")
+        val remainingPlaintext = preferencesManager.sheetsAuthToken.first()
+        assertTrue("Plaintext token must be permanently removed from DataStore", remainingPlaintext.isBlank())
+    }
+
+    @Test
+    fun syncPendingTrips_autoMigratesLegacyPlaintextToken_and_completesSync() = runTest {
+        tripsList.add(createTrip("trip_migrated", "BUSINESS", 5.0))
+        preferencesManager.setSheetsSpreadsheetId("test_sheet")
+        preferencesManager.setSheetsWebhookUrl("")
+        @Suppress("DEPRECATION")
+        preferencesManager.setSheetsAuthToken("auto_migrated_tok_123")
+        secureStorageManager.clearAllCredentials()
+
+        val service = createService()
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                // Confirm the Authorization header used the migrated token
+                val authHeader = req.header("Authorization")
+                assertEquals("Bearer auto_migrated_tok_123", authHeader)
+
+                if (req.method == "GET") {
+                    val body = "{\"values\":[[\"Trip ID\"]]}"
+                    Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                        .body(body.toResponseBody("application/json".toMediaType())).build()
+                } else {
+                    Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                        .body("{\"updates\":{\"updatedRows\":1}}".toResponseBody("application/json".toMediaType())).build()
+                }
+            }
+            .build()
+
+        val result = service.syncPendingTrips()
+        assertTrue("Sync should succeed following automatic migration", result is SheetsSyncResult.Success)
+        assertTrue("Token must now reside in SecureStorageManager", secureStorageManager.hasOAuthToken())
+        assertEquals("auto_migrated_tok_123", secureStorageManager.getOAuthToken())
+
+        @Suppress("DEPRECATION")
+        val remainingPlaintext = preferencesManager.sheetsAuthToken.first()
+        assertTrue("Plaintext token must be removed from DataStore", remainingPlaintext.isBlank())
     }
 }

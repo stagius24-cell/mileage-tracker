@@ -63,8 +63,17 @@ class GoogleSheetsSyncService @Inject constructor(
     private val preferencesManager: TrackingPreferencesManager,
     private val tripRepository: TripRepository,
     private val secureStorageManager: SecureStorageManager,
+    private val googleAuthManager: com.businesstracker.mileage.data.security.GoogleAuthManager?,
     private val gson: Gson
 ) {
+    // Secondary constructor for testing or when GoogleAuthManager is omitted
+    constructor(
+        preferencesManager: TrackingPreferencesManager,
+        tripRepository: TripRepository,
+        secureStorageManager: SecureStorageManager,
+        gson: Gson
+    ) : this(preferencesManager, tripRepository, secureStorageManager, null, gson)
+
     private val syncMutex = Mutex()
 
     internal var client: OkHttpClient = OkHttpClient.Builder()
@@ -105,15 +114,9 @@ class GoogleSheetsSyncService @Inject constructor(
         val spreadsheetId = preferencesManager.sheetsSpreadsheetId.first().trim()
         val webhookUrl = preferencesManager.sheetsWebhookUrl.first().trim()
 
-        // Resolve OAuth token: check secure Keystore storage first, fall back to preferences
-        val secureToken = secureStorageManager.getOAuthToken()?.trim().orEmpty()
-        val prefToken = preferencesManager.sheetsAuthToken.first().trim()
-        val authToken = secureToken.ifBlank { prefToken }
-
-        // Migration helper: If found in unencrypted prefs, migrate into secure Keystore storage
-        if (prefToken.isNotBlank() && secureToken.isBlank()) {
-            secureStorageManager.saveOAuthToken(prefToken)
-        }
+        // Safely migrate any legacy DataStore plaintext token and resolve strictly from Keystore
+        preferencesManager.migrateLegacyAuthToken(secureStorageManager)
+        val authToken = secureStorageManager.getOAuthToken()?.trim().orEmpty()
 
         if (spreadsheetId.isBlank() && webhookUrl.isBlank()) {
             return@withLock SheetsSyncResult.NotConfigured
@@ -160,6 +163,10 @@ class GoogleSheetsSyncService @Inject constructor(
             client.newCall(readRequest).execute().use { response ->
                 when (response.code) {
                     401 -> {
+                        val refreshed = googleAuthManager?.refreshOAuthToken()
+                        if (refreshed != null && refreshed != authToken) {
+                            return syncViaSheetsApi(spreadsheetId, refreshed, trips)
+                        }
                         val msg = "Google authorization expired (401). Please reconnect your account."
                         preferencesManager.setSheetsLastError(msg)
                         return SheetsSyncResult.TokenExpired(msg)
