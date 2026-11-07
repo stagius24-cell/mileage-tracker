@@ -1,0 +1,15 @@
+{
+  "versionName": "1.0.4",
+  "versionCode": 5,
+  "package": "com.businesstracker.mileage.debug",
+  "sourceBranch": "feature/vehicle-bluetooth-auto-stop",
+  "sourceCommit": "407facc9e261e46f75995ffc27f65dedb543ffa3",
+  "workflowRun": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42349288630",
+  "workflowArtifactId": 13565043348,
+  "unitTests": "debug and release suites passed",
+  "apkSha256": "7cb25c15d67dfb3c672c3a5725d8949b3a3730a332ba84b19c865141e7dad8cf",
+  "signingCertificateSha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "signatureSchemes": ["v2", "v3"],
+  "payloadComparison": "968 non-signature ZIP entries identical to CI artifact",
+  "physicalVehicleValidation": "NOT RUN"
+}
