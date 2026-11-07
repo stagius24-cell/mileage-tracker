@@ -1,8 +1,10 @@
 package com.businesstracker.mileage.ui.dashboard
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -26,7 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.BrightnessLow
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsNotFixed
@@ -92,6 +94,7 @@ fun DashboardScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val serviceState by viewModel.serviceState.collectAsStateWithLifecycle()
     var monthMenuExpanded by remember { mutableStateOf(false) }
+    var isTimeFilterExpanded by remember { mutableStateOf(false) }
     var isAmoledDimmed by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -161,37 +164,44 @@ fun DashboardScreen(
                             }
                         }
 
-                        // Right: Reports Document Icon
+                        // Right: Sort / Time Filter Toggle Button (replaces Reports icon)
                         IconButton(
-                            onClick = { onNavigateToReports?.invoke() },
+                            onClick = { isTimeFilterExpanded = !isTimeFilterExpanded },
                             modifier = Modifier.align(Alignment.CenterEnd)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Description,
-                                contentDescription = "Reports & Tax Summary",
-                                tint = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.size(26.dp)
+                                imageVector = Icons.Default.Sort,
+                                contentDescription = "Filter by Time Period",
+                                tint = if (isTimeFilterExpanded) SucculentPrimary else MaterialTheme.colorScheme.onBackground,
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    // Time Filter Chips (Today | This Week | This Month | This Year | Custom)
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    // Collapsible Time Filter Chips (Today | This Week | This Month | This Year | Custom)
+                    AnimatedVisibility(
+                        visible = isTimeFilterExpanded,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
                     ) {
-                        items(TimeFilter.entries.toTypedArray()) { filter ->
-                            FilterChip(
-                                selected = state.timeFilter == filter,
-                                onClick = { viewModel.setTimeFilter(filter) },
-                                label = { Text(filter.displayName) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = SucculentPrimary,
-                                    selectedLabelColor = Color.White
-                                )
-                            )
+                        Column {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(TimeFilter.entries.toTypedArray()) { filter ->
+                                    FilterChip(
+                                        selected = state.timeFilter == filter,
+                                        onClick = { viewModel.setTimeFilter(filter) },
+                                        label = { Text(filter.displayName) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = SucculentPrimary,
+                                            selectedLabelColor = Color.White
+                                        )
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -306,20 +316,20 @@ fun DashboardScreen(
                 )
             }
 
-            // Section: Trips to Review (MileIQ Style)
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Trips to Review",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
+            // Section: Trips to Review (Hidden by default when 0 to review, only appears if actual drives exist)
+            if (state.unreviewedTrips.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Trips to Review",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
 
-                    if (state.unreviewedTrips.isNotEmpty()) {
                         Surface(
                             shape = CircleShape,
                             color = MaterialTheme.colorScheme.primary,
@@ -335,6 +345,19 @@ fun DashboardScreen(
                             }
                         }
                     }
+                }
+
+                items(state.unreviewedTrips, key = { it.id }) { trip ->
+                    SwipeableTripCard(
+                        trip = trip,
+                        onClassifyBusiness = { id, entity, purpose ->
+                            viewModel.classifyTripAsBusiness(id, entity, purpose)
+                        },
+                        onClassifyPersonal = { id ->
+                            viewModel.classifyTripAsPersonal(id)
+                        },
+                        isProcessing = state.processingTripIds.contains(trip.id)
+                    )
                 }
             }
 
@@ -364,56 +387,6 @@ fun DashboardScreen(
                             }
                         }
                     }
-                }
-            }
-
-            if (state.unreviewedTrips.isEmpty()) {
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(20.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = SucculentPrimary,
-                                modifier = Modifier.size(32.dp)
-                            )
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column {
-                                Text(
-                                    text = "All Drives Classified!",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "Auto-detected drives will appear here for swipe classification.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-                    }
-                }
-            } else {
-                items(state.unreviewedTrips, key = { it.id }) { trip ->
-                    SwipeableTripCard(
-                        trip = trip,
-                        onClassifyBusiness = { id, entity, purpose ->
-                            viewModel.classifyTripAsBusiness(id, entity, purpose)
-                        },
-                        onClassifyPersonal = { id ->
-                            viewModel.classifyTripAsPersonal(id)
-                        },
-                        isProcessing = state.processingTripIds.contains(trip.id)
-                    )
                 }
             }
 
@@ -566,8 +539,8 @@ private fun DriveTrackingTable(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Table Header: Title + Tesla Badge + GPS Indicator
             Row(
@@ -579,79 +552,78 @@ private fun DriveTrackingTable(
                     Surface(
                         shape = CircleShape,
                         color = if (serviceState.isTracking) SucculentPrimary.copy(alpha = 0.15f) else SlateNeutral.copy(alpha = 0.15f),
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(30.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.DirectionsCar,
                             contentDescription = null,
                             tint = if (serviceState.isTracking) SucculentPrimary else SlateNeutral,
-                            modifier = Modifier.padding(8.dp)
+                            modifier = Modifier.padding(6.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
                             text = if (serviceState.isTracking) {
-                                "Active Drive Tracking"
+                                if (serviceState.isPaused) "Active Drive (Paused)" else "Active Drive Tracking"
                             } else if (serviceState.isRecoveryRequired) {
                                 "Drive Interrupted"
                             } else {
                                 "Drive Tracker"
                             },
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                         )
-                        Text(
-                            text = if (serviceState.isTracking) {
-                                if (serviceState.isPaused) "Tracking Paused" else "Recording in Tesla Model Y • ${serviceState.waypointCount} waypoints"
-                            } else if (serviceState.isRecoveryRequired) {
-                                serviceState.statusMessage ?: "Recovery Required • Preserved"
-                            } else {
-                                "Tesla Model Y • Ready"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
+                        if (!serviceState.isTracking) {
+                            Text(
+                                text = if (serviceState.isRecoveryRequired) {
+                                    serviceState.statusMessage ?: "Recovery Required • Preserved"
+                                } else {
+                                    "Tesla Model Y • Ready"
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
                     }
                 }
 
                 // Header Actions: Dim Screen (when tracking) + GPS Accuracy Badge
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     if (serviceState.isTracking) {
                         OutlinedButton(
                             onClick = onDimScreen,
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.BrightnessLow,
                                 contentDescription = null,
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(12.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text("Dim", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
                         }
                     }
 
                     // GPS Accuracy Badge
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(10.dp),
                         color = if (isHighAccuracy) HighAccuracyGreen.copy(alpha = 0.15f) else WeakGpsAmber.copy(alpha = 0.15f)
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = if (isHighAccuracy) Icons.Default.GpsFixed else Icons.Default.GpsNotFixed,
                                 contentDescription = null,
                                 tint = if (isHighAccuracy) HighAccuracyGreen else WeakGpsAmber,
-                                modifier = Modifier.size(13.dp)
+                                modifier = Modifier.size(12.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
                                 text = if (isHighAccuracy) "High GPS" else "GPS...",
                                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
@@ -663,18 +635,16 @@ private fun DriveTrackingTable(
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
             // Table Main Section: Compact Metrics Bar (DURATION | LIVE MILES | SPEED)
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 12.dp, horizontal = 8.dp),
+                        .padding(vertical = 8.dp, horizontal = 6.dp),
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -685,7 +655,7 @@ private fun DriveTrackingTable(
                     )
                     Box(
                         modifier = Modifier
-                            .height(36.dp)
+                            .height(30.dp)
                             .width(1.dp)
                             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
                     )
@@ -696,7 +666,7 @@ private fun DriveTrackingTable(
                         Text(
                             text = String.format(Locale.US, "%.2f", serviceState.distanceMiles),
                             style = MaterialTheme.typography.displayMedium.copy(
-                                fontSize = 36.sp,
+                                fontSize = 28.sp,
                                 fontWeight = FontWeight.Black
                             ),
                             color = MaterialTheme.colorScheme.onBackground
@@ -705,7 +675,7 @@ private fun DriveTrackingTable(
                         Text(
                             text = "LIVE MILES",
                             style = MaterialTheme.typography.labelSmall.copy(
-                                letterSpacing = 1.2.sp,
+                                letterSpacing = 1.sp,
                                 fontWeight = FontWeight.Bold
                             ),
                             color = SucculentPrimary
@@ -713,7 +683,7 @@ private fun DriveTrackingTable(
                     }
                     Box(
                         modifier = Modifier
-                            .height(36.dp)
+                            .height(30.dp)
                             .width(1.dp)
                             .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
                     )
@@ -732,8 +702,8 @@ private fun DriveTrackingTable(
                     onClick = onStart,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(50.dp),
-                    shape = RoundedCornerShape(12.dp),
+                        .height(44.dp),
+                    shape = RoundedCornerShape(10.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = SucculentPrimary,
                         contentColor = Color.White
@@ -743,13 +713,13 @@ private fun DriveTrackingTable(
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(18.dp),
                         tint = Color.White
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "Start Manual Drive",
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -757,14 +727,14 @@ private fun DriveTrackingTable(
             } else {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Button(
                         onClick = { if (serviceState.isPaused) onResume() else onPause() },
                         modifier = Modifier
                             .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp),
+                            .height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = if (serviceState.isPaused) SucculentPrimary else SlateNeutral,
                             contentColor = Color.White
@@ -774,12 +744,13 @@ private fun DriveTrackingTable(
                         Icon(
                             imageVector = if (serviceState.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(16.dp),
                             tint = Color.White
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (serviceState.isPaused) "Resume" else "Pause",
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
@@ -789,8 +760,8 @@ private fun DriveTrackingTable(
                         onClick = onEnd,
                         modifier = Modifier
                             .weight(1f)
-                            .height(50.dp),
-                        shape = RoundedCornerShape(12.dp),
+                            .height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = SpeedRed,
                             contentColor = Color.White
@@ -800,12 +771,13 @@ private fun DriveTrackingTable(
                         Icon(
                             imageVector = Icons.Default.Stop,
                             contentDescription = null,
-                            modifier = Modifier.size(18.dp),
+                            modifier = Modifier.size(16.dp),
                             tint = Color.White
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "End Trip",
+                            style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
