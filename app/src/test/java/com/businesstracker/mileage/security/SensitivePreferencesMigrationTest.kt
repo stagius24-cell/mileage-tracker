@@ -23,8 +23,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import javax.crypto.SecretKey
 
-private val Context.testDataStore by preferencesDataStore(name = "tracking_prefs")
-
 @RunWith(RobolectricTestRunner::class)
 class SensitivePreferencesMigrationTest {
 
@@ -48,7 +46,7 @@ class SensitivePreferencesMigrationTest {
 
         // Clear any leftover DataStore keys
         kotlinx.coroutines.runBlocking {
-            context.testDataStore.edit { it.clear() }
+            preferencesManager.dataStore.edit { it.clear() }
         }
     }
 
@@ -59,14 +57,14 @@ class SensitivePreferencesMigrationTest {
         val sampleSecret = "cf_client_secret_abcdef"
 
         // 1. Seed legacy plaintext values directly into DataStore
-        context.testDataStore.edit { prefs ->
+        preferencesManager.dataStore.edit { prefs ->
             prefs[KEY_SHEETS_WEBHOOK_URL] = sampleWebhook
             prefs[KEY_CF_BEARER_TOKEN] = sampleBearer
             prefs[KEY_CF_CLIENT_SECRET] = sampleSecret
         }
 
         // Verify DataStore initially has the plaintext secrets
-        val initialData = context.testDataStore.data.first()
+        val initialData = preferencesManager.dataStore.data.first()
         assertEquals(sampleWebhook, initialData[KEY_SHEETS_WEBHOOK_URL])
         assertEquals(sampleBearer, initialData[KEY_CF_BEARER_TOKEN])
         assertEquals(sampleSecret, initialData[KEY_CF_CLIENT_SECRET])
@@ -86,7 +84,7 @@ class SensitivePreferencesMigrationTest {
         assertEquals(sampleSecret, secureStorageManager.getCfClientSecret())
 
         // 4. Verify plaintext keys have been permanently removed from DataStore
-        val postMigrationData = context.testDataStore.data.first()
+        val postMigrationData = preferencesManager.dataStore.data.first()
         assertFalse("Plaintext sheets_webhook_url must be removed", postMigrationData.contains(KEY_SHEETS_WEBHOOK_URL))
         assertFalse("Plaintext cf_bearer_token must be removed", postMigrationData.contains(KEY_CF_BEARER_TOKEN))
         assertFalse("Plaintext cf_client_secret must be removed", postMigrationData.contains(KEY_CF_CLIENT_SECRET))
@@ -103,7 +101,7 @@ class SensitivePreferencesMigrationTest {
         val sampleBearer = "cf_bearer_idempotent"
         val sampleSecret = "cf_secret_idempotent"
 
-        context.testDataStore.edit { prefs ->
+        preferencesManager.dataStore.edit { prefs ->
             prefs[KEY_SHEETS_WEBHOOK_URL] = sampleWebhook
             prefs[KEY_CF_BEARER_TOKEN] = sampleBearer
             prefs[KEY_CF_CLIENT_SECRET] = sampleSecret
@@ -129,7 +127,7 @@ class SensitivePreferencesMigrationTest {
         val sampleBearer = "cf_bearer_unmigrated"
         val sampleSecret = "cf_secret_unmigrated"
 
-        context.testDataStore.edit { prefs ->
+        preferencesManager.dataStore.edit { prefs ->
             prefs[KEY_SHEETS_WEBHOOK_URL] = sampleWebhook
             prefs[KEY_CF_BEARER_TOKEN] = sampleBearer
             prefs[KEY_CF_CLIENT_SECRET] = sampleSecret
@@ -154,7 +152,7 @@ class SensitivePreferencesMigrationTest {
 
         // CRITICAL DATA PRESERVATION RULE:
         // Plaintext must NOT be deleted from DataStore if encryption/verification failed!
-        val preservedData = context.testDataStore.data.first()
+        val preservedData = preferencesManager.dataStore.data.first()
         assertEquals(sampleWebhook, preservedData[KEY_SHEETS_WEBHOOK_URL])
         assertEquals(sampleBearer, preservedData[KEY_CF_BEARER_TOKEN])
         assertEquals(sampleSecret, preservedData[KEY_CF_CLIENT_SECRET])
@@ -175,7 +173,7 @@ class SensitivePreferencesMigrationTest {
     @Test
     fun migrateSensitivePreferences_concurrentCalls_doNotCorruptState() = runTest {
         val sampleWebhook = "https://script.google.com/macros/s/AKfycbx_concurrent/exec"
-        context.testDataStore.edit { prefs ->
+        preferencesManager.dataStore.edit { prefs ->
             prefs[KEY_SHEETS_WEBHOOK_URL] = sampleWebhook
         }
 
@@ -190,7 +188,7 @@ class SensitivePreferencesMigrationTest {
         assertTrue(res2.isCompleteSuccess)
         assertEquals(sampleWebhook, secureStorageManager.getSheetsWebhookUrl())
 
-        val postData = context.testDataStore.data.first()
+        val postData = preferencesManager.dataStore.data.first()
         assertFalse(postData.contains(KEY_SHEETS_WEBHOOK_URL))
     }
 }

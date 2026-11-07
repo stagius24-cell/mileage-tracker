@@ -61,6 +61,9 @@ class TrackingPreferencesManager @Inject constructor(
         this.secureStorageManager = manager
     }
 
+    @VisibleForTesting
+    internal val dataStore: DataStore<Preferences> get() = context.dataStore
+
     private val migrationMutex = Mutex()
     companion object {
         private val KEY_AUTO_TRACKING_ENABLED = booleanPreferencesKey("auto_tracking_enabled")

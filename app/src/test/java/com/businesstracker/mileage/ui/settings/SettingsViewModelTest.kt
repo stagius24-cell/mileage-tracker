@@ -158,11 +158,11 @@ class SettingsViewModelTest {
         }
         advanceUntilIdle()
 
+        val state = viewModel.uiState.first { it.deletionMessage != null }
         assertNotNull(callbackResult)
         assertTrue("Callback should be success", callbackResult!!.isSuccess)
         assertEquals(1, callbackResult!!.getOrNull())
 
-        val state = viewModel.uiState.first { it.deletionMessage != null }
         assertFalse("Loading state must be reset to false after deletion", state.isDeletingAllTrips)
         assertNotNull("Success message must be populated", state.deletionMessage)
         assertTrue("Message must mention deletion count", state.deletionMessage!!.contains("Successfully deleted 1 local trip records"))
@@ -267,7 +267,7 @@ class SettingsViewModelTest {
         advanceUntilIdle()
 
         // Verify Settings flows still reflect accurate values
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.first { it.defaultVehicle == "Rivian R1T" }
         assertEquals("Rivian R1T", state.defaultVehicle)
         assertTrue(state.autoTrackingEnabled)
         assertEquals("https://example.com/keep_webhook", state.sheetsWebhookUrl)
