@@ -1,0 +1,12 @@
+{
+  "source_branch": "feature/compact-trip-details-start-address",
+  "source_commit": "318af79208214fbc57968bcb99db8d1548c1e15b",
+  "ci_run_id": 42407787440,
+  "ci_artifact_id": 13588810410,
+  "package": "com.businesstracker.mileage.debug",
+  "version_code": 17,
+  "version_name": "1.0.16",
+  "sha256": "a2bed840f8e733b4da7d8cd69a59e3d86cfaecb2feec8e7a20d881b30f2c31e8",
+  "signature_schemes": ["v2", "v3"],
+  "non_signature_entries_verified": 969
+}
