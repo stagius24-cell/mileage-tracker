@@ -28,7 +28,7 @@ private val LightColorScheme = lightColorScheme(
     onBackground = Color(0xFF1E293B),
     surface = NeutralSurfaceLight,
     onSurface = Color(0xFF1E293B),
-    surfaceVariant = NeutralBackgroundLight,
+    surfaceVariant = Color(0xFFF1F5F9),
     outline = NeutralBorderLight
 )
 

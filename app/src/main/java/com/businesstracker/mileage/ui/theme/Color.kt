@@ -23,9 +23,9 @@ val SlateDark = Color(0xFF334155)
 val SlateBackgroundSoft = Color(0xFFF1F5F9)
 
 // Shared Surface & Backgrounds
-val NeutralBackgroundLight = Color(0xFFF8FAFC)
+val NeutralBackgroundLight = Color(0xFFE2E8F0)
 val NeutralSurfaceLight = Color(0xFFFFFFFF)
-val NeutralBorderLight = Color(0xFFE2E8F0)
+val NeutralBorderLight = Color(0xFFCBD5E1)
 
 val NeutralBackgroundDark = Color(0xFF0F172A)
 val NeutralSurfaceDark = Color(0xFF1E293B)

@@ -99,15 +99,14 @@ fun DashboardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // MileIQ-Style Header Bar (Month Picker + Document Icon & 3-Stat Bar)
             item {
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                        .fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // Top Row: Month Dropdown in Center, Document Icon on Right
@@ -120,7 +119,7 @@ fun DashboardScreen(
                                 .align(Alignment.Center)
                                 .clip(RoundedCornerShape(8.dp))
                                 .clickable { monthMenuExpanded = true }
-                                .padding(horizontal = 12.dp, vertical = 6.dp),
+                                .padding(horizontal = 10.dp, vertical = 2.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.Center
                         ) {
@@ -176,11 +175,11 @@ fun DashboardScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     // Time Filter Chips (Today | This Week | This Month | This Year | Custom)
                     LazyRow(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(TimeFilter.entries.toTypedArray()) { filter ->
@@ -268,7 +267,7 @@ fun DashboardScreen(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
                     // Secondary Summary Metrics (Total | Personal | Unreviewed)
                     Row(
