@@ -1,0 +1,15 @@
+{
+  "versionName": "1.0.7",
+  "versionCode": 8,
+  "package": "com.businesstracker.mileage.debug",
+  "sourceBranch": "feature/theme-selector",
+  "sourceCommit": "93f274f56d6524b80ac4c33350ca16d9a2b572a1",
+  "workflowRun": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42382014570",
+  "workflowArtifactId": 13577324097,
+  "unitTests": "debug and release suites passed",
+  "apkSha256": "06ad7ab3bdf10271871b513a50a9cdecd60c7b30dc740e5ebd577667b12bdd26",
+  "signingCertificateSha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "signatureSchemes": ["v2", "v3"],
+  "payloadComparison": "969 non-signature ZIP entries identical to CI artifact",
+  "physicalThemeValidation": "NOT RUN"
+}
