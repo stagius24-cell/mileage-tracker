@@ -32,8 +32,8 @@ internal class PrivateMapTileDownloader(
                     response.header("Expires"), response.header("Cache-Control"), System.currentTimeMillis()
                 )
                 // Honor the tile service's cache lifetime. No bulk/prefetch requests.
-                ByteArrayInputStream(bytes).use { cache?.saveFile(source, tileIndex, it, expires) }
-                source.getDrawable(ByteArrayInputStream(bytes))
+                val stored = ByteArrayInputStream(bytes).use { cache?.saveFile(source, tileIndex, it, expires) ?: true }
+                if (stored) source.getDrawable(ByteArrayInputStream(bytes)) else null
             }
         }
     } catch (_: Exception) {

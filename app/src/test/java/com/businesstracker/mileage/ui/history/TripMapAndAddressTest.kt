@@ -1,6 +1,7 @@
 package com.businesstracker.mileage.ui.history
 
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
@@ -8,6 +9,7 @@ import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.usecase.GeocodeLocationUseCase
 import com.businesstracker.mileage.domain.usecase.ResolveTripAddressesUseCase
 import com.businesstracker.mileage.ui.components.PrivateMapTileDownloader
+import com.businesstracker.mileage.ui.components.PrivateMapTileCache
 import com.businesstracker.mileage.ui.components.createRouteMap
 import com.businesstracker.mileage.ui.components.routeMapData
 import kotlinx.coroutines.Dispatchers
@@ -27,6 +29,7 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polyline
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.shadows.ShadowLog
+import java.io.ByteArrayOutputStream
 
 @RunWith(RobolectricTestRunner::class)
 class TripMapAndAddressTest {
@@ -155,5 +158,32 @@ class TripMapAndAddressTest {
         val messages = ShadowLog.getLogs().joinToString { it.msg }
         assertFalse(messages.contains("tile.openstreetmap.org"))
         assertFalse(messages.contains("/0/0/0"))
+    }
+
+    @Test fun tileCache_rejectsLateWritesWithoutLocationDiagnostics() {
+        val map = createRouteMap(context, routeMapData(trip()), allowNetwork = false)
+        map.onDetach()
+        val cache = PrivateMapTileCache()
+        cache.onDetach()
+        ShadowLog.clear()
+        assertFalse(cache.saveFile(TileSourceFactory.MAPNIK, 0L, byteArrayOf(1, 2).inputStream(), 1000L))
+        assertTrue(ShadowLog.getLogs().isEmpty())
+    }
+
+    @Test fun tileCache_roundTripsImageAndServerExpirationForTheMapReader() {
+        val map = createRouteMap(context, routeMapData(trip()), allowNetwork = false)
+        map.onDetach()
+        val cache = PrivateMapTileCache()
+        try {
+            val image = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
+            val bytes = ByteArrayOutputStream().apply { image.compress(Bitmap.CompressFormat.PNG, 100, this) }.toByteArray()
+            val expiration = System.currentTimeMillis() + 600_000L
+            assertTrue(cache.saveFile(TileSourceFactory.MAPNIK, 0L, bytes.inputStream(), expiration))
+            assertEquals(expiration, cache.getExpirationTimestamp(TileSourceFactory.MAPNIK, 0L))
+            assertNotNull(cache.loadTile(TileSourceFactory.MAPNIK, 0L))
+        } finally {
+            cache.remove(TileSourceFactory.MAPNIK, 0L)
+            cache.onDetach()
+        }
     }
 }

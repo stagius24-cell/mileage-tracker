@@ -14,8 +14,8 @@ mileage calculation, stored coordinate, or tracking-threshold changes are includ
   retain their lightweight route previews. Missing waypoint data shows markers
   rather than inventing a route between endpoints.
 - Tiles use HTTPS, an identifying user agent, private app cache storage, server
-  cache lifetimes, and viewport-only requests. The custom downloader avoids the
-  SDK's default tile URL/index logging. No extra Android permissions or API key
+  cache lifetimes, and viewport-only requests. The custom downloader and cache writer avoid the
+  SDK's default tile URL/index logging on network and cache-write failures. No extra Android permissions or API key
   are required. Map requests disclose the viewed tile area to OpenStreetMap.
 - Opening Trip Details retries missing endpoint addresses through Android's
   geocoder. Conditional SQL fills only missing address fields if the stored

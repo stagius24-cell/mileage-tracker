@@ -124,7 +124,7 @@ internal fun createRouteMap(context: Context, data: RouteMapData, allowNetwork: 
         isDebugTileProviders = false
         isDebugMapTileDownloader = false
     }
-    val provider = object : MapTileProviderBasic(context, TileSourceFactory.MAPNIK) {
+    val provider = object : MapTileProviderBasic(context, TileSourceFactory.MAPNIK, PrivateMapTileCache()) {
         override fun createDownloaderProvider(check: INetworkAvailablityCheck?, source: ITileSource): MapTileDownloader =
             super.createDownloaderProvider(check, source).apply { setTileDownloader(PrivateMapTileDownloader()) }
     }
