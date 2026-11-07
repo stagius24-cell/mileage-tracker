@@ -1,11 +1,11 @@
 # Phase 3 — Device Validation Results Log
 
 **Application:** Business Mileage Tracker (`com.businesstracker.mileage`)  
-**Tested Code Commit:** `ae45a060780ac1b39f390cdfbee77efc3e60b782` (HEAD: `f143a03`)  
+**Tested Code Commit:** `3da7b1b` (Phase 3 Keystore Fix)  
 **Branch:** `feature/phase-3-device-validation`  
-**Latest CI Run:** GitHub Actions Run #82 ([Run ID: 42326959870](https://github.com/stagius24-cell/mileage-tracker/actions/runs/42326959870))  
-**Test Build Artifact:** `app-debug.apk` (Artifact ID: `13555114395`, SHA-256: `a8243d7859ba48224d6a6270b85bd9de7c7eb991a11e7c21cc3c52c0582990ee`)  
-**Direct Artifact Download:** [GitHub Actions Run 82 Artifacts](https://github.com/stagius24-cell/mileage-tracker/actions/runs/42326959870/artifacts/13555114395)  
+**Latest CI Run:** GitHub Actions Run #96 ([Run ID: 42331748179](https://github.com/stagius24-cell/mileage-tracker/actions/runs/42331748179)) — **SUCCESS (Exit 0)**  
+**Test Build Artifact:** `app-debug.apk` (Artifact ID: `13558126934`, ~21.7 MB)  
+**Direct Artifact Download:** [GitHub Actions Run 96 Artifacts](https://github.com/stagius24-cell/mileage-tracker/actions/runs/42331748179)  
 **Current Phase 3 Status:** `TESTING IN PROGRESS`  
 **Last Updated:** 2026-11-06  
 
