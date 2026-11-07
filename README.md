@@ -7,8 +7,8 @@ Update for the APK from GitHub Actions run #96.
 - Adds emulated application shutdown cleanup so startup work cannot outlive the Robolectric context.
 - Debug/release unit tests and debug assembly are checked in the linked CI run. Physical-device automatic-stop validation is still required.
 
-Download BusinessMileageTracker-1.0.1-run96-update.apk from Assets and install it over your existing run #96 app. Do not uninstall or clear app data. If installation is still rejected, keep the original app installed and report the error.
+Download [BusinessMileageTracker-1.0.1-run96-update.apk](https://github.com/stagius24-cell/mileage-tracker/raw/refs/heads/downloads/run96-auto-stop-v1.0.1/BusinessMileageTracker-1.0.1-run96-update.apk) and install it over your existing run #96 app. Do not uninstall or clear app data. If installation is still rejected, keep the original app installed and report the error.
 
 CI: https://github.com/stagius24-cell/mileage-tracker/actions/runs/42343661557
 
-The CI intermediate APK is not the signed update; use the APK attached here.
+The CI intermediate APK is not the signed update; use the signed APK on this download branch.
