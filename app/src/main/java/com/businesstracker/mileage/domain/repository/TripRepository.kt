@@ -39,6 +39,6 @@ interface TripRepository {
     suspend fun markSynced(tripId: String, timestamp: Long)
 
     // User-Controlled Full Data Deletion (GAP-04)
-    suspend fun deleteAllTripData(): Int
-    fun clearExportCache(): Boolean
+    suspend fun deleteAllTripData(): Int = 0
+    fun clearExportCache(): Boolean = true
 }
