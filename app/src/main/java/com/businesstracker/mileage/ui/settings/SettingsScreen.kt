@@ -441,7 +441,18 @@ private fun SettingsSwitchRow(
             checked = checked,
             onCheckedChange = onCheckedChange,
             enabled = enabled,
-            colors = SwitchDefaults.colors(checkedThumbColor = SucculentPrimary)
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = SucculentPrimary,
+                checkedBorderColor = SucculentPrimary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+                uncheckedBorderColor = MaterialTheme.colorScheme.outline,
+                disabledCheckedThumbColor = Color.White.copy(alpha = 0.7f),
+                disabledCheckedTrackColor = SucculentPrimary.copy(alpha = 0.35f),
+                disabledUncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                disabledUncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            )
         )
     }
 }
