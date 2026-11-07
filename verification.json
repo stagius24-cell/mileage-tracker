@@ -1,0 +1,15 @@
+{
+  "versionName": "1.0.13",
+  "versionCode": 14,
+  "package": "com.businesstracker.mileage.debug",
+  "sourceBranch": "feature/stationary-auto-stop-fallback",
+  "sourceCommit": "adbecc5a171c81c11c040c754ee186c30b6f9188",
+  "workflowRun": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42403058909",
+  "workflowArtifactId": 13585669038,
+  "unitTests": "debug and release suites passed, including stationary auto-stop tests",
+  "apkSha256": "9392d36e3ac10839070c9e3d8b31ab29c51c6c2aa5dab82bb66a789d762e14ea",
+  "signingCertificateSha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "signatureSchemes": ["v2", "v3"],
+  "payloadComparison": "969 non-signature ZIP entries identical to CI artifact",
+  "physicalAutoStopValidation": "NOT RUN"
+}
