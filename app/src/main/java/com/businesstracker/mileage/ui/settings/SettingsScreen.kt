@@ -25,8 +25,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
+import com.businesstracker.mileage.ui.theme.SpeedRed
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
@@ -44,6 +53,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -69,7 +79,13 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    var isD1Expanded by remember { mutableStateOf(false) }
+    val localContext = androidx.compose.ui.platform.LocalContext.current
+
+    val googleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        viewModel.handleGoogleSignInResult(result.data)
+    }
 
     LazyColumn(
         modifier = modifier
@@ -455,6 +471,29 @@ fun SettingsScreen(
             }
         }
 
+        // Battery optimization shortcut
+        item {
+            OutlinedButton(
+                onClick = {
+                    try {
+                        val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                        localContext.startActivity(intent)
+                    } catch (_: Exception) {
+                        try {
+                            val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = android.net.Uri.fromParts("package", localContext.packageName, null)
+                            }
+                            localContext.startActivity(intent)
+                        } catch (_: Exception) {}
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Configure Battery Optimization")
+            }
+        }
+
         // Primary Vehicle Information Card (Tesla Model Y)
         item {
             Card(
@@ -494,8 +533,12 @@ fun SettingsScreen(
             }
         }
 
-        // Cloudflare D1 Database & Google Sheets Sync (Expandable Table, Collapsed by Default)
+        // Google Sheets Synchronization Card
         item {
+            var isSheetsCardExpanded by remember { mutableStateOf(true) }
+            val timeFmt = remember { SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault()) }
+            val lastSyncStr = if (state.sheetsLastSyncTime > 0) timeFmt.format(Date(state.sheetsLastSyncTime)) else "Never"
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -507,12 +550,11 @@ fun SettingsScreen(
                         .padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    // Clickable Header to Expand / Collapse Table
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { isD1Expanded = !isD1Expanded },
+                            .clickable { isSheetsCardExpanded = !isSheetsCardExpanded },
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -526,7 +568,7 @@ fun SettingsScreen(
                                 modifier = Modifier.size(38.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.CloudSync,
+                                    imageVector = Icons.Default.TableChart,
                                     contentDescription = null,
                                     tint = SucculentPrimary,
                                     modifier = Modifier.padding(8.dp)
@@ -534,27 +576,48 @@ fun SettingsScreen(
                             }
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
-                                Text(
-                                    text = "Cloudflare D1 Database & Sync",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = if (isD1Expanded) "Tap to collapse credentials" else "Tap to expand credentials table",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Google Sheets Sync",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    val isExpired = state.sheetsLastError?.contains("expired", ignoreCase = true) == true || state.sheetsLastError?.contains("reconnect", ignoreCase = true) == true
+                                    val statusText = when {
+                                        isExpired -> "Auth Expired"
+                                        state.isSheetsConnected -> "Connected"
+                                        else -> "Not Connected"
+                                    }
+                                    val statusColor = when {
+                                        isExpired -> SpeedRed
+                                        state.isSheetsConnected -> SucculentPrimary
+                                        else -> SlateNeutral
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = statusColor.copy(alpha = 0.15f)
+                                    ) {
+                                        Text(
+                                            text = statusText,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = statusColor
+                                        )
+                                    }
+                                }
                             }
                         }
 
                         val rotationAngle by animateFloatAsState(
-                            targetValue = if (isD1Expanded) 180f else 0f,
+                            targetValue = if (isSheetsCardExpanded) 180f else 0f,
                             animationSpec = tween(durationMillis = 400),
-                            label = "d1_expand_rotation"
+                            label = "sheets_expand_rotation"
                         )
                         Icon(
                             imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (isD1Expanded) "Collapse" else "Expand",
+                            contentDescription = if (isSheetsCardExpanded) "Collapse" else "Expand",
                             modifier = Modifier
                                 .size(28.dp)
                                 .rotate(rotationAngle),
@@ -562,9 +625,8 @@ fun SettingsScreen(
                         )
                     }
 
-                    // Collapsible Table Content
                     AnimatedVisibility(
-                        visible = isD1Expanded,
+                        visible = isSheetsCardExpanded,
                         enter = expandVertically(animationSpec = tween(400)) + fadeIn(animationSpec = tween(400)),
                         exit = shrinkVertically(animationSpec = tween(400)) + fadeOut(animationSpec = tween(400))
                     ) {
@@ -574,83 +636,134 @@ fun SettingsScreen(
                         ) {
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
 
+                            // Status Details
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column {
+                                    Text("Last Sync", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
+                                    Text(lastSyncStr, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text("Pending Uploads", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
+                                    Text("${state.pendingTripsCount} drives", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
+                                }
+                            }
+
+                            if (!state.sheetsLastError.isNullOrBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = SpeedRed.copy(alpha = 0.1f),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Error, contentDescription = null, tint = SpeedRed, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(text = state.sheetsLastError ?: "", color = SpeedRed, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                }
+                            }
+
+                            // Secure Google OAuth 2.0 Authorization Card (Google Play Services Integration)
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (state.hasOAuthCredential) SucculentPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Security,
-                                        contentDescription = null,
-                                        tint = SucculentPrimary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Syncs mileage logs directly into Cloudflare D1 and Google Sheets.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Icon(
+                                            imageVector = if (state.hasOAuthCredential) Icons.Default.CheckCircle else Icons.Default.Security,
+                                            contentDescription = null,
+                                            tint = if (state.hasOAuthCredential) SucculentPrimary else SlateNeutral,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = if (state.hasOAuthCredential) "Google Account" else "Connect Google Account",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            state.connectedAccountEmail?.takeIf { it.isNotBlank() }?.let { email ->
+                                                Text(
+                                                    text = email,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = SlateNeutral
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (state.hasOAuthCredential) {
+                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    val client = viewModel.getGoogleSignInClient()
+                                                    googleSignInLauncher.launch(client.signInIntent)
+                                                },
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                            ) {
+                                                Text("Switch", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                            OutlinedButton(
+                                                onClick = { viewModel.disconnectSheets() },
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                            ) {
+                                                Text("Disconnect", color = SpeedRed, style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+                                    } else {
+                                        Button(
+                                            onClick = {
+                                                val client = viewModel.getGoogleSignInClient()
+                                                googleSignInLauncher.launch(client.signInIntent)
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                                        ) {
+                                            Text("Connect", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
                                 }
                             }
 
                             OutlinedTextField(
-                                value = state.cfEndpoint,
-                                onValueChange = { viewModel.setCfEndpoint(it) },
-                                label = { Text("API Endpoint URL") },
+                                value = state.sheetsSpreadsheetId,
+                                onValueChange = { viewModel.setSheetsSpreadsheetId(it) },
+                                label = { Text("Google Spreadsheet ID") },
+                                placeholder = { Text("e.g. 1BxiMVs0XRA5nFMdKvBdBZjgmUUq...") },
                                 modifier = Modifier.fillMaxWidth(),
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp)
                             )
-
-                            OutlinedTextField(
-                                value = state.cfClientId,
-                                onValueChange = { viewModel.setCfClientId(it) },
-                                label = { Text("CF-Access-Client-Id") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            OutlinedTextField(
-                                value = state.cfClientSecret,
-                                onValueChange = { viewModel.setCfClientSecret(it) },
-                                label = { Text("CF-Access-Client-Secret") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            OutlinedTextField(
-                                value = state.cfBearerToken,
-                                onValueChange = { viewModel.setCfBearerToken(it) },
-                                label = { Text("Bearer Token (Optional)") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            Spacer(modifier = Modifier.height(4.dp))
 
                             Button(
-                                onClick = { viewModel.triggerSyncNow() },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(50.dp),
+                                onClick = { viewModel.syncSheetsNow() },
+                                enabled = !state.isSyncing,
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
                                 shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = SucculentPrimary,
-                                    contentColor = Color.White
-                                ),
-                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
                             ) {
-                                Icon(Icons.Default.CloudSync, contentDescription = null, tint = Color.White)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Trigger Cloud Sync Now", fontWeight = FontWeight.Bold, color = Color.White)
+                                if (state.isSyncing) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Syncing...", fontWeight = FontWeight.Bold, color = Color.White)
+                                } else {
+                                    Icon(Icons.Default.Sync, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Sync Sheets", fontWeight = FontWeight.Bold, color = Color.White)
+                                }
                             }
                         }
                     }

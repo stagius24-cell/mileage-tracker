@@ -35,8 +35,15 @@ class ActivityTransitionManager @Inject constructor(
         )
     }
 
+    @androidx.annotation.VisibleForTesting
+    internal var transitionRegistrar: (suspend () -> Boolean)? = null
+
+    @androidx.annotation.VisibleForTesting
+    internal var transitionUnregistrar: (suspend () -> Boolean)? = null
+
     @SuppressLint("MissingPermission")
     suspend fun registerTransitions(): Boolean {
+        transitionRegistrar?.let { return it.invoke() }
         // Enforce required permissions before registering background transitions
         val fineGranted = androidx.core.content.ContextCompat.checkSelfPermission(
             context,
@@ -90,6 +97,7 @@ class ActivityTransitionManager @Inject constructor(
 
     @SuppressLint("MissingPermission")
     suspend fun unregisterTransitions(): Boolean {
+        transitionUnregistrar?.let { return it.invoke() }
         return try {
             activityRecognitionClient.removeActivityTransitionUpdates(transitionPendingIntent).await()
             true

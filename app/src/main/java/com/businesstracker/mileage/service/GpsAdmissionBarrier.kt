@@ -8,11 +8,22 @@ package com.businesstracker.mileage.service
  * 3. closeAndWait() blocks until all in-flight callback batches complete their Room insertion.
  * 4. Eliminates race conditions between late-arriving GPS callbacks and service shutdown.
  */
-class GpsAdmissionBarrier {
+class GpsAdmissionBarrier(initialSequence: Long = 0L) {
     private val lock = Any()
     private var isClosed = false
     private var inFlightCount = 0
-    private var sequenceGenerator = 0L
+    private var sequenceGenerator = initialSequence
+
+    /**
+     * Initializes sequence number from durable storage if greater than current generator.
+     */
+    fun initializeSequence(seq: Long) {
+        synchronized(lock) {
+            if (seq > sequenceGenerator) {
+                sequenceGenerator = seq
+            }
+        }
+    }
 
     /**
      * Attempts to acquire a sequence number and increment the in-flight counter.
@@ -55,18 +66,23 @@ class GpsAdmissionBarrier {
 
     /**
      * Closes the admission barrier to new batches and blocks until all in-flight batches complete.
+     * If interrupted, sets an internal flag and CONTINUES waiting until inFlightCount == 0.
+     * Restores interrupted status only after all in-flight batches have completed.
      */
     fun closeAndWait() {
+        var interrupted = false
         synchronized(lock) {
             isClosed = true
             while (inFlightCount > 0) {
                 try {
                     (lock as Object).wait()
                 } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                    break
+                    interrupted = true
                 }
             }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt()
         }
     }
 

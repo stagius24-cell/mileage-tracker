@@ -71,6 +71,22 @@ class TripRepositoryImpl @Inject constructor(
         tripDao.classifyTrip(tripId, classification, businessEntity, purpose, notes)
     }
 
+    override suspend fun updateTripDetails(
+        tripId: String,
+        classification: String,
+        businessEntity: String,
+        purpose: String,
+        notes: String?
+    ) = withContext(ioDispatcher) {
+        tripDao.updateTripDetails(tripId, classification, businessEntity, purpose, notes)
+    }
+
+    override fun getTripsBySyncStatus(syncStatus: String): Flow<List<TripEntity>> =
+        tripDao.getTripsBySyncStatus(syncStatus).flowOn(ioDispatcher)
+
+    override fun getTripsByClassification(classification: String): Flow<List<TripEntity>> =
+        tripDao.getTripsByClassification(classification).flowOn(ioDispatcher)
+
     override suspend fun getPendingSyncTrips(): List<TripEntity> = withContext(ioDispatcher) {
         tripDao.getPendingSyncTrips()
     }

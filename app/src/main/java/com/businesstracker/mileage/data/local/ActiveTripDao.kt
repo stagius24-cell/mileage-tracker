@@ -59,13 +59,13 @@ interface ActiveTripDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWaypoints(waypoints: List<ActiveWaypointEntity>)
 
-    @Query("SELECT * FROM active_waypoints WHERE tripId = :tripId ORDER BY timestamp ASC, id ASC")
+    @Query("SELECT * FROM active_waypoints WHERE tripId = :tripId ORDER BY sequenceNumber ASC, id ASC")
     suspend fun getWaypointsForTrip(tripId: String): List<ActiveWaypointEntity>
 
-    @Query("SELECT * FROM active_waypoints WHERE tripId = :tripId ORDER BY timestamp ASC, id ASC")
+    @Query("SELECT * FROM active_waypoints WHERE tripId = :tripId ORDER BY sequenceNumber ASC, id ASC")
     fun observeWaypointsForTrip(tripId: String): Flow<List<ActiveWaypointEntity>>
 
-    @Query("SELECT * FROM active_waypoints WHERE tripId = :tripId ORDER BY timestamp DESC, id DESC LIMIT 1")
+    @Query("SELECT * FROM active_waypoints WHERE tripId = :tripId ORDER BY sequenceNumber DESC, id DESC LIMIT 1")
     suspend fun getLastWaypointForTrip(tripId: String): ActiveWaypointEntity?
 
     @Query("SELECT COUNT(*) FROM active_waypoints WHERE tripId = :tripId AND sourceFixId = :fixId")

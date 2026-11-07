@@ -9,9 +9,12 @@ import com.businesstracker.mileage.transition.ActivityTransitionManager
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -39,5 +42,14 @@ class MileageTrackerApp : Application(), Configuration.Provider {
                 activityTransitionManager.registerTransitions()
             }
         }
+    }
+
+    override fun onTerminate() {
+        // Android calls this only for emulated application shutdown. Wait for
+        // startup work to stop before its Android context is torn down.
+        runBlocking {
+            appScope.coroutineContext[Job]?.cancelAndJoin()
+        }
+        super.onTerminate()
     }
 }

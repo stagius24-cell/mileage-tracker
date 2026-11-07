@@ -14,8 +14,8 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 4
+        versionName = "1.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -23,6 +23,16 @@ android {
             arg("room.schemaLocation", "$projectDir/schemas")
             arg("room.incremental", "true")
             arg("room.expandProjection", "true")
+        }
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("keystore/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+            storeType = "PKCS12"
         }
     }
 
@@ -38,6 +48,7 @@ android {
         debug {
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -63,6 +74,15 @@ android {
     testOptions {
         unitTests {
             isIncludeAndroidResources = true
+            all {
+                it.testLogging {
+                    events("started", "passed", "skipped", "failed", "standardOut", "standardError")
+                    exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+                    showExceptions = true
+                    showCauses = true
+                    showStackTraces = true
+                }
+            }
         }
     }
 
@@ -102,8 +122,9 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
 
-    // Google Play Services Location & Activity Recognition
+    // Google Play Services Location & Activity Recognition & Auth
     implementation(libs.play.services.location)
+    implementation(libs.play.services.auth)
 
     // Dependency Injection - Hilt
     implementation(libs.hilt.android)
@@ -126,6 +147,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.gson)
+
+    // Street maps for saved routes; no API key or native map binaries required.
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
 
     // Unit Testing
     testImplementation(libs.junit)

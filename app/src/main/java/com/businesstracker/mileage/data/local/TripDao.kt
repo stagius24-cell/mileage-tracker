@@ -50,6 +50,19 @@ interface TripDao {
     @Query("SELECT * FROM trips WHERE id = :tripId LIMIT 1")
     suspend fun getTripById(tripId: String): TripEntity?
 
+    // Fill missing labels only. Never replace coordinates, trip totals, edits or existing addresses.
+    @Query("""
+        UPDATE trips SET
+          startAddress = CASE WHEN startAddress IS NULL OR TRIM(startAddress) = '' OR startAddress = 'Unknown Location'
+            THEN COALESCE(:startAddress, startAddress) ELSE startAddress END,
+          endAddress = CASE WHEN endAddress IS NULL OR TRIM(endAddress) = '' OR endAddress = 'Unknown Location'
+            THEN COALESCE(:endAddress, endAddress) ELSE endAddress END
+        WHERE id = :tripId AND startLatitude = :startLat AND startLongitude = :startLon
+          AND endLatitude = :endLat AND endLongitude = :endLon
+    """)
+    suspend fun fillMissingAddresses(tripId: String, startAddress: String?, endAddress: String?,
+        startLat: Double, startLon: Double, endLat: Double, endLon: Double): Int
+
     @Query("SELECT * FROM trips WHERE id = :tripId LIMIT 1")
     fun observeTripById(tripId: String): Flow<TripEntity?>
 
@@ -110,6 +123,12 @@ interface TripDao {
     """)
     fun getTripCountByClassification(): Flow<List<ClassificationCount>>
 
+    @Query("SELECT * FROM trips WHERE syncStatus = :syncStatus ORDER BY startTime DESC")
+    fun getTripsBySyncStatus(syncStatus: String): Flow<List<TripEntity>>
+
+    @Query("SELECT * FROM trips WHERE classification = :classification ORDER BY startTime DESC")
+    fun getTripsByClassification(classification: String): Flow<List<TripEntity>>
+
     // Pending sync queries for offline-first synchronization
     @Query("SELECT * FROM trips WHERE syncStatus = 'PENDING' ORDER BY startTime ASC")
     suspend fun getPendingSyncTrips(): List<TripEntity>
@@ -130,6 +149,25 @@ interface TripDao {
         WHERE id = :tripId
     """)
     suspend fun classifyTrip(
+        tripId: String,
+        classification: String,
+        businessEntity: String,
+        purpose: String,
+        notes: String?
+    )
+
+    @Query("""
+        UPDATE trips 
+        SET classification = :classification, 
+            businessEntity = :businessEntity, 
+            purpose = :purpose, 
+            businessMiles = CASE WHEN :classification = 'BUSINESS' THEN totalDistanceMiles ELSE 0.0 END,
+            calculatedDeduction = CASE WHEN :classification = 'BUSINESS' THEN totalDistanceMiles * applicableRate ELSE 0.0 END,
+            notes = :notes,
+            syncStatus = 'PENDING'
+        WHERE id = :tripId
+    """)
+    suspend fun updateTripDetails(
         tripId: String,
         classification: String,
         businessEntity: String,

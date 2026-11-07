@@ -30,12 +30,27 @@
     <application
         android:name=".MileageTrackerApp"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@android:drawable/ic_menu_compass"
         android:label="@string/app_name"
         android:roundIcon="@android:drawable/ic_menu_compass"
         android:supportsRtl="true"
         android:theme="@style/Theme.BusinessMileageTracker"
         tools:targetApi="35">
+
+        <!-- WorkManager must use MileageTrackerApp's HiltWorkerFactory. The default
+             initializer bypasses Configuration.Provider and cannot construct our
+             injected workers, including the four-minute vehicle-exit worker. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                tools:node="remove" />
+        </provider>
 
         <!-- Main Compose Activity -->
         <activity

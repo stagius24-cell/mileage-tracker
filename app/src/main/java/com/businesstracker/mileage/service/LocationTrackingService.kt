@@ -4,25 +4,35 @@ import android.annotation.SuppressLint
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
 import android.os.Build
+import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
+import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.GpsInboxDao
 import com.businesstracker.mileage.data.local.TripLifecycleDao
+import com.businesstracker.mileage.data.local.TripSequenceDao
+import com.businesstracker.mileage.data.local.entity.TripLifecycleEntity
+import com.businesstracker.mileage.data.local.entity.TripLifecycleState
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.coordinator.TripFinalizationCoordinator
 import com.businesstracker.mileage.domain.model.FilterResult
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.Waypoint
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
+import com.businesstracker.mileage.domain.service.BootCountProvider
 import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.FinalizeTripUseCase
+import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -96,18 +106,31 @@ class LocationTrackingService : Service() {
     @Inject lateinit var gpsInboxDao: GpsInboxDao
     @Inject lateinit var drainPendingGpsFixesUseCase: DrainPendingGpsFixesUseCase
     @Inject lateinit var tripLifecycleDao: TripLifecycleDao
+    @Inject lateinit var tripSequenceDao: TripSequenceDao
+    @Inject lateinit var database: ExpenseTrackerDatabase
+    @Inject lateinit var bootCountProvider: BootCountProvider
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val safeBootCountProvider: BootCountProvider
+        get() = if (::bootCountProvider.isInitialized) bootCountProvider else object : BootCountProvider {
+            override fun getBootCount(): Int = 1
+        }
+
+    private var serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var wakeLock: PowerManager.WakeLock? = null
     private var tickerJob: Job? = null
     private var gpsLocationQueue: GpsLocationQueue? = null
+    private var gpsHandlerThread: HandlerThread? = null
+
+    @VisibleForTesting
+    internal var lastRecoveryJob: Job? = null
 
     private val isStopping = AtomicBoolean(false)
     private var currentTripId: String = ""
     private var trackingMethod: TrackingMethod = TrackingMethod.AUTO_DETECTED
     private var tripStartTime: Long = 0L
     private var totalDistanceMeters: Double = 0.0
+    private var currentSpeedMph: Double = 0.0
     private var lastAcceptedWaypoint: Waypoint? = null
     private var anchorWaypoint: Waypoint? = null
     private var isDisplacementConfirmed: Boolean = false
@@ -127,7 +150,11 @@ class LocationTrackingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        if (intent == null || intent.action == null) {
+            recoverActiveTripSession()
+            return START_STICKY
+        }
+        when (intent.action) {
             ACTION_START -> {
                 val tripId = intent.getStringExtra(EXTRA_TRIP_ID) ?: UUID.randomUUID().toString()
                 val methodStr = intent.getStringExtra(EXTRA_TRACKING_METHOD) ?: TrackingMethod.AUTO_DETECTED.value
@@ -137,8 +164,234 @@ class LocationTrackingService : Service() {
             ACTION_PAUSE -> pauseTracking()
             ACTION_RESUME -> resumeTracking()
             ACTION_STOP -> stopTracking()
+            else -> recoverActiveTripSession()
         }
         return START_STICKY // System will recreate service if killed, enabling interruption recovery
+    }
+
+    @VisibleForTesting
+    internal var locationUpdatesRegistrar: (suspend () -> Boolean)? = null
+
+    @VisibleForTesting
+    internal fun attachContextForTesting(context: Context) {
+        attachBaseContext(context)
+    }
+
+    /**
+     * Safe process recreation recovery when the OS restarts the service with a null intent.
+     * Enters foreground promptly on main thread before lengthy operations to satisfy Android 14+ requirements.
+     * Inspects persistent active trip and recovers existing trip state without generating new IDs.
+     */
+    private fun recoverActiveTripSession() {
+        if (isStartingOrRunning.getAndSet(true)) {
+            // Service already starting or tracking
+            return
+        }
+
+        // Check location permissions safely without crashing
+        val hasFine = ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarse = ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasFine && !hasCoarse) {
+            Log.w("LocationTrackingService", "Location permissions missing during process recreation; preserving active trip state.")
+            lastRecoveryJob = serviceScope.launch(ioDispatcher) {
+                try {
+                    val activeTrip = activeTripRepository.getActiveTrip()
+                    if (activeTrip != null) {
+                        try {
+                            tripLifecycleDao.updateState(
+                                activeTrip.id,
+                                TripLifecycleState.RECOVERY_REQUIRED.value
+                            )
+                        } catch (_: Exception) {}
+                        _serviceState.value = TrackingServiceState(
+                            isTracking = false,
+                            isRecoveryRequired = true,
+                            tripId = activeTrip.id,
+                            distanceMiles = activeTrip.totalDistanceMeters * 0.000621371,
+                            statusMessage = "Drive Interrupted: Permission Required"
+                        )
+                    }
+                } catch (_: Exception) {}
+            }
+            isStartingOrRunning.set(false)
+            stopSelf()
+            return
+        }
+
+        // Satisfy Android foreground service timing requirements immediately on main thread
+        val initialNotification = notificationHelper.buildTrackingNotification(
+            distanceMiles = 0.0,
+            durationMillis = 0L,
+            isPaused = false
+        )
+        val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        } else {
+            0
+        }
+        ServiceCompat.startForeground(
+            this,
+            NotificationHelper.NOTIFICATION_TRACKING_ID,
+            initialNotification,
+            foregroundType
+        )
+
+        lastRecoveryJob = serviceScope.launch(ioDispatcher) {
+            try {
+                val activeTrip = activeTripRepository.getActiveTrip()
+                if (activeTrip == null) {
+                    Log.d("LocationTrackingService", "Null intent received but no active trip found; stopping service.")
+                    isStartingOrRunning.set(false)
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return@launch
+                }
+
+                isStopping.set(false)
+                currentTripId = activeTrip.id
+                trackingMethod = TrackingMethod.fromString(activeTrip.trackingMethod)
+                tripStartTime = activeTrip.startTime
+                totalDistanceMeters = activeTrip.totalDistanceMeters
+                isPaused = activeTrip.isPaused
+                currentSpeedMph = 0.0
+
+                preferencesManager.setActiveTripId(currentTripId)
+
+                // Update notification with recovered metrics
+                notificationHelper.updateTrackingNotification(
+                    distanceMiles = totalDistanceMeters * 0.000621371,
+                    durationMillis = maxOf(0L, System.currentTimeMillis() - tripStartTime),
+                    isPaused = isPaused
+                )
+
+                // Recover waypoints and displacement confirmation state
+                val recoveredWaypoints = activeTripRepository.getWaypoints(currentTripId)
+                waypointCount = recoveredWaypoints.size
+                lastAcceptedWaypoint = recoveredWaypoints.lastOrNull()
+                anchorWaypoint = recoveredWaypoints.firstOrNull() ?: if (activeTrip.startLatitude != 0.0 || activeTrip.startLongitude != 0.0) {
+                    Waypoint(
+                        latitude = activeTrip.startLatitude,
+                        longitude = activeTrip.startLongitude,
+                        timestamp = activeTrip.startTime
+                    )
+                } else null
+
+                if (totalDistanceMeters >= 200.0) {
+                    isDisplacementConfirmed = true
+                } else if (anchorWaypoint != null && lastAcceptedWaypoint != null) {
+                    val distanceResults = FloatArray(1)
+                    Location.distanceBetween(
+                        anchorWaypoint!!.latitude,
+                        anchorWaypoint!!.longitude,
+                        lastAcceptedWaypoint!!.latitude,
+                        lastAcceptedWaypoint!!.longitude,
+                        distanceResults
+                    )
+                    if (distanceResults[0] >= 200.0f) {
+                        isDisplacementConfirmed = true
+                    }
+                }
+
+                // Initialize durable Room-backed GPS location queue
+                gpsLocationQueue?.stopConsumer()
+                gpsLocationQueue = GpsLocationQueue(
+                    scope = serviceScope,
+                    dispatcher = ioDispatcher,
+                    gpsInboxDao = gpsInboxDao,
+                    tripIdProvider = { currentTripId },
+                    batchFetchLimit = 100,
+                    drainPendingGpsFixesUseCase = drainPendingGpsFixesUseCase,
+                    tripSequenceDao = tripSequenceDao,
+                    database = database,
+                    bootCountProvider = safeBootCountProvider,
+                    onFixProcessed = { result ->
+                        handleFixProcessed(result)
+                    }
+                )
+
+                // Reconcile sequence monotonically
+                val initialSeq = tripSequenceDao.getReconciledMaxSequence(currentTripId)
+                gpsLocationQueue?.admissionBarrier?.initializeSequence(initialSeq)
+
+                // Update authoritative lifecycle in Room
+                try {
+                    tripLifecycleDao.insertOrUpdate(
+                        TripLifecycleEntity(
+                            tripId = currentTripId,
+                            state = TripLifecycleState.TRACKING.value
+                        )
+                    )
+                } catch (_: Exception) {}
+
+                // Drain any pending GPS inbox records before accepting new fixes
+                try {
+                    drainPendingGpsFixesUseCase.drain(
+                        tripId = currentTripId,
+                        batchLimit = 100,
+                        onFixProcessed = { handleFixProcessed(it) }
+                    )
+                } catch (e: Exception) {
+                    Log.w("LocationTrackingService", "Error draining inbox fixes during recovery: ${e.message}")
+                }
+
+                if (isPaused) {
+                    _serviceState.value = TrackingServiceState(
+                        isTracking = true,
+                        isPaused = true,
+                        tripId = currentTripId,
+                        distanceMeters = totalDistanceMeters,
+                        distanceMiles = totalDistanceMeters * 0.000621371,
+                        durationMillis = maxOf(0L, System.currentTimeMillis() - tripStartTime),
+                        currentSpeedMph = 0.0,
+                        lastWaypoint = lastAcceptedWaypoint,
+                        waypointCount = waypointCount
+                    )
+                    return@launch
+                }
+
+                // Register location updates with FusedLocationProviderClient on dedicated HandlerThread
+                val updatesRegistered = startLocationUpdates()
+                if (isStopping.get()) {
+                    return@launch
+                }
+
+                if (!updatesRegistered) {
+                    Log.e("LocationTrackingService", "Location updates could not be started during recovery; preserving active trip state.")
+                    try {
+                        tripLifecycleDao.updateState(currentTripId, TripLifecycleState.RECOVERY_REQUIRED.value)
+                    } catch (_: Exception) {}
+                    _serviceState.value = TrackingServiceState(
+                        isTracking = false,
+                        isRecoveryRequired = true,
+                        tripId = currentTripId,
+                        distanceMeters = totalDistanceMeters,
+                        distanceMiles = totalDistanceMeters * 0.000621371,
+                        durationMillis = maxOf(0L, System.currentTimeMillis() - tripStartTime),
+                        statusMessage = "Drive Interrupted: Registration Failed"
+                    )
+                    cleanupFailedStartup()
+                    return@launch
+                }
+
+                startDurationTicker()
+                updateServiceState()
+            } catch (e: Exception) {
+                Log.e("LocationTrackingService", "Failed during process recreation recovery", e)
+                try {
+                    if (currentTripId.isNotEmpty()) {
+                        tripLifecycleDao.updateState(currentTripId, TripLifecycleState.RECOVERY_REQUIRED.value)
+                    }
+                } catch (_: Exception) {}
+                cleanupFailedStartup()
+            }
+        }
     }
 
     private fun startTracking(
@@ -185,10 +438,14 @@ class LocationTrackingService : Service() {
                 gpsInboxDao = gpsInboxDao,
                 tripIdProvider = { currentTripId },
                 batchFetchLimit = 100,
-                drainPendingGpsFixesUseCase = drainPendingGpsFixesUseCase
-            ) { location ->
-                handleLocationSerialized(location)
-            }
+                drainPendingGpsFixesUseCase = drainPendingGpsFixesUseCase,
+                tripSequenceDao = tripSequenceDao,
+                database = database,
+                bootCountProvider = safeBootCountProvider,
+                onFixProcessed = { result ->
+                    handleFixProcessed(result)
+                }
+            )
 
             serviceScope.launch(ioDispatcher) {
                 try {
@@ -203,6 +460,10 @@ class LocationTrackingService : Service() {
                     currentTripId = activeTrip.id
                     preferencesManager.setActiveTripId(currentTripId)
 
+                    // Crash-safe sequence reconciliation across trip_sequence, gps_inbox, and active_waypoints
+                    val initialSeq = tripSequenceDao.getReconciledMaxSequence(currentTripId)
+                    gpsLocationQueue?.admissionBarrier?.initializeSequence(initialSeq)
+
                     // Track authoritative lifecycle in Room
                     try {
                         tripLifecycleDao.insertOrUpdate(
@@ -213,19 +474,37 @@ class LocationTrackingService : Service() {
                         )
                     } catch (_: Exception) {}
 
-                    val existingTrip = if (activeTrip.totalDistanceMeters > 0.0 || activeTrip.id != tripId) activeTrip else null
+                    val recoveredWaypoints = activeTripRepository.getWaypoints(currentTripId)
+                    val isRecoveredSession = activeTrip.totalDistanceMeters > 0.0 || activeTrip.id != tripId || recoveredWaypoints.isNotEmpty()
 
-                    if (existingTrip != null) {
+                    if (isRecoveredSession) {
                         // Resume in-progress trip after process termination or system recovery
-                        tripStartTime = existingTrip.startTime
-                        totalDistanceMeters = existingTrip.totalDistanceMeters
-                        if (totalDistanceMeters >= 200.0) {
-                            isDisplacementConfirmed = true
-                        }
-                        val recoveredWaypoints = activeTripRepository.getWaypoints(currentTripId)
+                        tripStartTime = activeTrip.startTime
+                        totalDistanceMeters = activeTrip.totalDistanceMeters
                         waypointCount = recoveredWaypoints.size
                         lastAcceptedWaypoint = recoveredWaypoints.lastOrNull()
-                        anchorWaypoint = recoveredWaypoints.firstOrNull()
+                        anchorWaypoint = recoveredWaypoints.firstOrNull() ?: if (activeTrip.startLatitude != 0.0 || activeTrip.startLongitude != 0.0) {
+                            Waypoint(
+                                latitude = activeTrip.startLatitude,
+                                longitude = activeTrip.startLongitude,
+                                timestamp = activeTrip.startTime
+                            )
+                        } else null
+                        if (totalDistanceMeters >= 200.0) {
+                            isDisplacementConfirmed = true
+                        } else if (anchorWaypoint != null && lastAcceptedWaypoint != null) {
+                            val distanceResults = FloatArray(1)
+                            Location.distanceBetween(
+                                anchorWaypoint!!.latitude,
+                                anchorWaypoint!!.longitude,
+                                lastAcceptedWaypoint!!.latitude,
+                                lastAcceptedWaypoint!!.longitude,
+                                distanceResults
+                            )
+                            if (distanceResults[0] >= 200.0f) {
+                                isDisplacementConfirmed = true
+                            }
+                        }
                     } else {
                         // New tracking session
                         tripStartTime = activeTrip.startTime
@@ -235,6 +514,7 @@ class LocationTrackingService : Service() {
                         anchorWaypoint = null
                         isDisplacementConfirmed = false
                     }
+                    currentSpeedMph = 0.0
 
                     // Register location updates with FusedLocationProviderClient asynchronously
                     val updatesRegistered = startLocationUpdates()
@@ -272,16 +552,38 @@ class LocationTrackingService : Service() {
         try {
             fusedLocationClient.removeLocationUpdates(locationCallback)
         } catch (_: Exception) {}
+        stopGpsHandlerThread()
         if (wakeLock?.isHeld == true) {
             try { wakeLock?.release() } catch (_: Exception) {}
         }
-        _serviceState.value = TrackingServiceState(isTracking = false)
+        currentTripId = ""
+        totalDistanceMeters = 0.0
+        waypointCount = 0
+        lastAcceptedWaypoint = null
+        anchorWaypoint = null
+        isDisplacementConfirmed = false
+        currentSpeedMph = 0.0
+        if (!_serviceState.value.isRecoveryRequired) {
+            _serviceState.value = TrackingServiceState(isTracking = false)
+        }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
+    private fun stopGpsHandlerThread() {
+        gpsHandlerThread?.let { thread ->
+            try {
+                thread.quitSafely()
+            } catch (_: Exception) {
+                try { thread.quit() } catch (_: Exception) {}
+            }
+        }
+        gpsHandlerThread = null
+    }
+
     @SuppressLint("MissingPermission")
     private suspend fun startLocationUpdates(): Boolean {
+        locationUpdatesRegistrar?.let { return it.invoke() }
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
             LOCATION_INTERVAL_MILLIS
@@ -291,71 +593,99 @@ class LocationTrackingService : Service() {
         }.build()
 
         return try {
+            stopGpsHandlerThread()
+            val thread = HandlerThread("GpsLocationHandlerThread").apply { start() }
+            gpsHandlerThread = thread
+
             fusedLocationClient.requestLocationUpdates(
                 locationRequest,
                 locationCallback,
-                Looper.getMainLooper()
+                thread.looper
             ).await()
             true
         } catch (e: SecurityException) {
+            stopGpsHandlerThread()
             Log.e("LocationTrackingService", "Location permission missing when requesting updates", e)
             false
         } catch (e: Exception) {
+            stopGpsHandlerThread()
             Log.e("LocationTrackingService", "Failed to register location updates: ${e.message}", e)
             false
         }
     }
 
-    private suspend fun handleLocationSerialized(location: Location) {
-        if (isPaused) return
-
-        when (val filterResult = filterGpsPointUseCase.filter(location, lastAcceptedWaypoint)) {
-            is FilterResult.Accepted -> {
-                val acceptedWaypoint = filterResult.waypoint
-                totalDistanceMeters += filterResult.deltaDistanceMeters
-                lastAcceptedWaypoint = acceptedWaypoint
+    @VisibleForTesting
+    internal fun handleFixProcessed(result: GpsInboxProcessor.ProcessResult) {
+        when (result) {
+            is GpsInboxProcessor.ProcessResult.Accepted -> {
+                if (result.tripId != currentTripId) return
+                totalDistanceMeters = result.totalDistanceMeters
                 waypointCount++
 
+                val wp = result.waypoint ?: Waypoint(
+                    latitude = result.lastLatitude,
+                    longitude = result.lastLongitude,
+                    speed = (result.speedMph / 2.23694).toFloat()
+                )
+                lastAcceptedWaypoint = wp
                 if (anchorWaypoint == null) {
-                    anchorWaypoint = acceptedWaypoint
+                    anchorWaypoint = wp
                 }
 
-                // Continuous drive displacement verification:
-                // Verifies movement >= 200m during an uninterrupted drive
                 if (!isDisplacementConfirmed) {
-                    val distanceResults = FloatArray(1)
-                    Location.distanceBetween(
-                        anchorWaypoint!!.latitude,
-                        anchorWaypoint!!.longitude,
-                        acceptedWaypoint.latitude,
-                        acceptedWaypoint.longitude,
-                        distanceResults
-                    )
-                    if (distanceResults[0] >= 200.0f || totalDistanceMeters >= 200.0) {
+                    if (result.isDisplacementConfirmed || totalDistanceMeters >= 200.0) {
                         isDisplacementConfirmed = true
+                    } else if (anchorWaypoint != null) {
+                        val distanceResults = FloatArray(1)
+                        Location.distanceBetween(
+                            anchorWaypoint!!.latitude,
+                            anchorWaypoint!!.longitude,
+                            wp.latitude,
+                            wp.longitude,
+                            distanceResults
+                        )
+                        if (distanceResults[0] >= 200.0f) {
+                            isDisplacementConfirmed = true
+                        }
                     }
                 }
 
-                // Interruption Recovery: Persist waypoint and progress directly to Room
-                activeTripRepository.recordWaypoint(currentTripId, acceptedWaypoint)
-                activeTripRepository.updateTripProgress(
-                    tripId = currentTripId,
-                    distanceMeters = totalDistanceMeters,
-                    latitude = acceptedWaypoint.latitude,
-                    longitude = acceptedWaypoint.longitude,
-                    timestamp = acceptedWaypoint.timestamp
-                )
-
-                updateNotificationAndState(filterResult.speedMph)
+                currentSpeedMph = result.speedMph
+                updateNotificationAndState(currentSpeedMph)
             }
-            is FilterResult.Rejected -> {
-                // Ignore stationary jitter or inaccurate points without corrupting mileage
+            is GpsInboxProcessor.ProcessResult.AlreadyConsumed -> {
+                if (result.tripId != currentTripId) return
+                // Synchronize from authoritative persisted values without adding mileage twice
+                totalDistanceMeters = result.totalDistanceMeters
+                if (result.isDisplacementConfirmed || totalDistanceMeters >= 200.0) {
+                    isDisplacementConfirmed = true
+                }
+                result.waypoint?.let { wp ->
+                    if (lastAcceptedWaypoint == null) {
+                        lastAcceptedWaypoint = wp
+                    }
+                    if (anchorWaypoint == null) {
+                        anchorWaypoint = wp
+                    }
+                }
+                updateNotificationAndState(currentSpeedMph)
+            }
+            is GpsInboxProcessor.ProcessResult.Rejected -> {
+                // Rejected: do not increase distance or waypoint count
+            }
+            is GpsInboxProcessor.ProcessResult.StaleOrphanAcknowledged -> {
+                // Stale orphan: do not update active-trip tracking state
+            }
+            is GpsInboxProcessor.ProcessResult.UnresolvedOrphan,
+            is GpsInboxProcessor.ProcessResult.TripNotFound -> {
+                // Unresolved orphan or processing failure: preserve current recovery-required behavior
             }
         }
     }
 
     private fun pauseTracking() {
         isPaused = true
+        currentSpeedMph = 0.0
         serviceScope.launch(ioDispatcher) {
             activeTripRepository.setPaused(currentTripId, true)
             updateNotificationAndState(0.0)
@@ -364,6 +694,7 @@ class LocationTrackingService : Service() {
 
     private fun resumeTracking() {
         isPaused = false
+        currentSpeedMph = 0.0
         serviceScope.launch(ioDispatcher) {
             activeTripRepository.setPaused(currentTripId, false)
             updateNotificationAndState(0.0)
@@ -389,6 +720,7 @@ class LocationTrackingService : Service() {
             } catch (e: Exception) {
                 Log.w("LocationTrackingService", "Error removing location updates: ${e.message}")
             }
+            stopGpsHandlerThread()
 
             // 2. Stop ticker
             tickerJob?.cancel()
@@ -425,13 +757,19 @@ class LocationTrackingService : Service() {
             // Persisted active trip in Room is authoritative
             val persistedActiveTrip = activeTripRepository.getActiveTrip()
             val totalMeters = persistedActiveTrip?.totalDistanceMeters ?: totalDistanceMeters
-            val distanceMiles = totalMeters / METERS_PER_MILE
-            if (!isDisplacementConfirmed && totalMeters < 200.0 && distanceMiles < 0.12) {
+            if (!isDisplacementConfirmed && totalMeters < 200.0) {
                 if (currentTripId.isNotEmpty()) {
                     tripFinalizationCoordinator.discardFalseTrip(currentTripId)
                     preferencesManager.clearActiveTripId(currentTripId)
                 }
                 _serviceState.value = TrackingServiceState(isTracking = false)
+                currentTripId = ""
+                totalDistanceMeters = 0.0
+                waypointCount = 0
+                lastAcceptedWaypoint = null
+                anchorWaypoint = null
+                isDisplacementConfirmed = false
+                currentSpeedMph = 0.0
                 isStartingOrRunning.set(false)
                 isStopping.set(false)
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -451,6 +789,13 @@ class LocationTrackingService : Service() {
             }
 
             _serviceState.value = TrackingServiceState(isTracking = false)
+            currentTripId = ""
+            totalDistanceMeters = 0.0
+            waypointCount = 0
+            lastAcceptedWaypoint = null
+            anchorWaypoint = null
+            isDisplacementConfirmed = false
+            currentSpeedMph = 0.0
             isStartingOrRunning.set(false)
             isStopping.set(false)
             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -464,15 +809,16 @@ class LocationTrackingService : Service() {
             while (isActive) {
                 delay(1000L)
                 if (!isPaused) {
-                    updateNotificationAndState(lastAcceptedWaypoint?.speed?.toDouble() ?: 0.0)
+                    updateNotificationAndState(currentSpeedMph)
                 }
             }
         }
     }
 
-    private fun updateNotificationAndState(currentSpeedMph: Double) {
+    private fun updateNotificationAndState(speedMph: Double) {
+        currentSpeedMph = speedMph
         val miles = totalDistanceMeters / METERS_PER_MILE
-        val duration = System.currentTimeMillis() - tripStartTime
+        val duration = if (tripStartTime > 0) System.currentTimeMillis() - tripStartTime else 0L
 
         notificationHelper.updateTrackingNotification(
             distanceMiles = miles,
@@ -494,21 +840,75 @@ class LocationTrackingService : Service() {
     }
 
     private fun updateServiceState() {
-        val miles = totalDistanceMeters / METERS_PER_MILE
-        val duration = if (tripStartTime > 0) System.currentTimeMillis() - tripStartTime else 0L
-
-        _serviceState.value = TrackingServiceState(
-            isTracking = true,
-            isPaused = isPaused,
-            tripId = currentTripId,
-            distanceMeters = totalDistanceMeters,
-            distanceMiles = miles,
-            durationMillis = duration,
-            currentSpeedMph = 0.0,
-            lastWaypoint = lastAcceptedWaypoint,
-            waypointCount = waypointCount
-        )
+        updateNotificationAndState(currentSpeedMph)
     }
+
+    @VisibleForTesting
+    internal fun setTestDependencies(
+        activeTripRepo: ActiveTripRepository,
+        helper: NotificationHelper,
+        tripId: String = "test-trip",
+        startTime: Long = System.currentTimeMillis(),
+        lifecycleDao: TripLifecycleDao? = null,
+        inboxDao: GpsInboxDao? = null,
+        drainUseCase: DrainPendingGpsFixesUseCase? = null,
+        seqDao: TripSequenceDao? = null,
+        db: ExpenseTrackerDatabase? = null,
+        prefs: TrackingPreferencesManager? = null,
+        bootProvider: BootCountProvider? = null,
+        fusedClient: FusedLocationProviderClient? = null,
+        dispatcher: CoroutineDispatcher? = null,
+        scope: CoroutineScope? = null
+    ) {
+        this.activeTripRepository = activeTripRepo
+        this.notificationHelper = helper
+        this.currentTripId = tripId
+        this.tripStartTime = startTime
+        lifecycleDao?.let { this.tripLifecycleDao = it }
+        inboxDao?.let { this.gpsInboxDao = it }
+        drainUseCase?.let { this.drainPendingGpsFixesUseCase = it }
+        seqDao?.let { this.tripSequenceDao = it }
+        db?.let { this.database = it }
+        prefs?.let { this.preferencesManager = it }
+        this.bootCountProvider = bootProvider ?: safeBootCountProvider
+        fusedClient?.let { this.fusedLocationClient = it }
+        dispatcher?.let { this.ioDispatcher = it }
+        scope?.let { this.serviceScope = it }
+    }
+
+    @VisibleForTesting
+    internal fun setTrackingStateForTesting(
+        tripId: String,
+        distanceMeters: Double = 0.0,
+        waypoints: Int = 0,
+        lastWaypoint: Waypoint? = null,
+        anchor: Waypoint? = null,
+        displacementConfirmed: Boolean = false,
+        startTime: Long = System.currentTimeMillis()
+    ) {
+        this.currentTripId = tripId
+        this.totalDistanceMeters = distanceMeters
+        this.waypointCount = waypoints
+        this.lastAcceptedWaypoint = lastWaypoint
+        this.anchorWaypoint = anchor
+        this.isDisplacementConfirmed = displacementConfirmed
+        this.tripStartTime = startTime
+        updateServiceState()
+    }
+
+    @VisibleForTesting
+    internal fun recoverActiveTripSessionForTesting() {
+        recoverActiveTripSession()
+    }
+
+    @VisibleForTesting
+    internal fun getInternalDistanceMeters(): Double = totalDistanceMeters
+
+    @VisibleForTesting
+    internal fun getInternalWaypointCount(): Int = waypointCount
+
+    @VisibleForTesting
+    internal fun getInternalDisplacementConfirmed(): Boolean = isDisplacementConfirmed
 
     private fun acquireWakeLock() {
         val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -531,6 +931,7 @@ class LocationTrackingService : Service() {
         try {
             fusedLocationClient.removeLocationUpdates(locationCallback)
         } catch (_: Exception) {}
+        stopGpsHandlerThread()
         if (wakeLock?.isHeld == true) {
             try { wakeLock?.release() } catch (_: Exception) {}
         }

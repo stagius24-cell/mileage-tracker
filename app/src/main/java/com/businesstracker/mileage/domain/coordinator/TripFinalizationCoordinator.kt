@@ -91,12 +91,12 @@ class TripFinalizationCoordinator @Inject constructor(
                 TripLifecycleEntity(tripId = tripId, state = TripLifecycleState.DRAINING.value)
             )
 
-            // 5. Check false trip threshold using persisted Room data: discard movement < 200m (0.12 miles)
-            val totalDistanceMiles = (activeTrip.totalDistanceMeters / METERS_PER_MILE).roundToDecimals(2)
-            if (totalDistanceMiles < 0.12 && activeTrip.totalDistanceMeters < 200.0) {
+            // 5. Check false trip threshold using persisted Room data: discard movement < 200m
+            if (activeTrip.totalDistanceMeters < 200.0) {
                 discardFalseTripInternal(tripId)
                 return@withLock null
             }
+            val totalDistanceMiles = (activeTrip.totalDistanceMeters / METERS_PER_MILE).roundToDecimals(2)
 
             val waypointsEntities = database.activeTripDao().getWaypointsForTrip(tripId)
             val waypoints = waypointsEntities.map { entity ->
@@ -106,7 +106,10 @@ class TripFinalizationCoordinator @Inject constructor(
                     altitude = entity.altitude,
                     accuracy = entity.accuracy,
                     speed = entity.speed,
-                    timestamp = entity.timestamp
+                    timestamp = entity.timestamp,
+                    sequenceNumber = entity.sequenceNumber,
+                    elapsedRealtimeNanos = entity.elapsedRealtimeNanos,
+                    bootCount = entity.bootCount
                 )
             }
 
@@ -184,6 +187,7 @@ class TripFinalizationCoordinator @Inject constructor(
                 database.activeTripDao().deleteActiveTripById(tripId)
                 database.activeTripDao().deleteWaypointsForTrip(tripId)
                 database.gpsInboxDao().deleteFixesForTrip(tripId)
+                database.tripSequenceDao().deleteSequenceForTrip(tripId)
             }
 
             preferencesManager.clearActiveTripId(activeTrip.id)
@@ -206,6 +210,7 @@ class TripFinalizationCoordinator @Inject constructor(
                 database.activeTripDao().deleteActiveTripById(tripId)
                 database.activeTripDao().deleteWaypointsForTrip(tripId)
                 database.gpsInboxDao().deleteFixesForTrip(tripId)
+                database.tripSequenceDao().deleteSequenceForTrip(tripId)
             }
             preferencesManager.clearActiveTripId(tripId)
             preferencesManager.recordDiscardedTrip(tripId)

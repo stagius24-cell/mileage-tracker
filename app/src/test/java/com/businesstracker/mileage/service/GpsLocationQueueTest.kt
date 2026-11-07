@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.GpsInboxDao
+import com.businesstracker.mileage.data.local.TripSequenceDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -13,6 +14,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Before
@@ -27,6 +29,7 @@ class GpsLocationQueueTest {
 
     private lateinit var database: ExpenseTrackerDatabase
     private lateinit var gpsInboxDao: GpsInboxDao
+    private lateinit var tripSequenceDao: TripSequenceDao
     private val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     @Before
@@ -36,6 +39,7 @@ class GpsLocationQueueTest {
             .allowMainThreadQueries()
             .build()
         gpsInboxDao = database.gpsInboxDao()
+        tripSequenceDao = database.tripSequenceDao()
     }
 
     @After
@@ -265,9 +269,10 @@ class GpsLocationQueueTest {
     @Test
     fun processTermination_preservesPendingFixesInPersistentStorage_forRecovery() = runBlocking {
         val tripId = "trip-process-death"
-        val initialLocations = (1..15).map { createLocation(37.0, -122.0, it * 1000L) }
+        val totalCount = 30
+        val initialLocations = (1..totalCount).map { createLocation(37.0, -122.0, it * 1000L) }
 
-        // Start first service queue session
+        // Start first service queue session with artificial delay to ensure items remain in flight
         val processedFirstSession = Collections.synchronizedList(mutableListOf<Long>())
         val queue1 = GpsLocationQueue(
             scope = testScope,
@@ -276,6 +281,7 @@ class GpsLocationQueueTest {
             tripIdProvider = { tripId },
             batchFetchLimit = 5
         ) { loc ->
+            kotlinx.coroutines.delay(20)
             processedFirstSession.add(loc.time)
         }
 
@@ -303,7 +309,7 @@ class GpsLocationQueueTest {
         queue2.drainAndClose()
 
         val totalProcessed = processedFirstSession.size + processedRecoverySession.size
-        assertEquals("Total processed fixes across process termination must equal 15", 15, totalProcessed)
+        assertEquals("Total processed fixes across process termination must equal $totalCount", totalCount, totalProcessed)
         assertEquals("Inbox must be completely clean after recovery", 0, gpsInboxDao.getPendingCount(tripId))
     }
 
@@ -416,5 +422,445 @@ class GpsLocationQueueTest {
             listOf(10_000_000L, 20_000_000L, 30_000_000L),
             processedTimes.toList()
         )
+    }
+
+    @Test
+    fun queueRecreation_withPersistentSequence_continuesMonotonicallyWithoutDuplicates() = runBlocking {
+        val tripId = "trip-seq-persist"
+        val tripSequenceDao = database.tripSequenceDao()
+
+        val processedSequences = Collections.synchronizedList(mutableListOf<Long>())
+
+        // Initial queue session: process 2 batches
+        val queue1 = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = tripSequenceDao.getLastSequenceNumber(tripId) ?: 0L,
+            batchFetchLimit = 10
+        ) { loc ->
+            // query fix to inspect sequence number
+        }
+
+        queue1.enqueueBatchSync(listOf(createLocation(37.33, -121.88, 1000L)))
+        queue1.enqueueBatchSync(listOf(createLocation(37.34, -121.89, 2000L)))
+        queue1.drainAndClose()
+
+        val lastSeq = tripSequenceDao.getLastSequenceNumber(tripId)
+        assertEquals("Persistent sequence after 2 batches must be 2", 2L, lastSeq)
+
+        // Queue recreated (simulating service restart / debounce cancellation)
+        val queue2 = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = tripSequenceDao.getLastSequenceNumber(tripId) ?: 0L,
+            batchFetchLimit = 10
+        ) { loc ->
+            // consumer drains fix from SQLite
+        }
+
+        queue2.enqueueBatchSync(listOf(createLocation(37.35, -121.90, 3000L)))
+        queue2.enqueueBatchSync(listOf(createLocation(37.36, -121.91, 4000L)))
+        queue2.drainAndClose()
+
+        val finalSeq = tripSequenceDao.getLastSequenceNumber(tripId)
+        assertEquals("Persistent sequence across queue recreation must advance monotonically to 4", 4L, finalSeq)
+    }
+
+    @Test
+    fun admissionBarrier_closeAndWait_doesNotReturnPrematurelyOnThreadInterruption() {
+        val barrier = GpsAdmissionBarrier(initialSequence = 0L)
+        val token = barrier.acquireSequenceOrNull()
+        assertEquals(1L, token)
+        assertEquals(1, barrier.inFlight())
+
+        val closedFlag = java.util.concurrent.atomic.AtomicBoolean(false)
+        val waitThread = Thread {
+            barrier.closeAndWait()
+            closedFlag.set(true)
+        }
+
+        waitThread.start()
+        Thread.sleep(50) // Let waitThread enter closeAndWait() wait loop
+
+        // Interrupt the thread while inFlight == 1
+        waitThread.interrupt()
+        Thread.sleep(50)
+
+        // Barrier must NOT return prematurely on interruption while inFlight > 0
+        assertTrue("closeAndWait must NOT return while inFlight > 0 even if interrupted", !closedFlag.get())
+        assertTrue("Thread should still be alive waiting for inFlight == 0", waitThread.isAlive)
+
+        // Release in-flight sequence
+        barrier.releaseSequence()
+        waitThread.join(1000)
+
+        assertTrue("closeAndWait must complete after in-flight reaches 0", closedFlag.get())
+    }
+
+    // REGRESSION TEST 1: Unfinished ingestion crash: fix in inbox without sequence update -> new queue initializes above pending fix
+    @Test
+    fun unfinishedIngestionCrash_newQueueInitializesAbovePendingInboxFix() = runBlocking {
+        val tripId = "trip-unfinish-crash"
+        // Simulate crash: inbox has durable fix with sequence 42L, but trip_sequence was at 10L
+        tripSequenceDao.insertOrUpdate(
+            com.businesstracker.mileage.data.local.entity.TripSequenceEntity(tripId = tripId, lastSequenceNumber = 10L)
+        )
+        gpsInboxDao.insertFix(
+            com.businesstracker.mileage.data.local.entity.GpsInboxEntity(
+                tripId = tripId,
+                sequenceNumber = 42L,
+                elapsedRealtimeNanos = 42000L,
+                latitude = 37.33,
+                longitude = -121.88,
+                timestamp = 42000L
+            )
+        )
+
+        // New queue restarts and reconciles sequence from durable storage
+        val reconciledSeq = tripSequenceDao.getReconciledMaxSequence(tripId)
+        assertEquals("Reconciled sequence must detect pending inbox fix with sequence 42", 42L, reconciledSeq)
+
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = reconciledSeq,
+            database = database,
+            batchFetchLimit = 10
+        )
+
+        val nextSeq = queue.admissionBarrier.acquireSequenceOrNull()
+        assertNotNull(nextSeq)
+        assertTrue("Newly admitted fix must have sequence > 42L, got $nextSeq", nextSeq!! > 42L)
+        assertEquals(43L, nextSeq)
+    }
+
+    // REGRESSION TEST 2: Pending inbox fixes are processed in original sequence order before newly admitted fixes
+    @Test
+    fun pendingInboxFixes_processedInOriginalSequenceOrder_beforeNewlyAdmittedFixes() = runBlocking {
+        val tripId = "trip-order-pending-new"
+        // Seed pending fixes from a prior session with sequences 1 and 2
+        gpsInboxDao.insertFix(
+            com.businesstracker.mileage.data.local.entity.GpsInboxEntity(
+                tripId = tripId,
+                sequenceNumber = 1L,
+                elapsedRealtimeNanos = 1000L,
+                latitude = 37.33,
+                longitude = -121.88,
+                timestamp = 1000L
+            )
+        )
+        gpsInboxDao.insertFix(
+            com.businesstracker.mileage.data.local.entity.GpsInboxEntity(
+                tripId = tripId,
+                sequenceNumber = 2L,
+                elapsedRealtimeNanos = 2000L,
+                latitude = 37.34,
+                longitude = -121.89,
+                timestamp = 2000L
+            )
+        )
+        tripSequenceDao.advanceSequence(tripId, 2L)
+
+        val processedSequences = Collections.synchronizedList(mutableListOf<Long>())
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = tripSequenceDao.getReconciledMaxSequence(tripId),
+            database = database,
+            batchFetchLimit = 10
+        ) { loc ->
+            processedSequences.add(loc.time)
+        }
+
+        // Admit new fixes (time 3000L and 4000L)
+        queue.enqueueBatchSync(listOf(createLocation(37.35, -121.90, 3000L)))
+        queue.enqueueBatchSync(listOf(createLocation(37.36, -121.91, 4000L)))
+
+        queue.drainAndClose()
+
+        assertEquals("All 4 fixes must be processed", 4, processedSequences.size)
+        assertEquals("Fixes must be processed in strict chronological and sequence order", listOf(1000L, 2000L, 3000L, 4000L), processedSequences)
+    }
+
+    // REGRESSION TEST 3: Recreating the queue does not reuse sequence numbers
+    @Test
+    fun queueRecreation_doesNotReuseSequenceNumbers() = runBlocking {
+        val tripId = "trip-recreate-no-reuse"
+        val queue1 = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = tripSequenceDao.getReconciledMaxSequence(tripId),
+            database = database,
+            batchFetchLimit = 10
+        ) { /* process */ }
+
+        queue1.enqueueBatchSync(listOf(createLocation(37.33, -121.88, 1000L)))
+        queue1.enqueueBatchSync(listOf(createLocation(37.34, -121.89, 2000L)))
+        queue1.drainAndClose()
+
+        val seqAfterQ1 = tripSequenceDao.getReconciledMaxSequence(tripId)
+        assertEquals(2L, seqAfterQ1)
+
+        // Queue 2 created
+        val queue2 = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = tripSequenceDao.getReconciledMaxSequence(tripId),
+            database = database,
+            batchFetchLimit = 10
+        ) { /* process */ }
+
+        val q2Seq1 = queue2.admissionBarrier.acquireSequenceOrNull()
+        val q2Seq2 = queue2.admissionBarrier.acquireSequenceOrNull()
+        queue2.admissionBarrier.releaseSequence()
+        queue2.admissionBarrier.releaseSequence()
+
+        assertEquals(3L, q2Seq1)
+        assertEquals(4L, q2Seq2)
+        assertTrue("Sequence numbers must never be reused across queue recreation", q2Seq1!! > seqAfterQ1)
+    }
+
+    // REGRESSION TEST 4: A failed inbox insertion does not create an inconsistent sequence state or allow sequence reuse
+    @Test
+    fun failedInboxInsertion_doesNotCreateInconsistentSequenceState_orAllowReuse() = runBlocking {
+        val tripId = "trip-fail-insertion"
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = 0L,
+            database = database,
+            batchFetchLimit = 10
+        )
+
+        // Manually acquire sequence 1 (simulating failed insertion)
+        val failedSeq = queue.admissionBarrier.acquireSequenceOrNull()
+        assertEquals(1L, failedSeq)
+        queue.admissionBarrier.releaseSequence()
+
+        // Next acquire must produce sequence 2 (never reuses sequence 1)
+        val nextSeq = queue.admissionBarrier.acquireSequenceOrNull()
+        assertEquals(2L, nextSeq)
+        queue.admissionBarrier.releaseSequence()
+
+        // Verify sequence table does not commit inconsistent sequence state
+        val persistedSeq = tripSequenceDao.getLastSequenceNumber(tripId) ?: 0L
+        assertEquals(0L, persistedSeq)
+    }
+
+    // REGRESSION TEST 5: Concurrent producers cannot allocate duplicate sequence numbers
+    @Test
+    fun concurrentProducers_cannotAllocateDuplicateSequenceNumbers() = runBlocking {
+        val barrier = GpsAdmissionBarrier(initialSequence = 0L)
+        val threadCount = 20
+        val iterationsPerThread = 50
+        val allocatedSequences = Collections.synchronizedList(mutableListOf<Long>())
+
+        val threads = (1..threadCount).map {
+            Thread {
+                for (i in 1..iterationsPerThread) {
+                    val seq = barrier.acquireSequenceOrNull()
+                    if (seq != null) {
+                        allocatedSequences.add(seq)
+                        barrier.releaseSequence()
+                    }
+                }
+            }
+        }
+
+        threads.forEach { it.start() }
+        threads.forEach { it.join() }
+
+        val totalExpected = threadCount * iterationsPerThread
+        assertEquals("Total allocated count must match expected", totalExpected, allocatedSequences.size)
+        val uniqueSequences = allocatedSequences.toSet()
+        assertEquals("All concurrently allocated sequences must be distinct (zero duplicates)", totalExpected, uniqueSequences.size)
+    }
+
+    // REGRESSION TEST 6: Database read/write failures are surfaced and do not silently reset sequence state
+    @Test
+    fun databaseReadWriteFailures_areSurfaced_andDoNotResetSequenceState() = runBlocking {
+        val tripId = "trip-surfaced-error"
+        tripSequenceDao.advanceSequence(tripId, 15L)
+
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = 15L,
+            database = database,
+            batchFetchLimit = 10
+        ) { loc ->
+            throw java.sql.SQLException("Simulated database write failure during consumer processing")
+        }
+
+        queue.enqueueBatchSync(listOf(createLocation(37.33, -121.88, 1000L)))
+
+        try {
+            queue.drainAndClose()
+            fail("Database failure must be surfaced to caller as IllegalStateException")
+        } catch (e: IllegalStateException) {
+            assertTrue("Exception message must describe waypoint processing failure", e.message?.contains("Waypoint processing failed") == true)
+        }
+
+        // Verify sequence state did not silently reset to 0
+        val currentSeq = tripSequenceDao.getReconciledMaxSequence(tripId)
+        assertTrue("Sequence state must not reset to 0 on failure, was $currentSeq", currentSeq >= 15L)
+    }
+
+    // REGRESSION TEST 7: Rejected-only batch still persists sequence to trip_sequence, and restart does not reuse it
+    @Test
+    fun rejectedOnlyBatch_stillPersistsSequence_andRestartDoesNotReuseIt() = runBlocking {
+        val tripId = "trip-rejected-batch"
+        val queue1 = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = tripSequenceDao.getReconciledMaxSequence(tripId),
+            database = database,
+            batchFetchLimit = 10
+        ) { loc ->
+            // Fix is consumed/deleted from inbox, but no waypoint is inserted (simulating rejection)
+        }
+
+        // 1. Enqueue a batch
+        queue1.enqueueBatchSync(listOf(
+            createLocation(37.33, -121.88, 1000L),
+            createLocation(37.34, -121.89, 2000L)
+        ))
+
+        // 2. Process and delete every inbox fix without creating any waypoint
+        queue1.drainAndClose()
+        assertEquals("Inbox must have 0 pending fixes after drain", 0, gpsInboxDao.getPendingCount(tripId))
+        assertEquals("No waypoints should have been inserted into active_waypoints", 0, database.activeTripDao().getWaypointsForTrip(tripId).size)
+
+        // 3. Verify trip_sequence.lastSequenceNumber still records the batch sequence
+        val storedSeq = tripSequenceDao.getLastSequenceNumber(tripId)
+        assertEquals("trip_sequence must record batch sequence 1 even when all fixes were rejected", 1L, storedSeq)
+
+        // 4. Recreate the queue using the reconciled sequence
+        val queue2 = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = gpsInboxDao,
+            tripIdProvider = { tripId },
+            tripSequenceDao = tripSequenceDao,
+            initialSequence = tripSequenceDao.getReconciledMaxSequence(tripId),
+            database = database,
+            batchFetchLimit = 10
+        )
+
+        // 5. Verify the next sequence is strictly greater than the previous sequence
+        val nextSeq = queue2.admissionBarrier.acquireSequenceOrNull()
+        assertNotNull(nextSeq)
+        assertTrue("Next sequence ($nextSeq) must be strictly greater than previous sequence (1L)", nextSeq!! > 1L)
+        assertEquals(2L, nextSeq)
+    }
+
+    // DIRECT DAO TEST: advanceSequence writes sequence table even when corresponding inbox record already exists
+    @Test
+    fun advanceSequence_persistsSequence_evenWhenInboxRecordAlreadyExists() = runBlocking {
+        val tripId = "trip-advance-seq-dao"
+        // 1. Insert an inbox record with sequence 5
+        gpsInboxDao.insertFix(
+            com.businesstracker.mileage.data.local.entity.GpsInboxEntity(
+                tripId = tripId,
+                sequenceNumber = 5L,
+                elapsedRealtimeNanos = 5000L,
+                latitude = 37.33,
+                longitude = -121.88,
+                timestamp = 5000L
+            )
+        )
+
+        // trip_sequence table initially has null/no record
+        val seqBefore = tripSequenceDao.getLastSequenceNumber(tripId)
+        assertEquals(null, seqBefore)
+
+        // 2. Call advanceSequence(tripId, 5L)
+        tripSequenceDao.advanceSequence(tripId, 5L)
+
+        // 3. Verify advanceSequence actually wrote 5L to trip_sequence table
+        val seqAfter = tripSequenceDao.getLastSequenceNumber(tripId)
+        assertEquals("advanceSequence must write to trip_sequence table even when inbox record already exists with sequence 5", 5L, seqAfter)
+    }
+
+    // REGRESSION TEST: Forwarding onFixProcessed through GpsLocationQueue with drainPendingGpsFixesUseCase
+    @Test
+    fun queueProcessing_withDrainUseCase_forwardsFixResultToOnFixProcessed() = runBlocking {
+        val tripId = "trip-forward-callback"
+        database.activeTripDao().insertActiveTrip(
+            com.businesstracker.mileage.data.local.entity.ActiveTripEntity(
+                id = tripId,
+                startTime = 1000L,
+                startLatitude = 37.3382,
+                startLongitude = -121.8863,
+                lastLatitude = 37.3382,
+                lastLongitude = -121.8863,
+                lastTimestamp = 1000L,
+                totalDistanceMeters = 0.0,
+                trackingMethod = "AUTO_DETECTED"
+            )
+        )
+
+        val processor = com.businesstracker.mileage.domain.usecase.GpsInboxProcessor(
+            database = database,
+            activeTripDao = database.activeTripDao(),
+            gpsInboxDao = database.gpsInboxDao(),
+            filterGpsPointUseCase = com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase(object : com.businesstracker.mileage.domain.service.BootCountProvider {
+                override fun getBootCount(): Int = 1
+            })
+        )
+        val drainUseCase = com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase(
+            gpsInboxDao = database.gpsInboxDao(),
+            gpsInboxProcessor = processor
+        )
+
+        val processedResults = java.util.Collections.synchronizedList(mutableListOf<com.businesstracker.mileage.domain.usecase.GpsInboxProcessor.ProcessResult>())
+
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = database.gpsInboxDao(),
+            tripIdProvider = { tripId },
+            batchFetchLimit = 10,
+            drainPendingGpsFixesUseCase = drainUseCase,
+            tripSequenceDao = database.tripSequenceDao(),
+            database = database,
+            onFixProcessed = { result ->
+                processedResults.add(result)
+            }
+        )
+
+        val loc = createLocation(37.3400, -121.8863, 10_000L)
+        queue.enqueueBatchSync(listOf(loc))
+        queue.drainAndClose()
+
+        assertEquals("onFixProcessed must be called for the enqueued fix", 1, processedResults.size)
+        assertTrue(processedResults[0] is com.businesstracker.mileage.domain.usecase.GpsInboxProcessor.ProcessResult.Accepted)
     }
 }

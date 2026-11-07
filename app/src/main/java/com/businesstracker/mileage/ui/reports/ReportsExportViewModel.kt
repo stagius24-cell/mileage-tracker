@@ -38,16 +38,44 @@ data class MonthSummary(
     val unreviewedDrives: Int
 )
 
+data class EntityBreakdown(
+    val entityName: String,
+    val tripCount: Int,
+    val totalMiles: Double,
+    val businessMiles: Double,
+    val totalDeduction: Double
+)
+
+data class PurposeBreakdown(
+    val purpose: String,
+    val count: Int,
+    val totalMiles: Double
+)
+
 data class ReportsUiState(
     val selectedYear: String = "2026",
     val availableYears: List<String> = listOf("2026"),
+    val selectedBusinessEntity: String = "ALL", // "ALL", "MySucculentCorner", "Personal"
+    val selectedClassification: String = "ALL",   // "ALL", "BUSINESS", "PERSONAL", "UNREVIEWED"
+    val customStartDate: String = "",
+    val customEndDate: String = "",
     val monthlySummaries: List<MonthSummary> = emptyList(),
+    val filteredTrips: List<TripEntity> = emptyList(),
+    // Summary metrics
+    val totalTrips: Int = 0,
+    val totalMiles: Double = 0.0,
+    val businessMiles: Double = 0.0,
+    val personalMiles: Double = 0.0,
+    val unreviewedMiles: Double = 0.0,
+    val totalDeduction: Double = 0.0,
+    val averageDistance: Double = 0.0,
+    val entityBreakdown: List<EntityBreakdown> = emptyList(),
+    val purposeBreakdown: List<PurposeBreakdown> = emptyList(),
+    val isExporting: Boolean = false,
     val ytdLoggedDeduction: Double = 0.0,
     val ytdPotentialDeduction: Double = 0.0,
     val ytdBusinessMiles: Double = 0.0,
-    val ytdTotalMiles: Double = 0.0,
-    val ytdDrivesCount: Int = 0,
-    val allBusinessTrips: List<TripEntity> = emptyList()
+    val ytdTotalMiles: Double = 0.0
 )
 
 @HiltViewModel
@@ -59,25 +87,82 @@ class ReportsExportViewModel @Inject constructor(
 
     private val currentYear = LocalDate.now().year.toString()
     private val _selectedYear = MutableStateFlow(currentYear)
+    private val _selectedBusinessEntity = MutableStateFlow("ALL")
+    private val _selectedClassification = MutableStateFlow("ALL")
+    private val _customStartDate = MutableStateFlow("")
+    private val _customEndDate = MutableStateFlow("")
+    private val _isExporting = MutableStateFlow(false)
 
     val uiState: StateFlow<ReportsUiState> = combine(
         tripRepository.getAllTrips(),
-        _selectedYear
-    ) { trips, year ->
-        val yearTrips = trips.filter { it.date.startsWith(year) }
-        val businessTrips = yearTrips.filter { it.classification == "BUSINESS" }
-        val unreviewedTrips = yearTrips.filter { it.classification == "UNREVIEWED" }
+        _selectedYear,
+        _selectedBusinessEntity,
+        _selectedClassification
+    ) { trips, year, entity, classification ->
+        FilterArgs(trips, year, entity, classification)
+    }.combine(
+        combine(_customStartDate, _customEndDate, _isExporting) { start, end, exporting ->
+            DateArgs(start, end, exporting)
+        }
+    ) { filterArgs, dateArgs ->
+        val trips = filterArgs.trips
+        val year = filterArgs.year
+        val entity = filterArgs.entity
+        val classification = filterArgs.classification
+        val start = dateArgs.start
+        val end = dateArgs.end
 
-        val ytdBusinessMiles = businessTrips.sumOf { it.businessMiles }
-        val ytdTotalMiles = yearTrips.sumOf { it.totalDistanceMiles }
-        val ytdLoggedDeduction = businessTrips.sumOf { it.calculatedDeduction }
-        val ytdUnreviewedPotential = unreviewedTrips.sumOf { it.totalDistanceMiles * it.applicableRate }
-        val ytdPotentialDeduction = ytdLoggedDeduction + ytdUnreviewedPotential
+        // Apply filters
+        val filtered = trips.filter { trip ->
+            val matchesYear = year == "ALL" || trip.date.startsWith(year)
+            val matchesEntity = entity == "ALL" || trip.businessEntity.equals(entity, ignoreCase = true)
+            val matchesClassification = classification == "ALL" || trip.classification.equals(classification, ignoreCase = true)
+            val matchesStartDate = start.isBlank() || trip.date >= start
+            val matchesEndDate = end.isBlank() || trip.date <= end
 
-        // Group trips by month
+            matchesYear && matchesEntity && matchesClassification && matchesStartDate && matchesEndDate
+        }
+
+        val businessTrips = filtered.filter { it.classification == "BUSINESS" }
+        val personalTrips = filtered.filter { it.classification == "PERSONAL" }
+        val unreviewedTrips = filtered.filter { it.classification == "UNREVIEWED" }
+
+        val totalMiles = round(filtered.sumOf { it.totalDistanceMiles })
+        val bMiles = round(businessTrips.sumOf { it.businessMiles })
+        val pMiles = round(personalTrips.sumOf { it.totalDistanceMiles })
+        val uMiles = round(unreviewedTrips.sumOf { it.totalDistanceMiles })
+        val totalDeduction = round(businessTrips.sumOf { it.calculatedDeduction })
+        val averageDist = if (filtered.isNotEmpty()) round(totalMiles / filtered.size) else 0.0
+
+        // Entity Breakdown
+        val entityGroups = filtered.groupBy { it.businessEntity }
+        val entityBreakdowns = entityGroups.map { (name, grpTrips) ->
+            val bGrp = grpTrips.filter { it.classification == "BUSINESS" }
+            EntityBreakdown(
+                entityName = name,
+                tripCount = grpTrips.size,
+                totalMiles = round(grpTrips.sumOf { it.totalDistanceMiles }),
+                businessMiles = round(bGrp.sumOf { it.businessMiles }),
+                totalDeduction = round(bGrp.sumOf { it.calculatedDeduction })
+            )
+        }.sortedByDescending { it.businessMiles }
+
+        // Purpose Breakdown
+        val purposeGroups = filtered.groupBy { it.purpose }
+        val purposeBreakdowns = purposeGroups.map { (p, grpTrips) ->
+            PurposeBreakdown(
+                purpose = p,
+                count = grpTrips.size,
+                totalMiles = round(grpTrips.sumOf { it.totalDistanceMiles })
+            )
+        }.sortedByDescending { it.totalMiles }
+
+        // Monthly Summaries (for the selected year)
+        val yearTrips = trips.filter { year == "ALL" || it.date.startsWith(year) }
         val monthsMap = mutableMapOf<String, MutableList<TripEntity>>()
         for (i in 1..12) {
-            val monthKey = String.format(Locale.US, "%s-%02d", year, i)
+            val yrPrefix = if (year == "ALL") currentYear else year
+            val monthKey = String.format(Locale.US, "%s-%02d", yrPrefix, i)
             monthsMap[monthKey] = mutableListOf()
         }
         for (trip in yearTrips) {
@@ -88,20 +173,23 @@ class ReportsExportViewModel @Inject constructor(
         }
 
         val summaries = monthsMap.keys.sortedDescending().mapNotNull { monthIso ->
-            val monthTrips = monthsMap[monthIso].orEmpty()
-            val mBusiness = monthTrips.filter { it.classification == "BUSINESS" }
-            val mUnreviewed = monthTrips.filter { it.classification == "UNREVIEWED" }
+            val mTrips = monthsMap[monthIso].orEmpty()
+            val mBusiness = mTrips.filter { it.classification == "BUSINESS" }
+            val mUnreviewed = mTrips.filter { it.classification == "UNREVIEWED" }
 
-            val totalDrives = monthTrips.size
-            val totalMiles = monthTrips.sumOf { it.totalDistanceMiles }
-            val bMiles = mBusiness.sumOf { it.businessMiles }
+            val totalDrives = mTrips.size
+            val mTotalMiles = mTrips.sumOf { it.totalDistanceMiles }
+            val mBMiles = mBusiness.sumOf { it.businessMiles }
             val logged = mBusiness.sumOf { it.calculatedDeduction }
-            val unreviewedPotential = mUnreviewed.sumOf { it.totalDistanceMiles * it.applicableRate }
+            val unreviewedPotential = mUnreviewed.sumOf { trip ->
+                val rate = if (trip.applicableRate > 0.0) trip.applicableRate else rateUseCase.getApplicableRate(trip.date)
+                trip.totalDistanceMiles * rate
+            }
             val potential = logged + unreviewedPotential
 
             val percent = if (potential > 0.0) {
                 ((logged / potential) * 100).toInt().coerceIn(0, 100)
-            } else if (totalMiles > 0) {
+            } else if (mTotalMiles > 0) {
                 0
             } else {
                 100
@@ -114,45 +202,61 @@ class ReportsExportViewModel @Inject constructor(
             }
             val monthName = monthDate.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
 
-            // Show month if it has drives or is within the current year up to now
-            val currentMonthIso = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"))
-            if (totalDrives > 0 || monthIso <= currentMonthIso) {
+            val curMonthIso = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"))
+            if (totalDrives > 0 || monthIso <= curMonthIso) {
                 MonthSummary(
                     monthIso = monthIso,
                     monthName = monthName,
                     year = year,
                     totalDrives = totalDrives,
-                    totalMiles = totalMiles,
+                    totalMiles = mTotalMiles,
                     businessDrives = mBusiness.size,
-                    businessMiles = bMiles,
+                    businessMiles = mBMiles,
                     loggedDeduction = logged,
                     potentialDeduction = potential,
                     percentComplete = percent,
                     unreviewedDrives = mUnreviewed.size
                 )
-            } else {
-                null
-            }
+            } else null
         }
 
         val availableYears = trips.mapNotNull {
             if (it.date.length >= 4) it.date.substring(0, 4) else null
         }.distinct().sortedDescending().ifEmpty { listOf(currentYear) }
 
+        val uTrips = filtered.filter { it.classification == "UNREVIEWED" }
+        val unreviewedPotential = uTrips.sumOf { trip ->
+            val rate = if (trip.applicableRate > 0.0) trip.applicableRate else rateUseCase.getApplicableRate(trip.date)
+            trip.totalDistanceMiles * rate
+        }
+
         ReportsUiState(
             selectedYear = year,
             availableYears = availableYears,
+            selectedBusinessEntity = entity,
+            selectedClassification = classification,
+            customStartDate = start,
+            customEndDate = end,
             monthlySummaries = summaries,
-            ytdLoggedDeduction = ytdLoggedDeduction,
-            ytdPotentialDeduction = ytdPotentialDeduction,
-            ytdBusinessMiles = ytdBusinessMiles,
-            ytdTotalMiles = ytdTotalMiles,
-            ytdDrivesCount = businessTrips.size,
-            allBusinessTrips = businessTrips
+            filteredTrips = filtered,
+            totalTrips = filtered.size,
+            totalMiles = totalMiles,
+            businessMiles = bMiles,
+            personalMiles = pMiles,
+            unreviewedMiles = uMiles,
+            totalDeduction = totalDeduction,
+            averageDistance = averageDist,
+            entityBreakdown = entityBreakdowns,
+            purposeBreakdown = purposeBreakdowns,
+            isExporting = dateArgs.exporting,
+            ytdLoggedDeduction = totalDeduction,
+            ytdPotentialDeduction = round(totalDeduction + unreviewedPotential),
+            ytdBusinessMiles = bMiles,
+            ytdTotalMiles = totalMiles
         )
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
+        started = SharingStarted.Eagerly,
         initialValue = ReportsUiState()
     )
 
@@ -160,56 +264,163 @@ class ReportsExportViewModel @Inject constructor(
         _selectedYear.value = year
     }
 
+    fun selectBusinessEntity(entity: String) {
+        _selectedBusinessEntity.value = entity
+    }
+
+    fun selectClassification(classification: String) {
+        _selectedClassification.value = classification
+    }
+
+    fun setCustomDateRange(start: String, end: String) {
+        _customStartDate.value = start
+        _customEndDate.value = end
+    }
+
     fun exportToCsv(monthIso: String? = null, onFileReady: (Intent) -> Unit) {
         viewModelScope.launch {
-            val allTrips = uiState.value.allBusinessTrips
-            val filteredTrips = if (monthIso != null) {
-                allTrips.filter { it.date.startsWith(monthIso) }
+            val state = uiState.value
+            val tripsToExport = if (monthIso != null) {
+                state.filteredTrips.filter { it.date.startsWith(monthIso) }
             } else {
-                allTrips
+                state.filteredTrips
             }
 
             val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val suffix = monthIso ?: uiState.value.selectedYear
-            val csvFile = File(exportDir, "MySucculentCorner_Mileage_${suffix}_${System.currentTimeMillis()}.csv")
+            val suffix = monthIso ?: "${state.selectedYear}_${state.selectedBusinessEntity}"
+            val csvFile = File(exportDir, "BusinessMileage_${suffix}_${System.currentTimeMillis()}.csv")
 
             FileWriter(csvFile).use { writer ->
-                writer.append("ID,Date,BusinessEntity,Classification,Purpose,DistanceMiles,Rate,CalculatedDeduction,StartAddress,EndAddress,TrackingMethod,SyncStatus\n")
+                writer.append("Trip ID,Date,Start Time,End Time,Start Address,End Address,Total Miles,Business Miles,Classification,Business Entity,Purpose,Mileage Rate,Estimated Deduction,Notes,Tracking Method,Sync Status\n")
 
-                for (trip in filteredTrips) {
-                    writer.append("\"${trip.id}\",")
-                    writer.append("\"${trip.date}\",")
-                    writer.append("\"MySucculentCorner\",")
-                    writer.append("\"${trip.classification}\",")
-                    writer.append("\"${escapeCsv(trip.purpose)}\",")
-                    writer.append("${trip.businessMiles},")
-                    writer.append("${trip.applicableRate},")
-                    writer.append("${trip.calculatedDeduction},")
+                val timeFmt = java.text.SimpleDateFormat("h:mm a", Locale.US)
+
+                for (trip in tripsToExport) {
+                    val startStr = if (trip.startTime > 0) timeFmt.format(java.util.Date(trip.startTime)) else ""
+                    val endStr = if (trip.endTime > 0) timeFmt.format(java.util.Date(trip.endTime)) else ""
+
+                    writer.append("\"${escapeCsv(trip.id)}\",")
+                    writer.append("\"${escapeCsv(trip.date)}\",")
+                    writer.append("\"${escapeCsv(startStr)}\",")
+                    writer.append("\"${escapeCsv(endStr)}\",")
                     writer.append("\"${escapeCsv(trip.startAddress.orEmpty())}\",")
                     writer.append("\"${escapeCsv(trip.endAddress.orEmpty())}\",")
-                    writer.append("\"${trip.trackingMethod}\",")
-                    writer.append("\"${trip.syncStatus}\"\n")
+                    writer.append("${trip.totalDistanceMiles},")
+                    writer.append("${trip.businessMiles},")
+                    writer.append("\"${escapeCsv(trip.classification)}\",")
+                    writer.append("\"${escapeCsv(trip.businessEntity)}\",")
+                    writer.append("\"${escapeCsv(trip.purpose)}\",")
+                    writer.append("${trip.applicableRate},")
+                    writer.append("${trip.calculatedDeduction},")
+                    writer.append("\"${escapeCsv(trip.notes.orEmpty())}\",")
+                    writer.append("\"${escapeCsv(trip.trackingMethod)}\",")
+                    writer.append("\"${escapeCsv(trip.syncStatus)}\"\n")
                 }
             }
 
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                csvFile
-            )
+            val uri = try {
+                FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    csvFile
+                )
+            } catch (_: Exception) {
+                android.net.Uri.fromFile(csvFile)
+            }
 
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/csv"
-                putExtra(Intent.EXTRA_SUBJECT, "MySucculentCorner Mileage Log ($suffix)")
+                putExtra(Intent.EXTRA_SUBJECT, "Business Mileage Report ($suffix)")
                 putExtra(Intent.EXTRA_STREAM, uri)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             }
 
-            onFileReady(Intent.createChooser(shareIntent, "Share Mileage Log").apply {
+            onFileReady(Intent.createChooser(shareIntent, "Share Mileage CSV").apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             })
         }
     }
 
-    private fun escapeCsv(value: String): String = value.replace("\"", "\"\"")
+    fun exportToPdf(onFileReady: (Intent) -> Unit) {
+        viewModelScope.launch {
+            val state = uiState.value
+            val summaryData = ReportSummaryData(
+                title = "Mileage Tax Deduction Report",
+                dateRangeLabel = if (state.customStartDate.isNotBlank() || state.customEndDate.isNotBlank()) {
+                    "${state.customStartDate} to ${state.customEndDate}"
+                } else {
+                    "${state.selectedYear} Tax Year"
+                },
+                businessEntity = state.selectedBusinessEntity,
+                totalTrips = state.totalTrips,
+                totalMiles = state.totalMiles,
+                businessMiles = state.businessMiles,
+                personalMiles = state.personalMiles,
+                unreviewedMiles = state.unreviewedMiles,
+                totalDeduction = state.totalDeduction,
+                averageDistance = state.averageDistance,
+                trips = state.filteredTrips
+            )
+
+            try {
+                val pdfFile = PdfReportGenerator.generatePdfReport(context, summaryData)
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    pdfFile
+                )
+
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/pdf"
+                    putExtra(Intent.EXTRA_SUBJECT, "Business Mileage PDF Report")
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+
+                onFileReady(Intent.createChooser(shareIntent, "Share Mileage PDF").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+            } catch (e: Exception) {
+                android.util.Log.e("ReportsExportViewModel", "Failed to export PDF: ${e.message}", e)
+            }
+        }
+    }
+
+    internal fun escapeCsv(value: String): String {
+        // Protect against spreadsheet formula injection (CSV Injection / CWE-1236)
+        // Values starting with formula triggers ('=', '+', '-', '@', '|', '%')
+        // even after leading whitespace/control characters (' ', '\t', '\r', '\n')
+        // or starting directly with whitespace/control characters must be prefixed with a single quote (')
+        val trimmed = value.trimStart(' ', '\t', '\r', '\n')
+        val hasFormulaTrigger = trimmed.isNotEmpty() && (
+            trimmed.startsWith('=') ||
+            trimmed.startsWith('+') ||
+            trimmed.startsWith('-') ||
+            trimmed.startsWith('@') ||
+            trimmed.startsWith('|') ||
+            trimmed.startsWith('%')
+        )
+        val hasControlPrefix = value.startsWith('\t') || value.startsWith('\r') || value.startsWith('\n')
+        val sanitized = if (hasFormulaTrigger || hasControlPrefix) {
+            "'$value"
+        } else {
+            value
+        }
+        return sanitized.replace("\"", "\"\"")
+    }
+
+    private fun round(value: Double): Double = kotlin.math.round(value * 100.0) / 100.0
+
+    private data class FilterArgs(
+        val trips: List<TripEntity>,
+        val year: String,
+        val entity: String,
+        val classification: String
+    )
+
+    private data class DateArgs(
+        val start: String,
+        val end: String,
+        val exporting: Boolean
+    )
 }

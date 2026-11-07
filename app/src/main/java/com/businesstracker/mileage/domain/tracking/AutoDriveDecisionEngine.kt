@@ -104,8 +104,7 @@ class AutoDriveDecisionEngine @Inject constructor() {
         isDisplacementConfirmed: Boolean,
         totalDistanceMeters: Double
     ): TripStopDecision {
-        val totalDistanceMiles = totalDistanceMeters / 1609.344
-        return if (isDisplacementConfirmed || totalDistanceMeters >= MIN_DISPLACEMENT_METERS || totalDistanceMiles >= 0.12) {
+        return if (isDisplacementConfirmed || totalDistanceMeters >= MIN_DISPLACEMENT_METERS) {
             TripStopDecision.FINALIZE_TRIP
         } else {
             TripStopDecision.DISCARD_FALSE_TRIP

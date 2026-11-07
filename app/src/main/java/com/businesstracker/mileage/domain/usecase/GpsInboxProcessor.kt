@@ -6,6 +6,7 @@ import com.businesstracker.mileage.data.local.ActiveTripDao
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.GpsInboxDao
 import com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity
+import com.businesstracker.mileage.data.local.entity.TripLifecycleState
 import com.businesstracker.mileage.domain.model.FilterResult
 import com.businesstracker.mileage.domain.model.Waypoint
 import javax.inject.Inject
@@ -27,10 +28,33 @@ class GpsInboxProcessor @Inject constructor(
             val lastLatitude: Double,
             val lastLongitude: Double,
             val speedMph: Double,
-            val isDisplacementConfirmed: Boolean
+            val isDisplacementConfirmed: Boolean,
+            val waypoint: Waypoint? = null
+        ) : ProcessResult()
+
+        data class AlreadyConsumed(
+            val fixId: Long,
+            val tripId: String,
+            val totalDistanceMeters: Double,
+            val lastLatitude: Double,
+            val lastLongitude: Double,
+            val isDisplacementConfirmed: Boolean,
+            val waypoint: Waypoint? = null
         ) : ProcessResult()
 
         data class Rejected(
+            val fixId: Long,
+            val tripId: String,
+            val reason: String
+        ) : ProcessResult()
+
+        data class StaleOrphanAcknowledged(
+            val fixId: Long,
+            val tripId: String,
+            val reason: String
+        ) : ProcessResult()
+
+        data class UnresolvedOrphan(
             val fixId: Long,
             val tripId: String,
             val reason: String
@@ -44,10 +68,11 @@ class GpsInboxProcessor @Inject constructor(
      * Enforces strict Room withTransaction atomicity:
      * - Reads exact pending fix by ID
      * - Confirms active trip exists and matches trip ID
+     * - Distinguishes terminal orphans (acknowledged) from unresolved orphans (preserved, halts drain)
      * - Checks idempotency: if fix was already recorded as waypoint, acknowledges inbox without double-counting mileage
      * - Obtains latest persisted accepted waypoint from Room (authoritative persisted state)
-     * - Runs FilterGpsPointUseCase
-     * - If accepted: inserts waypoint, updates active trip distance & coordinates, acknowledges inbox
+     * - Runs FilterGpsPointUseCase with monotonic timing and boot session detection
+     * - If accepted: inserts waypoint with sequenceNumber and elapsedRealtimeNanos, updates active trip distance & coordinates, acknowledges inbox
      * - If rejected: does not alter mileage, acknowledges inbox
      * - Rolls back everything if any operation throws
      */
@@ -58,20 +83,55 @@ class GpsInboxProcessor @Inject constructor(
 
         // 2. Confirm corresponding active trip still exists and matches fix's trip ID
         val activeTrip = activeTripDao.getActiveTripById(tripId)
-            ?: return@withTransaction ProcessResult.TripNotFound(tripId)
+        if (activeTrip == null) {
+            val lifecycle = database.tripLifecycleDao().getLifecycle(tripId)
+            val isTerminal = lifecycle?.state == TripLifecycleState.FINALIZED.value ||
+                    lifecycle?.state == TripLifecycleState.DISCARDED.value ||
+                    database.tripDao().getTripById(tripId) != null
+
+            if (isTerminal) {
+                // Trip is confirmed finalized or discarded: safe to delete stale orphan from inbox
+                gpsInboxDao.deleteFixById(fix.id)
+                return@withTransaction ProcessResult.StaleOrphanAcknowledged(
+                    fixId = fix.id,
+                    tripId = tripId,
+                    reason = "Trip confirmed terminal (${lifecycle?.state ?: "FINALIZED in trips table"})"
+                )
+            } else {
+                // Active trip missing without terminal state: preserve fix, do NOT delete, halt drain
+                return@withTransaction ProcessResult.UnresolvedOrphan(
+                    fixId = fix.id,
+                    tripId = tripId,
+                    reason = "Active trip missing without terminal lifecycle state (state=${lifecycle?.state})"
+                )
+            }
+        }
 
         // Idempotency check: if this fix was already recorded, acknowledge inbox without incrementing mileage
         if (activeTripDao.countWaypointsForFix(tripId, fix.id) > 0) {
             gpsInboxDao.deleteFixById(fix.id)
-            return@withTransaction ProcessResult.Accepted(
+            val lastWaypointEntity = activeTripDao.getLastWaypointForTrip(tripId)
+            val lastWaypoint = lastWaypointEntity?.let {
+                Waypoint(
+                    latitude = it.latitude,
+                    longitude = it.longitude,
+                    altitude = it.altitude,
+                    accuracy = it.accuracy,
+                    speed = it.speed,
+                    timestamp = it.timestamp,
+                    sequenceNumber = it.sequenceNumber,
+                    elapsedRealtimeNanos = it.elapsedRealtimeNanos,
+                    bootCount = it.bootCount
+                )
+            }
+            return@withTransaction ProcessResult.AlreadyConsumed(
                 fixId = fix.id,
                 tripId = tripId,
-                deltaDistanceMeters = 0.0,
                 totalDistanceMeters = activeTrip.totalDistanceMeters,
                 lastLatitude = activeTrip.lastLatitude,
                 lastLongitude = activeTrip.lastLongitude,
-                speedMph = (fix.speed * FilterGpsPointUseCase.METERS_PER_SECOND_TO_MPH).toDouble(),
-                isDisplacementConfirmed = activeTrip.totalDistanceMeters >= 200.0
+                isDisplacementConfirmed = activeTrip.totalDistanceMeters >= 200.0,
+                waypoint = lastWaypoint
             )
         }
 
@@ -84,7 +144,10 @@ class GpsInboxProcessor @Inject constructor(
                 altitude = it.altitude,
                 accuracy = it.accuracy,
                 speed = it.speed,
-                timestamp = it.timestamp
+                timestamp = it.timestamp,
+                sequenceNumber = it.sequenceNumber,
+                elapsedRealtimeNanos = it.elapsedRealtimeNanos,
+                bootCount = it.bootCount
             )
         }
 
@@ -99,20 +162,23 @@ class GpsInboxProcessor @Inject constructor(
         }
 
         // 4. Execute existing FilterGpsPointUseCase using correct persisted state
-        val filterResult = filterGpsPointUseCase.filter(location, lastWaypoint)
+        val filterResult = filterGpsPointUseCase.filter(location, lastWaypoint, currentBootCount = fix.bootCount)
 
         when (filterResult) {
             is FilterResult.Accepted -> {
-                // 5. Insert waypoint with stable source identifier
+                // 5. Insert waypoint with sequenceNumber, elapsedRealtimeNanos, and stable source identifier
                 val newWaypoint = ActiveWaypointEntity(
                     tripId = tripId,
                     sourceFixId = fix.id,
+                    sequenceNumber = fix.sequenceNumber,
+                    elapsedRealtimeNanos = fix.elapsedRealtimeNanos,
                     latitude = fix.latitude,
                     longitude = fix.longitude,
                     altitude = fix.altitude,
                     accuracy = fix.accuracy,
                     speed = fix.speed,
-                    timestamp = fix.timestamp
+                    timestamp = fix.timestamp,
+                    bootCount = fix.bootCount
                 )
                 activeTripDao.insertWaypoint(newWaypoint)
 
@@ -129,10 +195,26 @@ class GpsInboxProcessor @Inject constructor(
                 // 7. Acknowledge/delete exact inbox record in same transaction
                 gpsInboxDao.deleteFixById(fix.id)
 
+                val anchorLat: Double
+                val anchorLng: Double
+                if (activeTrip.startLatitude != 0.0 || activeTrip.startLongitude != 0.0) {
+                    anchorLat = activeTrip.startLatitude
+                    anchorLng = activeTrip.startLongitude
+                } else {
+                    val firstWp = activeTripDao.getWaypointsForTrip(tripId).firstOrNull()
+                    if (firstWp != null) {
+                        anchorLat = firstWp.latitude
+                        anchorLng = firstWp.longitude
+                    } else {
+                        anchorLat = fix.latitude
+                        anchorLng = fix.longitude
+                    }
+                }
+
                 val distanceResults = FloatArray(1)
                 Location.distanceBetween(
-                    activeTrip.startLatitude,
-                    activeTrip.startLongitude,
+                    anchorLat,
+                    anchorLng,
                     fix.latitude,
                     fix.longitude,
                     distanceResults
@@ -147,7 +229,8 @@ class GpsInboxProcessor @Inject constructor(
                     lastLatitude = fix.latitude,
                     lastLongitude = fix.longitude,
                     speedMph = filterResult.speedMph,
-                    isDisplacementConfirmed = isConfirmed
+                    isDisplacementConfirmed = isConfirmed,
+                    waypoint = filterResult.waypoint
                 )
             }
             is FilterResult.Rejected -> {

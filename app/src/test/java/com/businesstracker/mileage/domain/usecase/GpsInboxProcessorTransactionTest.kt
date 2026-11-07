@@ -240,6 +240,7 @@ class GpsInboxProcessorTransactionTest {
 
         // Retry the exact same fix: idempotency guard detects existing waypoint with sourceFixId = fixId
         val result2 = processor.processFixTransaction(fixId)
+        assertTrue("Idempotency guard must return AlreadyConsumed", result2 is GpsInboxProcessor.ProcessResult.AlreadyConsumed)
         val distanceAfterRetry = database.activeTripDao().getActiveTripById(tripId)!!.totalDistanceMeters
 
         assertEquals("Mileage must not be counted twice on retry of the same fix", distanceAfterFirst, distanceAfterRetry, 0.001)
@@ -324,5 +325,225 @@ class GpsInboxProcessorTransactionTest {
 
         // Pending fix remains intact in database
         assertEquals(1, database.gpsInboxDao().getPendingCount(tripId))
+    }
+
+    @Test
+    fun staleOrphanFix_forFinalizedTrip_isAcknowledgedAndRemovedFromInbox() = runBlocking {
+        val tripId = "trip-orphan-finalized"
+        database.tripLifecycleDao().insertOrUpdate(
+            com.businesstracker.mileage.data.local.entity.TripLifecycleEntity(
+                tripId = tripId,
+                state = com.businesstracker.mileage.data.local.entity.TripLifecycleState.FINALIZED.value
+            )
+        )
+
+        val fixId = database.gpsInboxDao().insertFix(
+            GpsInboxEntity(tripId = tripId, sequenceNumber = 1, latitude = 37.33, longitude = -121.88, timestamp = 2000L)
+        )
+
+        val result = processor.processFixTransaction(fixId)
+        assertTrue("Stale orphan fix for finalized trip must be StaleOrphanAcknowledged", result is GpsInboxProcessor.ProcessResult.StaleOrphanAcknowledged)
+        assertEquals("Stale orphan fix must be deleted from inbox", 0, database.gpsInboxDao().getPendingCount(tripId))
+    }
+
+    @Test
+    fun staleOrphanFix_forDiscardedTrip_isAcknowledgedAndRemovedFromInbox() = runBlocking {
+        val tripId = "trip-orphan-discarded"
+        database.tripLifecycleDao().insertOrUpdate(
+            com.businesstracker.mileage.data.local.entity.TripLifecycleEntity(
+                tripId = tripId,
+                state = com.businesstracker.mileage.data.local.entity.TripLifecycleState.DISCARDED.value
+            )
+        )
+
+        val fixId = database.gpsInboxDao().insertFix(
+            GpsInboxEntity(tripId = tripId, sequenceNumber = 1, latitude = 37.33, longitude = -121.88, timestamp = 2000L)
+        )
+
+        val result = processor.processFixTransaction(fixId)
+        assertTrue("Stale orphan fix for discarded trip must be StaleOrphanAcknowledged", result is GpsInboxProcessor.ProcessResult.StaleOrphanAcknowledged)
+        assertEquals("Stale orphan fix must be deleted from inbox", 0, database.gpsInboxDao().getPendingCount(tripId))
+    }
+
+    @Test
+    fun unresolvedOrphanFix_activeTripMissingWithoutTerminalLifecycle_preservesFixAndHaltsDrain() = runBlocking {
+        val tripId = "trip-unresolved-orphan"
+        // Active trip missing and no terminal lifecycle state
+        val fixId = database.gpsInboxDao().insertFix(
+            GpsInboxEntity(tripId = tripId, sequenceNumber = 1, latitude = 37.33, longitude = -121.88, timestamp = 2000L)
+        )
+
+        val result = processor.processFixTransaction(fixId)
+        assertTrue("Unresolved orphan without terminal lifecycle must be UnresolvedOrphan", result is GpsInboxProcessor.ProcessResult.UnresolvedOrphan)
+        assertEquals("Unresolved orphan must be preserved in inbox", 1, database.gpsInboxDao().getPendingCount(tripId))
+
+        // Draining must throw and halt
+        try {
+            drainUseCase.drain(tripId)
+            fail("Drain must halt and throw on unresolved orphan")
+        } catch (_: IllegalStateException) {}
+
+        assertEquals("Unresolved orphan must NOT be deleted after halted drain", 1, database.gpsInboxDao().getPendingCount(tripId))
+    }
+
+    @Test
+    fun wallClockBackwardJump_withMonotonicNanos_processesCorrectlyWithoutSpike() = runBlocking {
+        val tripId = "trip-wall-jump"
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = 10000L,
+                startLatitude = 37.3382,
+                startLongitude = -121.8863,
+                lastLatitude = 37.3382,
+                lastLongitude = -121.8863,
+                lastTimestamp = 10000L,
+                totalDistanceMeters = 0.0,
+                trackingMethod = "AUTO_DETECTED"
+            )
+        )
+
+        // Seed initial accepted waypoint with monotonic time 10s
+        database.activeTripDao().insertWaypoint(
+            com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity(
+                tripId = tripId,
+                sequenceNumber = 1L,
+                elapsedRealtimeNanos = 10_000_000_000L,
+                latitude = 37.3382,
+                longitude = -121.8863,
+                accuracy = 5f,
+                speed = 20f,
+                timestamp = 10000L
+            )
+        )
+
+        // Fix 2: Wall-clock jumped BACKWARDS to 5000L (-5 seconds), but monotonic time advanced by 9 seconds
+        // Movement is ~200 meters. Over 9 seconds monotonic, speed is ~22 m/s (~49 mph <= 110 mph)
+        val fixId = database.gpsInboxDao().insertFix(
+            GpsInboxEntity(
+                tripId = tripId,
+                sequenceNumber = 2L,
+                elapsedRealtimeNanos = 19_000_000_000L,
+                latitude = 37.3400,
+                longitude = -121.8863,
+                accuracy = 5f,
+                speed = 22f,
+                timestamp = 5000L // backwards wall-clock jump!
+            )
+        )
+
+        val result = processor.processFixTransaction(fixId)
+        assertTrue("Fix must be accepted using monotonic clock despite wall-clock backwards jump", result is GpsInboxProcessor.ProcessResult.Accepted)
+        assertEquals(0, database.gpsInboxDao().getPendingCount(tripId))
+        assertEquals(2, database.activeTripDao().getWaypointsForTrip(tripId).size)
+    }
+
+    @Test
+    fun rebootDetection_elapsedRealtimeNanosReset_rebaselinesSafelyWithSensorSpeed() = runBlocking {
+        val tripId = "trip-reboot-rebaseline"
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = 10000L,
+                startLatitude = 37.3382,
+                startLongitude = -121.8863,
+                lastLatitude = 37.3382,
+                lastLongitude = -121.8863,
+                lastTimestamp = 10000L,
+                totalDistanceMeters = 0.0,
+                trackingMethod = "AUTO_DETECTED"
+            )
+        )
+
+        // Waypoint before reboot had monotonic nanos = 50_000_000_000L
+        database.activeTripDao().insertWaypoint(
+            com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity(
+                tripId = tripId,
+                sequenceNumber = 1L,
+                elapsedRealtimeNanos = 50_000_000_000L,
+                latitude = 37.3382,
+                longitude = -121.8863,
+                accuracy = 5f,
+                speed = 15f,
+                timestamp = 10000L
+            )
+        )
+
+        // Device reboots! Monotonic nanos resets to 2_000_000_000L (< 50_000_000_000L)
+        // Hardware GPS provides sensor speed = 15.0 m/s (~33.5 mph)
+        val fixId = database.gpsInboxDao().insertFix(
+            GpsInboxEntity(
+                tripId = tripId,
+                sequenceNumber = 2L,
+                elapsedRealtimeNanos = 2_000_000_000L,
+                latitude = 37.3400,
+                longitude = -121.8863,
+                accuracy = 5f,
+                speed = 15f,
+                timestamp = 20000L
+            )
+        )
+
+        val result = processor.processFixTransaction(fixId)
+        assertTrue("Fix after reboot must be accepted via safe Doppler sensor re-baselining", result is GpsInboxProcessor.ProcessResult.Accepted)
+        assertEquals(0, database.gpsInboxDao().getPendingCount(tripId))
+        assertEquals(2, database.activeTripDao().getWaypointsForTrip(tripId).size)
+    }
+
+    @Test
+    fun rebootDetection_bootCountMismatch_withIncreasingElapsedTime_rebaselinesSafely() = runBlocking {
+        val tripId = "trip-reboot-bootcount-mismatch"
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = 10000L,
+                startLatitude = 37.3382,
+                startLongitude = -121.8863,
+                lastLatitude = 37.3382,
+                lastLongitude = -121.8863,
+                lastTimestamp = 10000L,
+                totalDistanceMeters = 0.0,
+                trackingMethod = "AUTO_DETECTED"
+            )
+        )
+
+        // Previous boot (bootCount = 1): 50 hours of elapsed uptime
+        val fiftyHoursNanos = 50L * 3600L * 1_000_000_000L
+        database.activeTripDao().insertWaypoint(
+            com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity(
+                tripId = tripId,
+                sequenceNumber = 1L,
+                elapsedRealtimeNanos = fiftyHoursNanos,
+                latitude = 37.3382,
+                longitude = -121.8863,
+                accuracy = 5f,
+                speed = 15f,
+                timestamp = 10000L,
+                bootCount = 1
+            )
+        )
+
+        // Device reboots to bootCount = 2, and new boot has already reached 60 hours (> 50 hours!)
+        val sixtyHoursNanos = 60L * 3600L * 1_000_000_000L
+        val fixId = database.gpsInboxDao().insertFix(
+            GpsInboxEntity(
+                tripId = tripId,
+                sequenceNumber = 2L,
+                elapsedRealtimeNanos = sixtyHoursNanos,
+                latitude = 37.3400,
+                longitude = -121.8863,
+                accuracy = 5f,
+                speed = 15f,
+                timestamp = 20000L,
+                bootCount = 2
+            )
+        )
+
+        val result = processor.processFixTransaction(fixId)
+        assertTrue("Fix across reboot with increasing elapsed time must be accepted via bootCount mismatch detection", result is GpsInboxProcessor.ProcessResult.Accepted)
+        assertEquals(0, database.gpsInboxDao().getPendingCount(tripId))
+        val waypoints = database.activeTripDao().getWaypointsForTrip(tripId)
+        assertEquals(2, waypoints.size)
+        assertEquals("New waypoint must record bootCount = 2", 2, waypoints.last().bootCount)
     }
 }
