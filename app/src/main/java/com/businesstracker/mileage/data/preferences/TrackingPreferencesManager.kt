@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
+import com.businesstracker.mileage.domain.model.AppThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -42,6 +43,7 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_VEHICLE_BLUETOOTH_ADDRESS = stringPreferencesKey("vehicle_bluetooth_address")
         private val KEY_VEHICLE_BLUETOOTH_NAME = stringPreferencesKey("vehicle_bluetooth_name")
         private val KEY_BLUETOOTH_DISCONNECT_PENDING = booleanPreferencesKey("bluetooth_disconnect_pending")
+        private val KEY_APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
 
         // Cloudflare D1 & Sync Configuration
         private val KEY_CF_ENDPOINT = stringPreferencesKey("cf_endpoint")
@@ -79,6 +81,16 @@ class TrackingPreferencesManager @Inject constructor(
 
     val isAutoTrackingEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_AUTO_TRACKING_ENABLED] ?: true
+    }
+
+    val appThemeMode: Flow<AppThemeMode> = context.dataStore.data.map { prefs ->
+        AppThemeMode.fromStoredValue(prefs[KEY_APP_THEME_MODE])
+    }
+
+    suspend fun setAppThemeMode(mode: AppThemeMode) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_APP_THEME_MODE] = mode.storedValue
+        }
     }
 
     suspend fun setAutoTrackingEnabled(enabled: Boolean) {

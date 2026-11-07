@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
+import com.businesstracker.mileage.domain.model.AppThemeMode
 
 private val LightColorScheme = lightColorScheme(
     primary = SucculentPrimary,
@@ -52,9 +53,10 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun BusinessMileageTrackerTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(), // Automatically follows system Light/Dark setting
+    themeMode: AppThemeMode = AppThemeMode.AUTO,
     content: @Composable () -> Unit
 ) {
+    val darkTheme = resolveDarkTheme(themeMode, isSystemInDarkTheme())
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     val view = LocalView.current
 
@@ -77,3 +79,10 @@ fun BusinessMileageTrackerTheme(
         content = content
     )
 }
+
+internal fun resolveDarkTheme(themeMode: AppThemeMode, systemIsDark: Boolean): Boolean =
+    when (themeMode) {
+        AppThemeMode.AUTO -> systemIsDark
+        AppThemeMode.LIGHT -> false
+        AppThemeMode.DARK -> true
+    }

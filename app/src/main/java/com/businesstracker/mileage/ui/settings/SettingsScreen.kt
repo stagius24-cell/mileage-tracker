@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TableChart
@@ -67,6 +68,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.domain.model.AppThemeMode
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import java.text.SimpleDateFormat
@@ -109,6 +111,42 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
+        }
+
+        item {
+            SettingsSection(title = "Appearance", icon = Icons.Default.Palette) {
+                Text(
+                    text = "Theme",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        AppThemeMode.AUTO to "Auto",
+                        AppThemeMode.LIGHT to "Light",
+                        AppThemeMode.DARK to "Dark"
+                    ).forEach { (mode, label) ->
+                        FilterChip(
+                            selected = state.themeMode == mode,
+                            onClick = { viewModel.setThemeMode(mode) },
+                            label = { Text(label) },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+                Text(
+                    text = if (state.themeMode == AppThemeMode.AUTO) {
+                        "Follows your phone's appearance"
+                    } else {
+                        "Uses ${state.themeMode.storedValue.lowercase()} appearance"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         item {

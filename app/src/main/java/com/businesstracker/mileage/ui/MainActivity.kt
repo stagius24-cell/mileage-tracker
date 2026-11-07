@@ -22,11 +22,13 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.domain.model.AppThemeMode
 import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.ui.navigation.MileageBottomBar
 import com.businesstracker.mileage.ui.navigation.MileageNavHost
@@ -86,7 +88,10 @@ class MainActivity : ComponentActivity() {
         checkAndRegisterTransitions()
 
         setContent {
-            BusinessMileageTrackerTheme {
+            val themeMode by preferencesManager.appThemeMode.collectAsStateWithLifecycle(
+                initialValue = AppThemeMode.AUTO
+            )
+            BusinessMileageTrackerTheme(themeMode = themeMode) {
                 val navController = rememberNavController()
 
                 Scaffold(

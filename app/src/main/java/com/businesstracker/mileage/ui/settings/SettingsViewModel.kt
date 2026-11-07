@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.data.remote.GoogleSheetsSyncService
 import com.businesstracker.mileage.data.security.SecureStorageManager
+import com.businesstracker.mileage.domain.model.AppThemeMode
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.worker.GoogleSheetsSyncWorker
@@ -27,6 +28,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class SettingsUiState(
+    val themeMode: AppThemeMode = AppThemeMode.AUTO,
     val autoTrackingEnabled: Boolean = true,
     val hasBackgroundLocationPermission: Boolean = true,
     val isAutoTrackingReady: Boolean = true,
@@ -64,7 +66,8 @@ data class VehicleBluetoothDevice(
 
 private data class GeneralPrefs(
     val autoTrackingEnabled: Boolean,
-    val defaultVehicle: String
+    val defaultVehicle: String,
+    val themeMode: AppThemeMode
 )
 
 private data class BluetoothPrefs(
@@ -112,9 +115,10 @@ class SettingsViewModel @Inject constructor(
 
     private val generalFlow = combine(
         preferencesManager.isAutoTrackingEnabled,
-        preferencesManager.defaultVehicle
-    ) { autoTrack, vehicle ->
-        GeneralPrefs(autoTrack, vehicle)
+        preferencesManager.defaultVehicle,
+        preferencesManager.appThemeMode
+    ) { autoTrack, vehicle, themeMode ->
+        GeneralPrefs(autoTrack, vehicle, themeMode)
     }
 
     private val scheduleFlow = combine(
@@ -215,6 +219,7 @@ class SettingsViewModel @Inject constructor(
         val isConnected = (hasOAuth && sheets.spreadsheetId.isNotBlank()) || sheets.webhookUrl.isNotBlank()
 
         SettingsUiState(
+            themeMode = config.general.themeMode,
             autoTrackingEnabled = config.general.autoTrackingEnabled,
             hasBackgroundLocationPermission = hasBg,
             isAutoTrackingReady = isReady,
@@ -259,6 +264,12 @@ class SettingsViewModel @Inject constructor(
                     activityTransitionManager.unregisterTransitions()
                 }
             } catch (_: Exception) {}
+        }
+    }
+
+    fun setThemeMode(mode: AppThemeMode) {
+        viewModelScope.launch {
+            preferencesManager.setAppThemeMode(mode)
         }
     }
 
