@@ -32,6 +32,9 @@ class BootReceiver : BroadcastReceiver() {
     @VisibleForTesting
     internal var lastJob: Job? = null
 
+    @VisibleForTesting
+    internal var activityTransitionRegistrar: (suspend () -> Boolean)? = null
+
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
         if (action == Intent.ACTION_BOOT_COMPLETED ||
@@ -54,7 +57,11 @@ class BootReceiver : BroadcastReceiver() {
                     } else true
 
                     if (isAutoTrackingEnabled && hasActivityRecognition) {
-                        activityTransitionManager.registerTransitions()
+                        if (activityTransitionRegistrar != null) {
+                            activityTransitionRegistrar?.invoke()
+                        } else {
+                            activityTransitionManager.registerTransitions()
+                        }
                     }
                 } finally {
                     pendingResult.finish()

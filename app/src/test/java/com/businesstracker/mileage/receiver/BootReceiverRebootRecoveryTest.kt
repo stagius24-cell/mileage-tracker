@@ -44,6 +44,7 @@ class BootReceiverRebootRecoveryTest {
         preferencesManager = TrackingPreferencesManager(context)
 
         bootReceiver = BootReceiver()
+        bootReceiver.activityTransitionRegistrar = { true }
         bootReceiver.setTestDependencies(
             transitionManager = ActivityTransitionManager(context),
             prefs = preferencesManager,
@@ -57,7 +58,7 @@ class BootReceiverRebootRecoveryTest {
         database.close()
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun rebootWithActiveTrip_marksLifecycleRecoveryRequiredWithoutDiscardingData() = runBlocking {
         val tripId = "reboot-trip-123"
         database.activeTripDao().insertActiveTrip(
@@ -95,7 +96,7 @@ class BootReceiverRebootRecoveryTest {
         assertEquals("Interrupted by device reboot; awaiting user review or resumption", lifecycle.reason)
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun rebootWithPendingGpsInboxRecords_preservesAllPendingFixes() = runBlocking {
         val tripId = "reboot-inbox-trip"
         database.activeTripDao().insertActiveTrip(
@@ -125,13 +126,13 @@ class BootReceiverRebootRecoveryTest {
         assertEquals(2, database.gpsInboxDao().getPendingCount(tripId))
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun rebootWithNoActiveTrip_succeedsSilently() = runBlocking {
         bootReceiver.reconcileBootActiveTrip()
         assertNull(database.activeTripDao().getActiveTrip())
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun repeatedBootReconciliation_isStrictlyIdempotent() = runBlocking {
         val tripId = "idempotent-reboot-trip"
         database.activeTripDao().insertActiveTrip(
@@ -168,7 +169,7 @@ class BootReceiverRebootRecoveryTest {
         assertEquals(4000.0, database.activeTripDao().getActiveTripById(tripId)!!.totalDistanceMeters, 0.001)
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun onReceive_bootCompleted_invokesReconciliationAndTransitionsToRecoveryRequired() = runBlocking {
         val tripId = "broadcast-reboot-trip"
         database.activeTripDao().insertActiveTrip(
@@ -192,6 +193,7 @@ class BootReceiverRebootRecoveryTest {
         )
 
         val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        bootReceiver.activityTransitionRegistrar = { true }
         bootReceiver.setTestDependencies(
             transitionManager = ActivityTransitionManager(context),
             prefs = preferencesManager,
@@ -216,7 +218,7 @@ class BootReceiverRebootRecoveryTest {
         assertEquals(TripLifecycleState.RECOVERY_REQUIRED.value, lifecycle!!.state)
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun onReceive_bootCompleted_withPendingGpsInboxFixes_preservesFixesIntact() = runBlocking {
         val tripId = "broadcast-inbox-trip"
         database.activeTripDao().insertActiveTrip(
@@ -240,6 +242,7 @@ class BootReceiverRebootRecoveryTest {
         )
 
         val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        bootReceiver.activityTransitionRegistrar = { true }
         bootReceiver.setTestDependencies(
             transitionManager = ActivityTransitionManager(context),
             prefs = preferencesManager,
