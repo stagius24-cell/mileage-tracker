@@ -1,0 +1,15 @@
+{
+  "versionName": "1.0.5",
+  "versionCode": 6,
+  "package": "com.businesstracker.mileage.debug",
+  "sourceBranch": "feature/settings-design-cleanup",
+  "sourceCommit": "ffbe886bd896672d653155cb0541ab7f35d37419",
+  "workflowRun": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42351298224",
+  "workflowArtifactId": 13566340169,
+  "unitTests": "debug and release suites passed",
+  "apkSha256": "4c78526b44681306f4c493bef6534f2be4433463219fb0ade0fcca29087febf3",
+  "signingCertificateSha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "signatureSchemes": ["v2", "v3"],
+  "payloadComparison": "968 non-signature ZIP entries identical to CI artifact",
+  "physicalUiValidation": "NOT RUN"
+}
