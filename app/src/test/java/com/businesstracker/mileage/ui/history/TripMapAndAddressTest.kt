@@ -72,6 +72,39 @@ class TripMapAndAddressTest {
         assertEquals(result, db.tripDao().getTripById(before.id))
     }
 
+    @Test fun savedTrip_zeroOrigin_usesFirstRecordedRoutePointForApproximateAddress() = runBlocking {
+        val before = trip().copy(
+            startLatitude = 0.0,
+            startLongitude = 0.0,
+            waypointsJson = """[
+                {"latitude":30.2021,"longitude":-97.6671},
+                {"latitude":30.2050,"longitude":-97.6700}
+            ]"""
+        )
+        db.tripDao().insertTrip(before)
+
+        val result = resolver { lat, lon ->
+            assertEquals(30.2021, lat, 0.0)
+            assertEquals(-97.6671, lon, 0.0)
+            "Approximate Start Road, Austin, TX"
+        }.execute(before.id)
+
+        assertEquals("Approximate Start Road, Austin, TX", result?.startAddress)
+        assertEquals(0.0, result?.startLatitude ?: Double.NaN, 0.0)
+        assertEquals(0.0, result?.startLongitude ?: Double.NaN, 0.0)
+    }
+
+    @Test fun zeroOriginWithoutRecordedRoute_doesNotAttemptOceanCoordinateLookup() = runBlocking {
+        val before = trip().copy(startLatitude = 0.0, startLongitude = 0.0, waypointsJson = "[]")
+        db.tripDao().insertTrip(before)
+        var lookups = 0
+
+        val result = resolver { _, _ -> lookups++; "Unexpected address" }.execute(before.id)
+
+        assertEquals(0, lookups)
+        assertNull(result?.startAddress)
+    }
+
     @Test fun addressLookup_doesNotOverwriteConcurrentAddressOrNoteEdits() = runBlocking {
         val before = trip()
         db.tripDao().insertTrip(before)

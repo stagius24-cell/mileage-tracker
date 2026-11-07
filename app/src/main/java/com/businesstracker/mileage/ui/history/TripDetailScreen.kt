@@ -20,15 +20,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -41,7 +38,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -61,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -141,8 +138,8 @@ fun TripDetailScreen(
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.background)
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Header Card: Date, Classification & Miles
             Card(
@@ -153,8 +150,8 @@ fun TripDetailScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -194,7 +191,7 @@ fun TripDetailScreen(
 
                     Text(
                         text = dateFormatted,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold
                     )
 
@@ -213,14 +210,14 @@ fun TripDetailScreen(
                             Row(verticalAlignment = Alignment.Bottom) {
                                 Text(
                                     text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
-                                    style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Black)
+                                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Black)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
                                     text = "miles",
-                                    style = MaterialTheme.typography.titleMedium,
+                                    style = MaterialTheme.typography.bodyMedium,
                                     color = SlateNeutral,
-                                    modifier = Modifier.padding(bottom = 4.dp)
+                                    modifier = Modifier.padding(bottom = 2.dp)
                                 )
                             }
                         }
@@ -235,7 +232,7 @@ fun TripDetailScreen(
                                 )
                                 Text(
                                     text = "\$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}",
-                                    style = MaterialTheme.typography.headlineLarge.copy(
+                                    style = MaterialTheme.typography.headlineSmall.copy(
                                         fontWeight = FontWeight.Black,
                                         color = SucculentPrimary
                                     )
@@ -255,15 +252,9 @@ fun TripDetailScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .padding(6.dp)
                 ) {
-                    Text(
-                        text = "GPS Route Map",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    TripRouteMap(trip = trip, modifier = Modifier.height(260.dp))
+                    TripRouteMap(trip = trip, modifier = Modifier.height(160.dp))
                 }
             }
 
@@ -276,8 +267,8 @@ fun TripDetailScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // Time and Duration
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -307,9 +298,11 @@ fun TripDetailScreen(
                             Text(
                                 text = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
                                     ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
-                                    else "Address unavailable (GPS: ${String.format(Locale.US, "%.4f", trip.startLatitude)}, ${String.format(Locale.US, "%.4f", trip.startLongitude)})",
+                                    else "Approximate start location unavailable",
                                 style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -332,9 +325,11 @@ fun TripDetailScreen(
                             Text(
                                 text = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
                                     ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
-                                    else "Address unavailable (GPS: ${String.format(Locale.US, "%.4f", trip.endLatitude)}, ${String.format(Locale.US, "%.4f", trip.endLongitude)})",
+                                    else "Approximate destination unavailable",
                                 style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -350,8 +345,8 @@ fun TripDetailScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(text = "Tax & Classification Details", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
 
@@ -395,17 +390,6 @@ fun TripDetailScreen(
                 }
             }
 
-            // Edit Action Button
-            Button(
-                onClick = { showEditSheet = true },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Edit Classification & Details", fontWeight = FontWeight.Bold)
-            }
         }
     }
 

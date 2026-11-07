@@ -21,7 +21,8 @@ open class GeocodeLocationUseCase @Inject constructor(
 ) {
 
     open suspend fun getFormattedAddress(latitude: Double, longitude: Double): String? = withContext(ioDispatcher) {
-        if (!latitude.isFinite() || !longitude.isFinite() || latitude !in -90.0..90.0 || longitude !in -180.0..180.0) return@withContext null
+        if (!latitude.isFinite() || !longitude.isFinite() || latitude !in -90.0..90.0 || longitude !in -180.0..180.0 ||
+            (latitude == 0.0 && longitude == 0.0)) return@withContext null
         if (!Geocoder.isPresent()) return@withContext null
 
         try {

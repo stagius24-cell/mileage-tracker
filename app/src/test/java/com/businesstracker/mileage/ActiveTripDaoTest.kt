@@ -160,6 +160,68 @@ class ActiveTripDaoTest {
         assertNull("Active trip table must be cleared after finalization", activeInDb)
     }
 
+    @Test
+    fun finalization_usesFirstRecordedWaypointWhenInitialLocationWasUnavailable() = runBlocking {
+        val tripId = "trip-zero-origin"
+        val startLat = 30.2021
+        val startLon = -97.6671
+        activeTripDao.insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = 1_000L,
+                startLatitude = 0.0,
+                startLongitude = 0.0,
+                lastLatitude = 30.2100,
+                lastLongitude = -97.6750,
+                lastTimestamp = 2_000L,
+                totalDistanceMeters = 900.0,
+                trackingMethod = "AUTO_DETECTED",
+                suggestedBusiness = "Personal"
+            )
+        )
+        activeTripDao.insertWaypoint(
+            ActiveWaypointEntity(
+                tripId = tripId,
+                latitude = startLat,
+                longitude = startLon,
+                accuracy = 8f,
+                speed = 8f,
+                timestamp = 1_100L
+            )
+        )
+        activeTripDao.insertWaypoint(
+            ActiveWaypointEntity(
+                tripId = tripId,
+                latitude = 30.2100,
+                longitude = -97.6750,
+                accuracy = 8f,
+                speed = 0f,
+                timestamp = 2_000L
+            )
+        )
+        val geocoder = object : GeocodeLocationUseCase(context, Dispatchers.IO) {
+            override suspend fun getFormattedAddress(latitude: Double, longitude: Double): String? =
+                if (latitude == startLat && longitude == startLon) "Approximate Start Road, Austin, TX"
+                else "Approximate Destination, Austin, TX"
+        }
+        val zeroOriginCoordinator = TripFinalizationCoordinator(
+            database = database,
+            activeTripRepository = activeTripRepository,
+            tripRepository = tripRepository,
+            geocodeUseCase = geocoder,
+            rateCalculator = CalculateMileageRateUseCase(),
+            preferencesManager = preferencesManager,
+            gson = Gson(),
+            ioDispatcher = Dispatchers.IO
+        )
+
+        val result = zeroOriginCoordinator.finalizeTrip(tripId, TrackingMethod.AUTO_DETECTED)
+
+        assertEquals(startLat, result?.startLatitude ?: Double.NaN, 0.0)
+        assertEquals(startLon, result?.startLongitude ?: Double.NaN, 0.0)
+        assertEquals("Approximate Start Road, Austin, TX", result?.startAddress)
+    }
+
     // FIX 5 - Requirement 8: Interrupted trip recovery restores state and displacement confirmation intact
     @Test
     fun interruptedTripRecovery_restoresStateAndDisplacementIntact() = runBlocking {

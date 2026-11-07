@@ -117,10 +117,28 @@ class TripFinalizationCoordinator @Inject constructor(
             val endTime = System.currentTimeMillis()
             val dateString = rateCalculator.getFormattedDate(startTime)
 
-            val startLat = activeTrip.startLatitude
-            val startLng = activeTrip.startLongitude
-            val endLat = activeTrip.lastLatitude
-            val endLng = activeTrip.lastLongitude
+            val firstRecordedPoint = waypoints.firstOrNull { it.hasUsableCoordinates() }
+            val lastRecordedPoint = waypoints.lastOrNull { it.hasUsableCoordinates() }
+            val startLat = if (hasUsableCoordinates(activeTrip.startLatitude, activeTrip.startLongitude)) {
+                activeTrip.startLatitude
+            } else {
+                firstRecordedPoint?.latitude ?: activeTrip.startLatitude
+            }
+            val startLng = if (hasUsableCoordinates(activeTrip.startLatitude, activeTrip.startLongitude)) {
+                activeTrip.startLongitude
+            } else {
+                firstRecordedPoint?.longitude ?: activeTrip.startLongitude
+            }
+            val endLat = if (hasUsableCoordinates(activeTrip.lastLatitude, activeTrip.lastLongitude)) {
+                activeTrip.lastLatitude
+            } else {
+                lastRecordedPoint?.latitude ?: activeTrip.lastLatitude
+            }
+            val endLng = if (hasUsableCoordinates(activeTrip.lastLatitude, activeTrip.lastLongitude)) {
+                activeTrip.lastLongitude
+            } else {
+                lastRecordedPoint?.longitude ?: activeTrip.lastLongitude
+            }
 
             // 6. Geocode endpoints asynchronously
             val startAddress = geocodeUseCase.getFormattedAddress(startLat, startLng)
@@ -225,4 +243,11 @@ class TripFinalizationCoordinator @Inject constructor(
         repeat(decimals) { multiplier *= 10 }
         return kotlin.math.round(this * multiplier) / multiplier
     }
+
+    private fun Waypoint.hasUsableCoordinates(): Boolean = hasUsableCoordinates(latitude, longitude)
+
+    private fun hasUsableCoordinates(latitude: Double, longitude: Double): Boolean =
+        latitude.isFinite() && longitude.isFinite() &&
+            latitude in -90.0..90.0 && longitude in -180.0..180.0 &&
+            (latitude != 0.0 || longitude != 0.0)
 }
