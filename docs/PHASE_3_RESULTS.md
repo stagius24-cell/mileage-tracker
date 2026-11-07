@@ -33,7 +33,7 @@
 | **P3-003** | Google Sign-in | NOT TESTED | - | - | Play Services OAuth consent dialog |
 | **P3-004** | Authentication Expiration | NOT TESTED | - | - | Remote revocation 401 retry test |
 | **P3-005** | Manual Trip Review | **PASS** | 2026-11-06 | User Confirmation | Trip reviewed and classified as Business (MySucculentCorner); persisted across app process kill and restart. |
-| **P3-006** | Personal Classification | NOT TESTED | - | - | Zero business deduction |
+| **P3-006** | Personal Classification | **PASS** | 2026-11-06 | User Confirmation | Trip reclassified as Personal; business deduction correctly dropped to $0.00 and dashboard business miles updated cleanly. |
 | **P3-007** | Unreviewed Trip Exclusion | NOT TESTED | - | - | Omitted from outgoing sync |
 | **P3-008** | Successful Sync | NOT TESTED | - | - | 16 columns mapped on test Sheet |
 | **P3-009** | Duplicate Prevention | NOT TESTED | - | - | In-place row update PUT |
