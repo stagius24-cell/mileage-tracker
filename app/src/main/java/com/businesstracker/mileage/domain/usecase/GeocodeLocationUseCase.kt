@@ -39,7 +39,7 @@ open class GeocodeLocationUseCase @Inject constructor(
                                 override fun onGeocode(addresses: MutableList<Address>) {
                                     if (delivered.compareAndSet(false, true)) continuation.resume(addresses.firstOrNull())
                                 }
-    
+
                                 override fun onError(errorMessage: String?) {
                                     if (delivered.compareAndSet(false, true)) continuation.resume(null)
                                 }
