@@ -1,0 +1,12 @@
+{
+  "source_branch": "feature/normalized-history-reports-headers",
+  "source_commit": "cb6dff30b21e9ee66ae68c88d84cce6d349a1be9",
+  "ci_run_id": 42407033860,
+  "ci_artifact_id": 13587891971,
+  "package": "com.businesstracker.mileage.debug",
+  "version_code": 16,
+  "version_name": "1.0.15",
+  "sha256": "25021b8492d1a8b66f051ff69810f32e1deb5eb2fb104d41c22da4042eae3f40",
+  "signature_schemes": ["v2", "v3"],
+  "non_signature_entries_verified": 969
+}
