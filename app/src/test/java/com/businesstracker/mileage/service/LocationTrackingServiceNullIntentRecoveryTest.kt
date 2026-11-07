@@ -16,7 +16,6 @@ import com.businesstracker.mileage.data.repository.ActiveTripRepositoryImpl
 import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
-import com.businesstracker.mileage.notification.NotificationHelper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import org.junit.After
