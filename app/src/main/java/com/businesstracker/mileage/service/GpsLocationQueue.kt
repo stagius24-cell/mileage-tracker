@@ -383,7 +383,6 @@ class GpsLocationQueue(
         }
 
         // 5. Verify exact pending count is 0
-        val currentTripId = tripIdProvider()
         if (currentTripId.isNotEmpty()) {
             val pendingCount = gpsInboxDao.getPendingCount(currentTripId)
             if (pendingCount > 0) {
