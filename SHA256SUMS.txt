@@ -1,1 +1,1 @@
-570ff3863827633e571bf49b5c460b505b9cb8ed645e939b6b7d98b2fc948954  BusinessMileageTracker-1.0.18-more-info.apk
+b88a6325a3da83da928b7d919a54320c4474deae9c2caa245056e1070b408cda  BusinessMileageTracker-1.0.19-compact-table.apk
