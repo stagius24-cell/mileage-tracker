@@ -76,7 +76,7 @@ class VehicleBluetoothEventHandlerTest {
     @Test
     fun manualTripDisconnect_isIgnored() = runBlocking {
         preferences.setBluetoothAutoStopEnabled(true)
-        repository.activeTrip.value = autoTrip().copy(trackingMethod = TrackingMethod.MANUAL.value)
+        repository.activeTrip.value = autoTrip().copy(trackingMethod = TrackingMethod.MANUAL_GPS.value)
 
         handler.handle(BluetoothDevice.ACTION_ACL_DISCONNECTED, CAR_ADDRESS)
 
