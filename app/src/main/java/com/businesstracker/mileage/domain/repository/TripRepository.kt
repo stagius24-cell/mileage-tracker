@@ -37,4 +37,8 @@ interface TripRepository {
     fun getTripsByClassification(classification: String): Flow<List<TripEntity>>
     suspend fun getPendingSyncTrips(): List<TripEntity>
     suspend fun markSynced(tripId: String, timestamp: Long)
+
+    // User-Controlled Full Data Deletion (GAP-04)
+    suspend fun deleteAllTripData(): Int
+    fun clearExportCache(): Boolean
 }

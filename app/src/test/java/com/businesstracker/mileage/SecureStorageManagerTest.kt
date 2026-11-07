@@ -109,6 +109,67 @@ class SecureStorageManagerTest {
     }
 
     @Test
+    fun saveSheetsWebhookUrl_and_getSheetsWebhookUrl_roundTrip_success() {
+        val webhookUrl = "https://script.google.com/macros/s/AKfycbx_deployment_secret_12345/exec"
+        val saved = secureStorageManager.saveSheetsWebhookUrl(webhookUrl)
+
+        assertTrue(saved)
+        assertTrue(secureStorageManager.hasSheetsWebhookUrl())
+        assertEquals(webhookUrl, secureStorageManager.getSheetsWebhookUrl())
+
+        val rawPrefs = context.getSharedPreferences("mileage_secure_credentials", Context.MODE_PRIVATE)
+        val ciphertext = rawPrefs.getString("enc_sheets_webhook_url", null)
+        assertNotNull(ciphertext)
+        assertFalse("Ciphertext must not be plaintext", ciphertext!!.contains(webhookUrl))
+
+        secureStorageManager.clearSheetsWebhookUrl()
+        assertFalse(secureStorageManager.hasSheetsWebhookUrl())
+        assertNull(secureStorageManager.getSheetsWebhookUrl())
+    }
+
+    @Test
+    fun saveCfBearerToken_and_saveCfClientSecret_roundTrip_success() {
+        val bearerToken = "cf_token_secret_998877"
+        val clientSecret = "cf_client_secret_aabbcc"
+
+        assertTrue(secureStorageManager.saveCfBearerToken(bearerToken))
+        assertTrue(secureStorageManager.saveCfClientSecret(clientSecret))
+
+        assertEquals(bearerToken, secureStorageManager.getCfBearerToken())
+        assertEquals(clientSecret, secureStorageManager.getCfClientSecret())
+
+        secureStorageManager.clearCfBearerToken()
+        assertNull(secureStorageManager.getCfBearerToken())
+        assertEquals(clientSecret, secureStorageManager.getCfClientSecret())
+
+        secureStorageManager.clearCfClientSecret()
+        assertNull(secureStorageManager.getCfClientSecret())
+    }
+
+    @Test
+    fun clearOAuthCredentials_preservesWebhookAndCloudflareCredentials() {
+        secureStorageManager.saveOAuthToken("oauth_token_123")
+        secureStorageManager.saveRefreshToken("refresh_token_456")
+        secureStorageManager.saveAccountEmail("user@example.com")
+        secureStorageManager.saveSheetsWebhookUrl("https://example.com/webhook")
+        secureStorageManager.saveCfBearerToken("cf_token_789")
+        secureStorageManager.saveCfClientSecret("cf_secret_xyz")
+
+        secureStorageManager.clearOAuthCredentials()
+
+        // OAuth credentials must be wiped
+        assertFalse(secureStorageManager.hasOAuthToken())
+        assertNull(secureStorageManager.getOAuthToken())
+        assertNull(secureStorageManager.getRefreshToken())
+        assertNull(secureStorageManager.getAccountEmail())
+
+        // Webhook and Cloudflare credentials MUST remain intact (GAP-02 / GAP-04)
+        assertEquals("https://example.com/webhook", secureStorageManager.getSheetsWebhookUrl())
+        assertEquals("cf_token_789", secureStorageManager.getCfBearerToken())
+        assertEquals("cf_secret_xyz", secureStorageManager.getCfClientSecret())
+    }
+
+    @Test
     fun tamperedCiphertext_failsClosed_returnsNull() {
         val originalToken = "valid_oauth_token_to_tamper"
         secureStorageManager.saveOAuthToken(originalToken)

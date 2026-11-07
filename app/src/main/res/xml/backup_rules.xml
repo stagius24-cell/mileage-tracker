@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
+    <!-- Exclude hardware-backed Keystore credentials (cannot be decrypted on new device) -->
     <exclude domain="sharedpref" path="mileage_secure_credentials.xml" />
+    <!-- Exclude temporary PDF and CSV exports in cache -->
+    <exclude domain="file" path="exports" />
+    <exclude domain="root" path="cache" />
 </full-backup-content>

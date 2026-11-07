@@ -59,11 +59,11 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
-        <!-- Low-Power Auto-Drive Activity Transition Receiver -->
+        <!-- Low-Power Auto-Drive Activity Transition Receiver (Explicit PendingIntent only; not exported to 3rd party apps) -->
         <receiver
             android:name=".receiver.AutoDriveReceiver"
             android:enabled="true"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="com.businesstracker.mileage.ACTION_ACTIVITY_TRANSITION" />
             </intent-filter>

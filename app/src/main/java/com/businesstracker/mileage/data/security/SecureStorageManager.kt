@@ -141,6 +141,15 @@ class SecureStorageManager @Inject constructor(
         private const val KEY_OAUTH_TOKEN_IV = "oauth_token_iv"
         private const val KEY_REFRESH_TOKEN_IV = "refresh_token_iv"
         private const val KEY_ACCOUNT_EMAIL_IV = "account_email_iv"
+
+        // Encrypted Preferences (GAP-02)
+        private const val KEY_ENCRYPTED_SHEETS_WEBHOOK_URL = "enc_sheets_webhook_url"
+        private const val KEY_SHEETS_WEBHOOK_URL_IV = "sheets_webhook_url_iv"
+        private const val KEY_ENCRYPTED_CF_BEARER_TOKEN = "enc_cf_bearer_token"
+        private const val KEY_CF_BEARER_TOKEN_IV = "cf_bearer_token_iv"
+        private const val KEY_ENCRYPTED_CF_CLIENT_SECRET = "enc_cf_client_secret"
+        private const val KEY_CF_CLIENT_SECRET_IV = "cf_client_secret_iv"
+
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val GCM_TAG_LENGTH = 128
     }
@@ -279,6 +288,85 @@ class SecureStorageManager @Inject constructor(
 
     fun clearAccountEmail() {
         prefs.edit()
+            .remove(KEY_ENCRYPTED_ACCOUNT_EMAIL)
+            .remove(KEY_ACCOUNT_EMAIL_IV)
+            .apply()
+    }
+
+    // --- Sheets Webhook URL (GAP-02) ---
+
+    fun saveSheetsWebhookUrl(url: String): Boolean {
+        return encryptAndStore(url, KEY_ENCRYPTED_SHEETS_WEBHOOK_URL, KEY_SHEETS_WEBHOOK_URL_IV)
+    }
+
+    fun getSheetsWebhookUrl(): String? {
+        return retrieveAndDecrypt(KEY_ENCRYPTED_SHEETS_WEBHOOK_URL, KEY_SHEETS_WEBHOOK_URL_IV)
+    }
+
+    fun hasSheetsWebhookUrl(): Boolean {
+        return !getSheetsWebhookUrl().isNullOrBlank()
+    }
+
+    fun clearSheetsWebhookUrl() {
+        prefs.edit()
+            .remove(KEY_ENCRYPTED_SHEETS_WEBHOOK_URL)
+            .remove(KEY_SHEETS_WEBHOOK_URL_IV)
+            .apply()
+    }
+
+    // --- Cloudflare Bearer Token (GAP-02) ---
+
+    fun saveCfBearerToken(token: String): Boolean {
+        return encryptAndStore(token, KEY_ENCRYPTED_CF_BEARER_TOKEN, KEY_CF_BEARER_TOKEN_IV)
+    }
+
+    fun getCfBearerToken(): String? {
+        return retrieveAndDecrypt(KEY_ENCRYPTED_CF_BEARER_TOKEN, KEY_CF_BEARER_TOKEN_IV)
+    }
+
+    fun hasCfBearerToken(): Boolean {
+        return !getCfBearerToken().isNullOrBlank()
+    }
+
+    fun clearCfBearerToken() {
+        prefs.edit()
+            .remove(KEY_ENCRYPTED_CF_BEARER_TOKEN)
+            .remove(KEY_CF_BEARER_TOKEN_IV)
+            .apply()
+    }
+
+    // --- Cloudflare Client Secret (GAP-02) ---
+
+    fun saveCfClientSecret(secret: String): Boolean {
+        return encryptAndStore(secret, KEY_ENCRYPTED_CF_CLIENT_SECRET, KEY_CF_CLIENT_SECRET_IV)
+    }
+
+    fun getCfClientSecret(): String? {
+        return retrieveAndDecrypt(KEY_ENCRYPTED_CF_CLIENT_SECRET, KEY_CF_CLIENT_SECRET_IV)
+    }
+
+    fun hasCfClientSecret(): Boolean {
+        return !getCfClientSecret().isNullOrBlank()
+    }
+
+    fun clearCfClientSecret() {
+        prefs.edit()
+            .remove(KEY_ENCRYPTED_CF_CLIENT_SECRET)
+            .remove(KEY_CF_CLIENT_SECRET_IV)
+            .apply()
+    }
+
+    // --- OAuth Credential Purge ---
+
+    /**
+     * Purges only OAuth tokens and account email, leaving webhook and Cloudflare secrets intact.
+     */
+    fun clearOAuthCredentials() {
+        prefs.edit()
+            .remove(KEY_ENCRYPTED_OAUTH_TOKEN)
+            .remove(KEY_OAUTH_TOKEN_IV)
+            .remove(KEY_ENCRYPTED_REFRESH_TOKEN)
+            .remove(KEY_REFRESH_TOKEN_IV)
             .remove(KEY_ENCRYPTED_ACCOUNT_EMAIL)
             .remove(KEY_ACCOUNT_EMAIL_IV)
             .apply()

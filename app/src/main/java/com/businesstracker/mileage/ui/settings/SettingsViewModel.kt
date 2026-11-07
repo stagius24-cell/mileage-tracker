@@ -21,7 +21,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.businesstracker.mileage.service.LocationTrackingService
 import javax.inject.Inject
 
 data class SettingsUiState(
@@ -48,7 +50,9 @@ data class SettingsUiState(
     val sheetsLastSyncTime: Long = 0L,
     val sheetsLastError: String? = null,
     val pendingTripsCount: Int = 0,
-    val isSyncing: Boolean = false
+    val isSyncing: Boolean = false,
+    val isDeletingAllTrips: Boolean = false,
+    val deletionMessage: String? = null
 )
 
 private data class GeneralPrefs(
@@ -383,5 +387,48 @@ class SettingsViewModel @Inject constructor(
     fun triggerSyncNow() {
         com.businesstracker.mileage.worker.MileageSyncWorker.enqueueOneTimeSync(context)
         syncSheetsNow()
+    }
+
+    // User-Controlled Data Deletion (GAP-04)
+
+    fun isTrackingActive(): Boolean {
+        return LocationTrackingService.serviceState.value.isTracking
+    }
+
+    fun deleteAllTripData(onResult: (Result<Int>) -> Unit = {}) {
+        if (LocationTrackingService.serviceState.value.isTracking) {
+            val failure = Result.failure<Int>(
+                IllegalStateException("Tracking is currently active. Please end the active drive before deleting trip data.")
+            )
+            _uiState.update { it.copy(deletionMessage = "Cannot delete while tracking is active. End your drive first.") }
+            onResult(failure)
+            return
+        }
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDeletingAllTrips = true) }
+            try {
+                val deletedCount = tripRepository.deleteAllTripData()
+                _uiState.update {
+                    it.copy(
+                        isDeletingAllTrips = false,
+                        deletionMessage = "Successfully deleted $deletedCount local trip records and cleared report cache."
+                    )
+                }
+                onResult(Result.success(deletedCount))
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isDeletingAllTrips = false,
+                        deletionMessage = "Failed to delete local trip data: ${e.message}"
+                    )
+                }
+                onResult(Result.failure(e))
+            }
+        }
+    }
+
+    fun clearDeletionMessage() {
+        _uiState.update { it.copy(deletionMessage = null) }
     }
 }

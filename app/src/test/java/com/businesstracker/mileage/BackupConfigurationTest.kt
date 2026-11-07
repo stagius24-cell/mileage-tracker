@@ -38,12 +38,28 @@ class BackupConfigurationTest {
         val content = rulesFile.readText()
 
         assertTrue(
-            "data_extraction_rules must define cloud-backup exclusion",
+            "data_extraction_rules must define cloud-backup exclusion for credentials",
             content.contains("<cloud-backup>") && content.contains("path=\"mileage_secure_credentials.xml\"")
         )
         assertTrue(
-            "data_extraction_rules must define device-transfer exclusion",
+            "data_extraction_rules must define device-transfer exclusion for credentials",
             content.contains("<device-transfer>") && content.contains("path=\"mileage_secure_credentials.xml\"")
+        )
+
+        // GAP-03: Exclude temporary export reports and cache
+        assertTrue(
+            "data_extraction_rules must exclude exports from cloud backup",
+            content.contains("path=\"exports\"")
+        )
+        assertTrue(
+            "data_extraction_rules must exclude cache from backup",
+            content.contains("path=\"cache\"")
+        )
+
+        // Critical Data Preservation: Room database must NOT be excluded
+        assertFalse(
+            "Room database must NOT be excluded from backup without explicit user approval",
+            content.contains("EXPENSE_TRACKER_DB") || content.contains("domain=\"database\"")
         )
     }
 
@@ -58,6 +74,22 @@ class BackupConfigurationTest {
         assertTrue(
             "backup_rules must exclude mileage_secure_credentials.xml from full-backup-content",
             content.contains("<full-backup-content>") && content.contains("path=\"mileage_secure_credentials.xml\"")
+        )
+
+        // GAP-03: Exclude temporary export reports and cache
+        assertTrue(
+            "backup_rules must exclude exports directory",
+            content.contains("path=\"exports\"")
+        )
+        assertTrue(
+            "backup_rules must exclude cache directory",
+            content.contains("path=\"cache\"")
+        )
+
+        // Critical Data Preservation: Room database must NOT be excluded
+        assertFalse(
+            "Room database must NOT be excluded from backup without explicit user approval",
+            content.contains("EXPENSE_TRACKER_DB") || content.contains("domain=\"database\"")
         )
     }
 }

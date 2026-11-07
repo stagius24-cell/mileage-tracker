@@ -32,8 +32,12 @@ class MileageTrackerApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
-        // Initialize transition recognition if enabled by user
+        // Initialize transition recognition if enabled by user and safely migrate sensitive preferences
         appScope.launch {
+            try {
+                preferencesManager.migrateSensitivePreferences()
+            } catch (_: Exception) {}
+
             val autoTrackEnabled = preferencesManager.isAutoTrackingEnabled.first()
             if (autoTrackEnabled) {
                 activityTransitionManager.registerTransitions()

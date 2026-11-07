@@ -227,8 +227,8 @@ open class GoogleAuthManager @Inject constructor(
             remoteError = e.localizedMessage
         }
 
-        // Always purge local credentials and reset state to disconnected
-        secureStorageManager.clearAllCredentials()
+        // Purge OAuth credentials and reset state to disconnected
+        secureStorageManager.clearOAuthCredentials()
         preferencesManager.setSheetsConnected(false)
         preferencesManager.setSheetsSpreadsheetId("")
         preferencesManager.setSheetsWebhookUrl("")

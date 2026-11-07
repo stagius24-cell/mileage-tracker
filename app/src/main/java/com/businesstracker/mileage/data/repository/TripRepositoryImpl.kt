@@ -1,21 +1,25 @@
 package com.businesstracker.mileage.data.repository
 
+import android.content.Context
 import com.businesstracker.mileage.data.local.TripDao
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.data.local.model.BusinessEntitySummary
 import com.businesstracker.mileage.data.local.model.ClassificationCount
 import com.businesstracker.mileage.domain.repository.TripRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class TripRepositoryImpl @Inject constructor(
     private val tripDao: TripDao,
-    private val ioDispatcher: CoroutineDispatcher
+    private val ioDispatcher: CoroutineDispatcher,
+    @ApplicationContext private val context: Context? = null
 ) : TripRepository {
 
     override fun getAllTrips(): Flow<List<TripEntity>> =
@@ -93,5 +97,24 @@ class TripRepositoryImpl @Inject constructor(
 
     override suspend fun markSynced(tripId: String, timestamp: Long) = withContext(ioDispatcher) {
         tripDao.updateSyncStatus(tripId, "SYNCED", timestamp)
+    }
+
+    override suspend fun deleteAllTripData(): Int = withContext(ioDispatcher) {
+        val count = tripDao.clearAllLocalTripData()
+        clearExportCache()
+        count
+    }
+
+    override fun clearExportCache(): Boolean {
+        val targetContext = context ?: return true
+        return try {
+            val exportDir = File(targetContext.cacheDir, "exports")
+            if (exportDir.exists() && exportDir.isDirectory) {
+                exportDir.listFiles()?.forEach { it.delete() }
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 }

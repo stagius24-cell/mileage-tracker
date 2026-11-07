@@ -1,6 +1,7 @@
 package com.businesstracker.mileage.data.preferences
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -10,10 +11,13 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.businesstracker.mileage.data.security.SecureStorageManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,10 +29,31 @@ data class VehicleAnchor(
     val timestamp: Long
 )
 
+/**
+ * Result representation for migrating sensitive preferences from plaintext DataStore to AndroidKeyStore.
+ */
+data class SensitivePreferencesMigrationResult(
+    val sheetsWebhookMigrated: Boolean,
+    val cfBearerTokenMigrated: Boolean,
+    val cfClientSecretMigrated: Boolean,
+    val isCompleteSuccess: Boolean,
+    val errors: List<String> = emptyList()
+)
+
 @Singleton
 class TrackingPreferencesManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private var secureStorageManager: SecureStorageManager
 ) {
+    // Secondary constructor for existing tests and backwards compatibility
+    constructor(context: Context) : this(context, SecureStorageManager(context))
+
+    @VisibleForTesting
+    internal fun setSecureStorageManagerForTesting(manager: SecureStorageManager) {
+        this.secureStorageManager = manager
+    }
+
+    private val migrationMutex = Mutex()
     companion object {
         private val KEY_AUTO_TRACKING_ENABLED = booleanPreferencesKey("auto_tracking_enabled")
         private val KEY_DEFAULT_BUSINESS_ENTITY = stringPreferencesKey("default_business_entity")
@@ -56,6 +81,7 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_SHEETS_LAST_SYNC_TIME = longPreferencesKey("sheets_last_sync_time")
         private val KEY_SHEETS_LAST_ERROR = stringPreferencesKey("sheets_last_error")
         private val KEY_SHEETS_AUTO_SYNC_ENABLED = booleanPreferencesKey("sheets_auto_sync_enabled")
+        private val KEY_SENSITIVE_DATA_VERSION = longPreferencesKey("sensitive_data_version")
 
         // Work Schedule & Auto-Classification Keys
         private val KEY_SCHEDULE_FILTERING_ENABLED = booleanPreferencesKey("schedule_filtering_enabled")
@@ -275,22 +301,40 @@ class TrackingPreferencesManager @Inject constructor(
     }
 
     val cfClientSecret: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_CF_CLIENT_SECRET] ?: ""
+        secureStorageManager.getCfClientSecret() ?: prefs[KEY_CF_CLIENT_SECRET] ?: ""
     }
 
     suspend fun setCfClientSecret(secret: String) {
+        if (secret.isBlank()) {
+            secureStorageManager.clearCfClientSecret()
+        } else {
+            val saved = secureStorageManager.saveCfClientSecret(secret)
+            if (!saved) {
+                throw SecurityException("Failed to securely store Cloudflare client secret in Keystore")
+            }
+        }
         context.dataStore.edit { prefs ->
-            prefs[KEY_CF_CLIENT_SECRET] = secret
+            prefs.remove(KEY_CF_CLIENT_SECRET)
+            prefs[KEY_SENSITIVE_DATA_VERSION] = System.currentTimeMillis()
         }
     }
 
     val cfBearerToken: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_CF_BEARER_TOKEN] ?: ""
+        secureStorageManager.getCfBearerToken() ?: prefs[KEY_CF_BEARER_TOKEN] ?: ""
     }
 
     suspend fun setCfBearerToken(token: String) {
+        if (token.isBlank()) {
+            secureStorageManager.clearCfBearerToken()
+        } else {
+            val saved = secureStorageManager.saveCfBearerToken(token)
+            if (!saved) {
+                throw SecurityException("Failed to securely store Cloudflare bearer token in Keystore")
+            }
+        }
         context.dataStore.edit { prefs ->
-            prefs[KEY_CF_BEARER_TOKEN] = token
+            prefs.remove(KEY_CF_BEARER_TOKEN)
+            prefs[KEY_SENSITIVE_DATA_VERSION] = System.currentTimeMillis()
         }
     }
 
@@ -395,13 +439,109 @@ class TrackingPreferencesManager @Inject constructor(
         return verified
     }
 
+    /**
+     * Migrates all sensitive preferences (sheetsWebhookUrl, cfBearerToken, cfClientSecret)
+     * from plaintext DataStore into hardware-backed AndroidKeyStore via [SecureStorageManager].
+     *
+     * In accordance with GAP-02 requirements:
+     * 1. Reads the old DataStore value.
+     * 2. Encrypts using AndroidKeyStore AES-256 GCM.
+     * 3. Reads back and verifies successful authenticated decryption.
+     * 4. Only after verified decryption, removes the plaintext DataStore entry.
+     * 5. If encryption or verification fails: preserves the original plaintext value in DataStore,
+     *    reports a recoverable migration error, and never corrupts or deletes data.
+     * 6. Thread-safe and idempotent via mutex locking.
+     */
+    suspend fun migrateSensitivePreferences(): SensitivePreferencesMigrationResult {
+        return migrationMutex.withLock {
+            val errors = mutableListOf<String>()
+            val prefs = context.dataStore.data.first()
+
+            var webhookMigrated = true
+            var bearerMigrated = true
+            var secretMigrated = true
+
+            // 1. Sheets Webhook URL
+            if (prefs.contains(KEY_SHEETS_WEBHOOK_URL)) {
+                val oldUrl = prefs[KEY_SHEETS_WEBHOOK_URL]?.trim().orEmpty()
+                if (oldUrl.isNotBlank()) {
+                    val saved = secureStorageManager.saveSheetsWebhookUrl(oldUrl)
+                    val verified = saved && (secureStorageManager.getSheetsWebhookUrl() == oldUrl)
+                    if (verified) {
+                        context.dataStore.edit { it.remove(KEY_SHEETS_WEBHOOK_URL) }
+                    } else {
+                        webhookMigrated = false
+                        errors.add("Failed to securely migrate sheets webhook URL to Keystore")
+                    }
+                } else {
+                    context.dataStore.edit { it.remove(KEY_SHEETS_WEBHOOK_URL) }
+                }
+            }
+
+            // 2. Cloudflare Bearer Token
+            if (prefs.contains(KEY_CF_BEARER_TOKEN)) {
+                val oldToken = prefs[KEY_CF_BEARER_TOKEN]?.trim().orEmpty()
+                if (oldToken.isNotBlank()) {
+                    val saved = secureStorageManager.saveCfBearerToken(oldToken)
+                    val verified = saved && (secureStorageManager.getCfBearerToken() == oldToken)
+                    if (verified) {
+                        context.dataStore.edit { it.remove(KEY_CF_BEARER_TOKEN) }
+                    } else {
+                        bearerMigrated = false
+                        errors.add("Failed to securely migrate Cloudflare bearer token to Keystore")
+                    }
+                } else {
+                    context.dataStore.edit { it.remove(KEY_CF_BEARER_TOKEN) }
+                }
+            }
+
+            // 3. Cloudflare Client Secret
+            if (prefs.contains(KEY_CF_CLIENT_SECRET)) {
+                val oldSecret = prefs[KEY_CF_CLIENT_SECRET]?.trim().orEmpty()
+                if (oldSecret.isNotBlank()) {
+                    val saved = secureStorageManager.saveCfClientSecret(oldSecret)
+                    val verified = saved && (secureStorageManager.getCfClientSecret() == oldSecret)
+                    if (verified) {
+                        context.dataStore.edit { it.remove(KEY_CF_CLIENT_SECRET) }
+                    } else {
+                        secretMigrated = false
+                        errors.add("Failed to securely migrate Cloudflare client secret to Keystore")
+                    }
+                } else {
+                    context.dataStore.edit { it.remove(KEY_CF_CLIENT_SECRET) }
+                }
+            }
+
+            // 4. Legacy OAuth Auth Token (if present)
+            migrateLegacyAuthToken(secureStorageManager)
+
+            val isSuccess = webhookMigrated && bearerMigrated && secretMigrated
+            SensitivePreferencesMigrationResult(
+                sheetsWebhookMigrated = webhookMigrated,
+                cfBearerTokenMigrated = bearerMigrated,
+                cfClientSecretMigrated = secretMigrated,
+                isCompleteSuccess = isSuccess,
+                errors = errors
+            )
+        }
+    }
+
     val sheetsWebhookUrl: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_SHEETS_WEBHOOK_URL] ?: ""
+        secureStorageManager.getSheetsWebhookUrl() ?: prefs[KEY_SHEETS_WEBHOOK_URL] ?: ""
     }
 
     suspend fun setSheetsWebhookUrl(url: String) {
+        if (url.isBlank()) {
+            secureStorageManager.clearSheetsWebhookUrl()
+        } else {
+            val saved = secureStorageManager.saveSheetsWebhookUrl(url)
+            if (!saved) {
+                throw SecurityException("Failed to securely store sheets webhook URL in Keystore")
+            }
+        }
         context.dataStore.edit { prefs ->
-            prefs[KEY_SHEETS_WEBHOOK_URL] = url
+            prefs.remove(KEY_SHEETS_WEBHOOK_URL)
+            prefs[KEY_SENSITIVE_DATA_VERSION] = System.currentTimeMillis()
         }
     }
 

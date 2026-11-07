@@ -47,6 +47,40 @@ interface TripDao {
     @Query("DELETE FROM trips WHERE id = :tripId")
     suspend fun deleteTripById(tripId: String)
 
+    // User-Controlled Full Data Deletion (GAP-04)
+    @Query("DELETE FROM trips")
+    suspend fun deleteAllTrips(): Int
+
+    @Query("DELETE FROM active_trip")
+    suspend fun deleteAllActiveTrips(): Int
+
+    @Query("DELETE FROM active_waypoints")
+    suspend fun deleteAllActiveWaypoints(): Int
+
+    @Query("DELETE FROM gps_inbox")
+    suspend fun deleteAllGpsInbox(): Int
+
+    @Query("DELETE FROM trip_lifecycle")
+    suspend fun deleteAllTripLifecycle(): Int
+
+    @Query("DELETE FROM trip_sequence")
+    suspend fun deleteAllTripSequence(): Int
+
+    /**
+     * Atomically purges all locally stored trips and associated tracking lifecycle session records.
+     * Guaranteed to execute inside a single SQLite transaction.
+     */
+    @androidx.room.Transaction
+    suspend fun clearAllLocalTripData(): Int {
+        val count = deleteAllTrips()
+        deleteAllActiveTrips()
+        deleteAllActiveWaypoints()
+        deleteAllGpsInbox()
+        deleteAllTripLifecycle()
+        deleteAllTripSequence()
+        return count
+    }
+
     @Query("SELECT * FROM trips WHERE id = :tripId LIMIT 1")
     suspend fun getTripById(tripId: String): TripEntity?
 

@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import com.businesstracker.mileage.ui.theme.SpeedRed
@@ -82,6 +84,9 @@ fun SettingsScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val localContext = androidx.compose.ui.platform.LocalContext.current
     var isD1Expanded by remember { mutableStateOf(false) }
+    var showFirstDeleteDialog by remember { mutableStateOf(false) }
+    var showSecondDeleteDialog by remember { mutableStateOf(false) }
+    var showTrackingActiveDialog by remember { mutableStateOf(false) }
 
     val googleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
@@ -1047,5 +1052,175 @@ fun SettingsScreen(
                 }
             }
         }
+
+        // Data Management & Privacy (GAP-04)
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(40.dp),
+                            shape = CircleShape,
+                            color = SpeedRed.copy(alpha = 0.15f)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = null,
+                                    tint = SpeedRed,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+
+                        Column {
+                            Text(
+                                text = "Data Management & Privacy",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Erase local trips and cache",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SlateNeutral
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Permanently deletes all locally recorded trips, waypoints, and cached export files. Google Sheets records and your configuration are NOT deleted.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    state.deletionMessage?.let { msg ->
+                        Text(
+                            text = msg,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (msg.startsWith("Successfully")) SucculentPrimary else SpeedRed,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            if (viewModel.isTrackingActive()) {
+                                showTrackingActiveDialog = true
+                            } else {
+                                showFirstDeleteDialog = true
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SpeedRed,
+                            contentColor = Color.White
+                        ),
+                        enabled = !state.isDeletingAllTrips
+                    ) {
+                        if (state.isDeletingAllTrips) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color.White)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Delete All Trip Data", fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showTrackingActiveDialog) {
+        AlertDialog(
+            onDismissRequest = { showTrackingActiveDialog = false },
+            title = { Text("Active Tracking in Progress", fontWeight = FontWeight.Bold) },
+            text = { Text("A drive is currently being tracked. Please end or discard the active trip on the Dashboard before deleting trip data.") },
+            confirmButton = {
+                TextButton(onClick = { showTrackingActiveDialog = false }) {
+                    Text("OK", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    if (showFirstDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showFirstDeleteDialog = false },
+            title = { Text("Delete All Local Trip Data?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "This action will permanently delete all local trip history, active sessions, and cached report files from this device.\n\n" +
+                    "• Google Sheets records are NOT deleted.\n" +
+                    "• Cloudflare D1 records are NOT deleted.\n" +
+                    "• Your Google login and settings will be preserved.\n\n" +
+                    "Do you want to proceed?"
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showFirstDeleteDialog = false
+                        showSecondDeleteDialog = true
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
+                ) {
+                    Text("Continue", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFirstDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showSecondDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showSecondDeleteDialog = false },
+            title = { Text("Permanent Deletion Confirmation", fontWeight = FontWeight.Bold, color = SpeedRed) },
+            text = {
+                Text(
+                    "This action is permanent and cannot be undone.\n\n" +
+                    "All local mileage logs, GPS coordinates, and deduction records will be permanently removed from this phone."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showSecondDeleteDialog = false
+                        viewModel.deleteAllTripData()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
+                ) {
+                    Text("Permanently Delete", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSecondDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
