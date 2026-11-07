@@ -83,6 +83,11 @@ private data class SheetsPrefs(
     val lastError: String?
 )
 
+private data class DeletionUiState(
+    val isDeleting: Boolean = false,
+    val message: String? = null
+)
+
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val preferencesManager: TrackingPreferencesManager,
@@ -95,8 +100,7 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _isSyncing = MutableStateFlow(false)
-    private val _isDeletingAllTrips = MutableStateFlow(false)
-    private val _deletionMessage = MutableStateFlow<String?>(null)
+    private val _deletionState = MutableStateFlow(DeletionUiState())
 
     private val generalFlow = combine(
         preferencesManager.isAutoTrackingEnabled,
@@ -183,9 +187,8 @@ class SettingsViewModel @Inject constructor(
         sheetsFlow,
         pendingCountFlow,
         _isSyncing,
-        _isDeletingAllTrips,
-        _deletionMessage
-    ) { config, sheets, pendingCount, isSyncing, isDeleting, deletionMsg ->
+        _deletionState
+    ) { config, sheets, pendingCount, isSyncing, deletion ->
         val hasBg = hasBackgroundLocationPermission()
         val isReady = config.general.autoTrackingEnabled && hasRequiredPermissions()
 
@@ -217,8 +220,8 @@ class SettingsViewModel @Inject constructor(
             sheetsLastError = sheets.lastError,
             pendingTripsCount = pendingCount,
             isSyncing = isSyncing,
-            isDeletingAllTrips = isDeleting,
-            deletionMessage = deletionMsg
+            isDeletingAllTrips = deletion.isDeleting,
+            deletionMessage = deletion.message
         )
     }.stateIn(
         scope = viewModelScope,
@@ -406,27 +409,34 @@ class SettingsViewModel @Inject constructor(
             val failure = Result.failure<Int>(
                 IllegalStateException("Tracking is currently active. Please end the active drive before deleting trip data.")
             )
-            _deletionMessage.value = "Cannot delete while tracking is active. End your drive first."
+            _deletionState.value = DeletionUiState(
+                isDeleting = false,
+                message = "Cannot delete while tracking is active. End your drive first."
+            )
             onResult(failure)
             return
         }
 
         viewModelScope.launch {
-            _isDeletingAllTrips.value = true
+            _deletionState.value = DeletionUiState(isDeleting = true, message = null)
             try {
                 val deletedCount = tripRepository.deleteAllTripData()
-                _isDeletingAllTrips.value = false
-                _deletionMessage.value = "Successfully deleted $deletedCount local trip records and cleared report cache."
+                _deletionState.value = DeletionUiState(
+                    isDeleting = false,
+                    message = "Successfully deleted $deletedCount local trip records and cleared report cache."
+                )
                 onResult(Result.success(deletedCount))
             } catch (e: Exception) {
-                _isDeletingAllTrips.value = false
-                _deletionMessage.value = "Failed to delete local trip data: ${e.message}"
+                _deletionState.value = DeletionUiState(
+                    isDeleting = false,
+                    message = "Failed to delete local trip data: ${e.message}"
+                )
                 onResult(Result.failure(e))
             }
         }
     }
 
     fun clearDeletionMessage() {
-        _deletionMessage.value = null
+        _deletionState.update { it.copy(message = null) }
     }
 }
