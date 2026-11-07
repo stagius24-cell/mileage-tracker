@@ -1,0 +1,15 @@
+{
+  "versionName": "1.0.8",
+  "versionCode": 9,
+  "package": "com.businesstracker.mileage.debug",
+  "sourceBranch": "feature/reports-mobile-streamline",
+  "sourceCommit": "251545b9c9606b244c7d9dd3f5c919e691790efd",
+  "workflowRun": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42383000085",
+  "workflowArtifactId": 13579160083,
+  "unitTests": "debug and release suites passed",
+  "apkSha256": "5ed3e4e3a0742b0afe5b7ed41845f13f0f31239b7232f90814ee89154b6cfcba",
+  "signingCertificateSha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "signatureSchemes": ["v2", "v3"],
+  "payloadComparison": "969 non-signature ZIP entries identical to CI artifact",
+  "physicalReportsUiValidation": "NOT RUN"
+}
