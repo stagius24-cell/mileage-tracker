@@ -40,7 +40,7 @@
 | **P3-010** | Partial Failure | NOT TESTED | - | - | PartialSuccess taxonomy check |
 | **P3-011** | Network Failure | NOT TESTED | - | - | Offline airplane mode check |
 | **P3-012** | Invalid Configuration | NOT TESTED | - | - | Pre-flight rejection of bad URL/ID |
-| **P3-013** | Permission Setup | NOT TESTED | - | - | Background location, activity recognition, notifications |
+| **P3-013** | Permission Setup | **PASS** | 2026-11-06 | User Confirmation | Location ("Allow all the time" + precise), Physical Activity, Notifications granted; Samsung Battery Unrestricted. Clean 0.0 mi dashboard and smooth tab navigation. |
 | **P3-014** | Real Vehicle Trip | NOT TESTED | - | - | Controlled test drive |
 | **P3-015** | Screen-Off Tracking | NOT TESTED | - | - | Background continuous tracking with screen locked |
 | **P3-016** | Short Movement (<200m) | NOT TESTED | - | - | Movement discarded / unconfirmed |
@@ -67,5 +67,5 @@
 ## 4. Release-Readiness Assessment
 
 - **Overall Status:** `TESTING IN PROGRESS`
-- **Gates Fulfilled:** 1 / 11 (P3-001 PASS, P3-002 FAIL logged)
-- **Recommendation:** Proceed with Session A permissions check (`P3-013`) and Session B drive detection tests on the fresh installation while tracking DEF-001.
+- **Gates Fulfilled:** 2 / 11 (P3-001 PASS, P3-013 PASS; P3-002 FAIL logged)
+- **Recommendation:** Proceed with Session B drive detection tests (stationary drift P3-016 and candidate drive P3-017) on the validated Samsung installation.
