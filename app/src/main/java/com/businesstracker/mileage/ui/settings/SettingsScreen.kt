@@ -1,64 +1,56 @@
 package com.businesstracker.mileage.ui.settings
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.TableChart
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Error
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.OutlinedButton
-import com.businesstracker.mileage.ui.theme.SpeedRed
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -67,18 +59,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.core.content.ContextCompat
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
-import com.businesstracker.mileage.ui.theme.SlateNeutral
+import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(
@@ -86,16 +79,14 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val localContext = androidx.compose.ui.platform.LocalContext.current
+    val context = androidx.compose.ui.platform.LocalContext.current
 
-    val googleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        viewModel.handleGoogleSignInResult(result.data)
-    }
+    val googleSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result -> viewModel.handleGoogleSignInResult(result.data) }
 
-    val bluetoothPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) {
             viewModel.refreshPairedBluetoothDevices()
@@ -103,537 +94,156 @@ fun SettingsScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.refreshPairedBluetoothDevices()
-    }
+    LaunchedEffect(Unit) { viewModel.refreshPairedBluetoothDevices() }
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Automatic Drive Detection & Work Hours Schedule Card
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // Master Auto Tracking Switch
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Automatic Drive Detection",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "Low-power Activity Recognition automatically detects drives and notifies you to review.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+            Text(
+                text = "Settings",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        item {
+            SettingsSection(title = "Drive tracking", icon = Icons.Default.LocationOn) {
+                SettingsSwitchRow(
+                    title = "Automatic detection",
+                    description = "Detect drives in the background",
+                    checked = state.autoTrackingEnabled,
+                    onCheckedChange = viewModel::setAutoTrackingEnabled
+                )
+
+                if (state.autoTrackingEnabled && !state.hasBackgroundLocationPermission) {
+                    CompactAlert(
+                        text = "Allow location all the time for automatic tracking.",
+                        actionLabel = "Open settings",
+                        onAction = {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
                             )
                         }
+                    )
+                }
 
-                        Switch(
-                            checked = state.autoTrackingEnabled,
-                            onCheckedChange = { viewModel.setAutoTrackingEnabled(it) },
-                            colors = SwitchDefaults.colors(checkedThumbColor = SucculentPrimary)
-                        )
+                SectionDivider()
+                SettingsSwitchRow(
+                    title = "Work schedule",
+                    description = "Apply work days and hours",
+                    checked = state.scheduleFilteringEnabled,
+                    enabled = state.autoTrackingEnabled,
+                    onCheckedChange = viewModel::setScheduleFilteringEnabled
+                )
+
+                if (state.autoTrackingEnabled && state.scheduleFilteringEnabled) {
+                    ScheduleControls(
+                        state = state,
+                        onToggleDay = viewModel::toggleWorkDay,
+                        onStartChange = viewModel::setWorkHoursStart,
+                        onEndChange = viewModel::setWorkHoursEnd,
+                        onBehaviorChange = viewModel::setOutsideScheduleBehavior
+                    )
+                }
+
+                SectionDivider()
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        } catch (_: Exception) {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.BatterySaver, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Battery optimization")
+                }
+            }
+        }
+
+        item {
+            var bluetoothMenuExpanded by remember { mutableStateOf(false) }
+
+            SettingsSection(title = "Vehicle", icon = Icons.Default.DirectionsCar) {
+                OutlinedTextField(
+                    value = state.defaultVehicle,
+                    onValueChange = viewModel::setDefaultVehicle,
+                    label = { Text("Vehicle name") },
+                    placeholder = { Text("Tesla Model Y") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                SectionDivider()
+                SettingsSwitchRow(
+                    title = "Bluetooth auto-stop",
+                    description = "Stop after the selected car disconnects",
+                    checked = state.bluetoothAutoStopEnabled,
+                    onCheckedChange = { enabled ->
+                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                            ContextCompat.checkSelfPermission(
+                                context,
+                                Manifest.permission.BLUETOOTH_CONNECT
+                            ) != PackageManager.PERMISSION_GRANTED
+                        ) {
+                            bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                        } else {
+                            viewModel.setBluetoothAutoStopEnabled(enabled)
+                            if (enabled) viewModel.refreshPairedBluetoothDevices()
+                        }
                     }
+                )
 
-                    // Background Location Permission Warning (if permission missing on Android 10+)
-                    if (state.autoTrackingEnabled && !state.hasBackgroundLocationPermission) {
-                        val localContext = androidx.compose.ui.platform.LocalContext.current
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.25f)),
+                if (state.bluetoothAutoStopEnabled) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.refreshPairedBluetoothDevices()
+                                bluetoothMenuExpanded = true
+                            },
+                            modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp)
                         ) {
-                            Column(modifier = Modifier.padding(14.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        Icons.Default.Security,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.error,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Background Location Required",
-                                        style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "To detect drives automatically when your phone is in your pocket or vehicle, set Location to 'Allow all the time'.",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Button(
-                                    onClick = {
-                                        val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                            data = android.net.Uri.fromParts("package", localContext.packageName, null)
-                                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                                        }
-                                        localContext.startActivity(intent)
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-                                ) {
-                                    Text("Open Location Settings", color = Color.White)
-                                }
-                            }
-                        }
-                    } else if (state.autoTrackingEnabled && state.isAutoTrackingReady) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(SucculentPrimary)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Auto Drive Detection Ready • Active in Background",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = SucculentPrimary,
-                                fontWeight = FontWeight.SemiBold
+                                state.vehicleBluetoothName.takeIf { it.isNotBlank() }
+                                    ?: "Choose paired car"
                             )
                         }
-                    }
-
-                    // Work Schedule & Day-of-Week Filters (Visible when Auto Tracking is ON)
-                    AnimatedVisibility(
-                        visible = state.autoTrackingEnabled,
-                        enter = expandVertically(tween(300)) + fadeIn(tween(300)),
-                        exit = shrinkVertically(tween(300)) + fadeOut(tween(300))
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        DropdownMenu(
+                            expanded = bluetoothMenuExpanded,
+                            onDismissRequest = { bluetoothMenuExpanded = false }
                         ) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-                            // Schedule Filter Toggle Row
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Schedule,
-                                        contentDescription = null,
-                                        tint = SucculentPrimary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column {
-                                        Text(
-                                            text = "Work Hours & Days Filter",
-                                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
-                                        )
-                                        Text(
-                                            text = "Customize business drive tracking schedule",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                        )
-                                    }
-                                }
-
-                                Switch(
-                                    checked = state.scheduleFilteringEnabled,
-                                    onCheckedChange = { viewModel.setScheduleFilteringEnabled(it) },
-                                    colors = SwitchDefaults.colors(checkedThumbColor = SucculentPrimary)
+                            if (state.pairedBluetoothDevices.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text("No paired devices found") },
+                                    onClick = {},
+                                    enabled = false
                                 )
-                            }
-
-                            if (state.scheduleFilteringEnabled) {
-                                // 1. Days of Week Selector
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(
-                                        text = "ACTIVE WORK DAYS",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            letterSpacing = 1.sp,
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        color = SlateNeutral
-                                    )
-
-                                    val days = listOf(
-                                        "MON" to "Mon",
-                                        "TUE" to "Tue",
-                                        "WED" to "Wed",
-                                        "THU" to "Thu",
-                                        "FRI" to "Fri",
-                                        "SAT" to "Sat",
-                                        "SUN" to "Sun"
-                                    )
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween
-                                    ) {
-                                        days.forEach { (code, label) ->
-                                            val isSelected = state.workDays.contains(code)
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(40.dp)
-                                                    .clip(CircleShape)
-                                                    .background(
-                                                        if (isSelected) SucculentPrimary else MaterialTheme.colorScheme.surfaceVariant
-                                                    )
-                                                    .clickable { viewModel.toggleWorkDay(code) },
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = label,
-                                                    style = MaterialTheme.typography.labelSmall.copy(
-                                                        fontSize = 11.sp,
-                                                        fontWeight = if (isSelected) FontWeight.Black else FontWeight.Medium
-                                                    ),
-                                                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                // 2. Work Hours Range
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(
-                                        text = "WORK HOURS WINDOW",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            letterSpacing = 1.sp,
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        color = SlateNeutral
-                                    )
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        OutlinedTextField(
-                                            value = state.workHoursStart,
-                                            onValueChange = { viewModel.setWorkHoursStart(it) },
-                                            label = { Text("Start Time") },
-                                            placeholder = { Text("08:00") },
-                                            modifier = Modifier.weight(1f),
-                                            singleLine = true,
-                                            shape = RoundedCornerShape(12.dp)
-                                        )
-
-                                        Text(
-                                            text = "to",
-                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                            color = SlateNeutral
-                                        )
-
-                                        OutlinedTextField(
-                                            value = state.workHoursEnd,
-                                            onValueChange = { viewModel.setWorkHoursEnd(it) },
-                                            label = { Text("End Time") },
-                                            placeholder = { Text("18:00") },
-                                            modifier = Modifier.weight(1f),
-                                            singleLine = true,
-                                            shape = RoundedCornerShape(12.dp)
-                                        )
-                                    }
-                                }
-
-                                // 3. Outside Schedule Behavior Selector
-                                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Text(
-                                        text = "OUTSIDE SCHEDULE BEHAVIOR",
-                                        style = MaterialTheme.typography.labelSmall.copy(
-                                            letterSpacing = 1.sp,
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        color = SlateNeutral
-                                    )
-
-                                    val isClassifyPersonal = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL
-                                    val isConserveBattery = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY
-
-                                    // Option A: Auto-Classify as Personal
-                                    Surface(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .border(
-                                                width = if (isClassifyPersonal) 2.dp else 1.dp,
-                                                color = if (isClassifyPersonal) SucculentPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                                                shape = RoundedCornerShape(12.dp)
-                                            )
-                                            .clickable {
-                                                viewModel.setOutsideScheduleBehavior(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL)
-                                            },
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = if (isClassifyPersonal) SucculentPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(14.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(20.dp)
-                                                    .clip(CircleShape)
-                                                    .border(
-                                                        2.dp,
-                                                        if (isClassifyPersonal) SucculentPrimary else SlateNeutral,
-                                                        CircleShape
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                if (isClassifyPersonal) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(10.dp)
-                                                            .clip(CircleShape)
-                                                            .background(SucculentPrimary)
-                                                    )
-                                                }
-                                            }
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Column {
-                                                Text(
-                                                    text = "Auto-classify as Personal Drive",
-                                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                                                )
-                                                Text(
-                                                    text = "Logs drive and automatically marks as Personal without tax deduction.",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    // Option B: Turn Off to Conserve Battery
-                                    Surface(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clip(RoundedCornerShape(12.dp))
-                                            .border(
-                                                width = if (isConserveBattery) 2.dp else 1.dp,
-                                                color = if (isConserveBattery) SucculentPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
-                                                shape = RoundedCornerShape(12.dp)
-                                            )
-                                            .clickable {
-                                                viewModel.setOutsideScheduleBehavior(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY)
-                                            },
-                                        shape = RoundedCornerShape(12.dp),
-                                        color = if (isConserveBattery) SucculentPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(14.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(20.dp)
-                                                    .clip(CircleShape)
-                                                    .border(
-                                                        2.dp,
-                                                        if (isConserveBattery) SucculentPrimary else SlateNeutral,
-                                                        CircleShape
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                if (isConserveBattery) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .size(10.dp)
-                                                            .clip(CircleShape)
-                                                            .background(SucculentPrimary)
-                                                    )
-                                                }
-                                            }
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Column {
-                                                Text(
-                                                    text = "Turn Off Tracking (Conserve Battery)",
-                                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold)
-                                                )
-                                                Text(
-                                                    text = "Stops GPS & Activity Detection outside work schedule to save battery.",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Battery optimization shortcut
-        item {
-            OutlinedButton(
-                onClick = {
-                    try {
-                        val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                        localContext.startActivity(intent)
-                    } catch (_: Exception) {
-                        try {
-                            val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = android.net.Uri.fromParts("package", localContext.packageName, null)
-                            }
-                            localContext.startActivity(intent)
-                        } catch (_: Exception) {}
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text("Configure Battery Optimization")
-            }
-        }
-
-        // Primary Vehicle Information Card (Tesla Model Y)
-        item {
-            var isBluetoothMenuExpanded by remember { mutableStateOf(false) }
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.DirectionsCar,
-                            contentDescription = null,
-                            tint = SucculentPrimary,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Primary Vehicle",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    OutlinedTextField(
-                        value = state.defaultVehicle,
-                        onValueChange = { viewModel.setDefaultVehicle(it) },
-                        label = { Text("Vehicle Description") },
-                        placeholder = { Text("Tesla Model Y") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Stop Using Vehicle Bluetooth",
-                                style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Starts the safe stop timer when your selected car disconnects.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                        }
-                        Switch(
-                            checked = state.bluetoothAutoStopEnabled,
-                            onCheckedChange = { enabled ->
-                                if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                                    ContextCompat.checkSelfPermission(
-                                        localContext,
-                                        Manifest.permission.BLUETOOTH_CONNECT
-                                    ) != PackageManager.PERMISSION_GRANTED
-                                ) {
-                                    bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                                } else {
-                                    viewModel.setBluetoothAutoStopEnabled(enabled)
-                                    if (enabled) viewModel.refreshPairedBluetoothDevices()
-                                }
-                            },
-                            colors = SwitchDefaults.colors(checkedThumbColor = SucculentPrimary)
-                        )
-                    }
-
-                    if (state.bluetoothAutoStopEnabled) {
-                        Text(
-                            text = if (state.vehicleBluetoothName.isNotBlank()) {
-                                "Vehicle: ${state.vehicleBluetoothName}"
                             } else {
-                                "Select your paired vehicle"
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (state.vehicleBluetoothName.isNotBlank()) {
-                                SucculentPrimary
-                            } else {
-                                MaterialTheme.colorScheme.error
-                            }
-                        )
-
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                                onClick = {
-                                    viewModel.refreshPairedBluetoothDevices()
-                                    isBluetoothMenuExpanded = true
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Choose Vehicle Bluetooth")
-                            }
-                            DropdownMenu(
-                                expanded = isBluetoothMenuExpanded,
-                                onDismissRequest = { isBluetoothMenuExpanded = false }
-                            ) {
-                                if (state.pairedBluetoothDevices.isEmpty()) {
+                                state.pairedBluetoothDevices.forEach { device ->
                                     DropdownMenuItem(
-                                        text = { Text("No paired devices found") },
-                                        onClick = {},
-                                        enabled = false
+                                        text = { Text(device.name) },
+                                        onClick = {
+                                            viewModel.selectVehicleBluetoothDevice(device)
+                                            bluetoothMenuExpanded = false
+                                        }
                                     )
-                                } else {
-                                    state.pairedBluetoothDevices.forEach { device ->
-                                        DropdownMenuItem(
-                                            text = { Text(device.name) },
-                                            onClick = {
-                                                viewModel.selectVehicleBluetoothDevice(device)
-                                                isBluetoothMenuExpanded = false
-                                            }
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -642,242 +252,359 @@ fun SettingsScreen(
             }
         }
 
-        // Google Sheets Synchronization Card
         item {
-            var isSheetsCardExpanded by remember { mutableStateOf(true) }
-            val timeFmt = remember { SimpleDateFormat("MMM d, yyyy h:mm a", Locale.getDefault()) }
-            val lastSyncStr = if (state.sheetsLastSyncTime > 0) timeFmt.format(Date(state.sheetsLastSyncTime)) else "Never"
+            val timeFormat = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
+            val lastSync = if (state.sheetsLastSyncTime > 0L) {
+                timeFormat.format(Date(state.sheetsLastSyncTime))
+            } else {
+                "Never"
+            }
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            SettingsSection(
+                title = "Google Sheets",
+                icon = Icons.Default.TableChart,
+                trailing = {
+                    StatusText(
+                        text = if (state.isSheetsConnected) "Connected" else "Not connected",
+                        positive = state.isSheetsConnected
+                    )
+                }
             ) {
-                Column(
+                if (!state.sheetsLastError.isNullOrBlank()) {
+                    CompactError(state.sheetsLastError.orEmpty())
+                }
+
+                AccountRow(
+                    connected = state.hasOAuthCredential,
+                    email = state.connectedAccountEmail,
+                    onConnect = {
+                        googleSignInLauncher.launch(viewModel.getGoogleSignInClient().signInIntent)
+                    },
+                    onDisconnect = viewModel::disconnectSheets
+                )
+
+                OutlinedTextField(
+                    value = state.sheetsSpreadsheetId,
+                    onValueChange = viewModel::setSheetsSpreadsheetId,
+                    label = { Text("Spreadsheet ID") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp)
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    MetaText("Last sync", lastSync)
+                    MetaText("Pending", state.pendingTripsCount.toString(), Alignment.End)
+                }
+
+                Button(
+                    onClick = viewModel::syncSheetsNow,
+                    enabled = !state.isSyncing,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { isSheetsCardExpanded = !isSheetsCardExpanded },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = SucculentPrimary.copy(alpha = 0.15f),
-                                modifier = Modifier.size(38.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.TableChart,
-                                    contentDescription = null,
-                                    tint = SucculentPrimary,
-                                    modifier = Modifier.padding(8.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text(
-                                        text = "Google Sheets Sync",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    val isExpired = state.sheetsLastError?.contains("expired", ignoreCase = true) == true || state.sheetsLastError?.contains("reconnect", ignoreCase = true) == true
-                                    val statusText = when {
-                                        isExpired -> "Auth Expired"
-                                        state.isSheetsConnected -> "Connected"
-                                        else -> "Not Connected"
-                                    }
-                                    val statusColor = when {
-                                        isExpired -> SpeedRed
-                                        state.isSheetsConnected -> SucculentPrimary
-                                        else -> SlateNeutral
-                                    }
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = statusColor.copy(alpha = 0.15f)
-                                    ) {
-                                        Text(
-                                            text = statusText,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = statusColor
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        val rotationAngle by animateFloatAsState(
-                            targetValue = if (isSheetsCardExpanded) 180f else 0f,
-                            animationSpec = tween(durationMillis = 400),
-                            label = "sheets_expand_rotation"
+                    if (state.isSyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Color.White,
+                            strokeWidth = 2.dp
                         )
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (isSheetsCardExpanded) "Collapse" else "Expand",
-                            modifier = Modifier
-                                .size(28.dp)
-                                .rotate(rotationAngle),
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
+                    } else {
+                        Icon(Icons.Default.Sync, contentDescription = null)
                     }
-
-                    AnimatedVisibility(
-                        visible = isSheetsCardExpanded,
-                        enter = expandVertically(animationSpec = tween(400)) + fadeIn(animationSpec = tween(400)),
-                        exit = shrinkVertically(animationSpec = tween(400)) + fadeOut(animationSpec = tween(400))
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-                            // Status Details
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Column {
-                                    Text("Last Sync", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                                    Text(lastSyncStr, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text("Pending Uploads", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                                    Text("${state.pendingTripsCount} drives", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-
-                            if (!state.sheetsLastError.isNullOrBlank()) {
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = SpeedRed.copy(alpha = 0.1f),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Error, contentDescription = null, tint = SpeedRed, modifier = Modifier.size(16.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(text = state.sheetsLastError ?: "", color = SpeedRed, style = MaterialTheme.typography.bodySmall)
-                                    }
-                                }
-                            }
-
-                            // Secure Google OAuth 2.0 Authorization Card (Google Play Services Integration)
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = if (state.hasOAuthCredential) SucculentPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(14.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Icon(
-                                            imageVector = if (state.hasOAuthCredential) Icons.Default.CheckCircle else Icons.Default.Security,
-                                            contentDescription = null,
-                                            tint = if (state.hasOAuthCredential) SucculentPrimary else SlateNeutral,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Column {
-                                            Text(
-                                                text = if (state.hasOAuthCredential) "Google Account" else "Connect Google Account",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                            state.connectedAccountEmail?.takeIf { it.isNotBlank() }?.let { email ->
-                                                Text(
-                                                    text = email,
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = SlateNeutral
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    if (state.hasOAuthCredential) {
-                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            OutlinedButton(
-                                                onClick = {
-                                                    val client = viewModel.getGoogleSignInClient()
-                                                    googleSignInLauncher.launch(client.signInIntent)
-                                                },
-                                                shape = RoundedCornerShape(8.dp),
-                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                            ) {
-                                                Text("Switch", style = MaterialTheme.typography.labelSmall)
-                                            }
-                                            OutlinedButton(
-                                                onClick = { viewModel.disconnectSheets() },
-                                                shape = RoundedCornerShape(8.dp),
-                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                                            ) {
-                                                Text("Disconnect", color = SpeedRed, style = MaterialTheme.typography.labelSmall)
-                                            }
-                                        }
-                                    } else {
-                                        Button(
-                                            onClick = {
-                                                val client = viewModel.getGoogleSignInClient()
-                                                googleSignInLauncher.launch(client.signInIntent)
-                                            },
-                                            shape = RoundedCornerShape(8.dp),
-                                            colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
-                                        ) {
-                                            Text("Connect", color = Color.White, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                                        }
-                                    }
-                                }
-                            }
-
-                            OutlinedTextField(
-                                value = state.sheetsSpreadsheetId,
-                                onValueChange = { viewModel.setSheetsSpreadsheetId(it) },
-                                label = { Text("Google Spreadsheet ID") },
-                                placeholder = { Text("e.g. 1BxiMVs0XRA5nFMdKvBdBZjgmUUq...") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            Button(
-                                onClick = { viewModel.syncSheetsNow() },
-                                enabled = !state.isSyncing,
-                                modifier = Modifier.fillMaxWidth().height(48.dp),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-                            ) {
-                                if (state.isSyncing) {
-                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Syncing...", fontWeight = FontWeight.Bold, color = Color.White)
-                                } else {
-                                    Icon(Icons.Default.Sync, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Sync Sheets", fontWeight = FontWeight.Bold, color = Color.White)
-                                }
-                            }
-                        }
-                    }
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (state.isSyncing) "Syncing" else "Sync now")
                 }
             }
         }
     }
+}
+
+@Composable
+private fun SettingsSection(
+    title: String,
+    icon: ImageVector,
+    trailing: (@Composable () -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = SucculentPrimary,
+                    modifier = Modifier.size(22.dp)
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f)
+                )
+                trailing?.invoke()
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SettingsSwitchRow(
+    title: String,
+    description: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 52.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium,
+                color = if (enabled) MaterialTheme.colorScheme.onSurface
+                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                    alpha = if (enabled) 1f else 0.45f
+                )
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            enabled = enabled,
+            colors = SwitchDefaults.colors(checkedThumbColor = SucculentPrimary)
+        )
+    }
+}
+
+@Composable
+private fun ScheduleControls(
+    state: SettingsUiState,
+    onToggleDay: (String) -> Unit,
+    onStartChange: (String) -> Unit,
+    onEndChange: (String) -> Unit,
+    onBehaviorChange: (String) -> Unit
+) {
+    val days = listOf(
+        "MON" to "M", "TUE" to "T", "WED" to "W", "THU" to "T",
+        "FRI" to "F", "SAT" to "S", "SUN" to "S"
+    )
+
+    Text("Work days", style = MaterialTheme.typography.labelLarge)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        days.forEach { (code, label) ->
+            FilterChip(
+                selected = code in state.workDays,
+                onClick = { onToggleDay(code) },
+                modifier = Modifier.weight(1f),
+                label = { Text(label) }
+            )
+        }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            value = state.workHoursStart,
+            onValueChange = onStartChange,
+            label = { Text("Start") },
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
+        )
+        OutlinedTextField(
+            value = state.workHoursEnd,
+            onValueChange = onEndChange,
+            label = { Text("End") },
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            shape = RoundedCornerShape(12.dp)
+        )
+    }
+
+    Text("Outside work hours", style = MaterialTheme.typography.labelLarge)
+    CompactRadioRow(
+        title = "Classify as personal",
+        selected = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
+        onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL) }
+    )
+    CompactRadioRow(
+        title = "Do not track",
+        selected = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY,
+        onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) }
+    )
+}
+
+@Composable
+private fun CompactRadioRow(title: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp)
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(selected = selected, onClick = onClick)
+        Spacer(Modifier.width(8.dp))
+        Text(title, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
+@Composable
+private fun CompactAlert(text: String, actionLabel: String, onAction: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Default.Security,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+        }
+        OutlinedButton(onClick = onAction, modifier = Modifier.fillMaxWidth()) {
+            Text(actionLabel)
+        }
+    }
+}
+
+@Composable
+private fun AccountRow(
+    connected: Boolean,
+    email: String?,
+    onConnect: () -> Unit,
+    onDisconnect: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column {
+            Text(
+                text = if (connected) "Google account" else "Connect Google account",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Medium
+            )
+            email?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (connected) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onConnect, modifier = Modifier.weight(1f)) {
+                    Text("Switch")
+                }
+                OutlinedButton(onClick = onDisconnect, modifier = Modifier.weight(1f)) {
+                    Text("Disconnect", color = SpeedRed)
+                }
+            }
+        } else {
+            Button(
+                onClick = onConnect,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+            ) {
+                Text("Connect")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactError(message: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(SpeedRed.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Default.Error,
+            contentDescription = null,
+            tint = SpeedRed,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(message, style = MaterialTheme.typography.bodySmall, color = SpeedRed)
+    }
+}
+
+@Composable
+private fun StatusText(text: String, positive: Boolean) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (positive) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+@Composable
+private fun MetaText(
+    label: String,
+    value: String,
+    alignment: Alignment.Horizontal = Alignment.Start
+) {
+    Column(horizontalAlignment = alignment) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
+    }
+}
+
+@Composable
+private fun SectionDivider() {
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
