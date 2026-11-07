@@ -29,10 +29,12 @@ import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.Waypoint
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
 import com.businesstracker.mileage.domain.service.BootCountProvider
+import com.businesstracker.mileage.domain.tracking.StationaryAutoStopMonitor
 import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.FinalizeTripUseCase
 import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
+import com.businesstracker.mileage.worker.TripDebounceWorker
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
@@ -136,11 +138,45 @@ class LocationTrackingService : Service() {
     private var isDisplacementConfirmed: Boolean = false
     private var isPaused: Boolean = false
     private var waypointCount: Int = 0
+    private val stationaryAutoStopMonitor = StationaryAutoStopMonitor()
+    private val stationaryAutoStopRequested = AtomicBoolean(false)
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             if (isPaused || isStopping.get()) return
             gpsLocationQueue?.enqueueBatch(result.locations)
+            evaluateStationaryAutoStop(result.locations)
+        }
+    }
+
+    private fun evaluateStationaryAutoStop(locations: List<Location>) {
+        if (trackingMethod != TrackingMethod.AUTO_DETECTED ||
+            !isDisplacementConfirmed ||
+            stationaryAutoStopRequested.get()
+        ) return
+
+        val shouldStop = locations.any { location ->
+            val elapsedMillis = if (location.elapsedRealtimeNanos > 0L) {
+                location.elapsedRealtimeNanos / 1_000_000L
+            } else {
+                android.os.SystemClock.elapsedRealtime()
+            }
+            stationaryAutoStopMonitor.record(
+                latitude = location.latitude,
+                longitude = location.longitude,
+                speedMetersPerSecond = if (location.hasSpeed()) location.speed else 0f,
+                accuracyMeters = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE,
+                elapsedRealtimeMillis = elapsedMillis
+            )
+        }
+
+        if (shouldStop && stationaryAutoStopRequested.compareAndSet(false, true)) {
+            serviceScope.launch(ioDispatcher) {
+                preferencesManager.setInVehicleState(false)
+                preferencesManager.setBluetoothDisconnectPending(false)
+                TripDebounceWorker.cancelDebounce(applicationContext)
+                stopTracking()
+            }
         }
     }
 
@@ -255,6 +291,8 @@ class LocationTrackingService : Service() {
                 }
 
                 isStopping.set(false)
+                stationaryAutoStopMonitor.reset()
+                stationaryAutoStopRequested.set(false)
                 currentTripId = activeTrip.id
                 trackingMethod = TrackingMethod.fromString(activeTrip.trackingMethod)
                 tripStartTime = activeTrip.startTime
@@ -406,6 +444,8 @@ class LocationTrackingService : Service() {
 
         try {
             isStopping.set(false)
+            stationaryAutoStopMonitor.reset()
+            stationaryAutoStopRequested.set(false)
             currentTripId = tripId
             trackingMethod = method
             isPaused = false
@@ -686,6 +726,8 @@ class LocationTrackingService : Service() {
     private fun pauseTracking() {
         isPaused = true
         currentSpeedMph = 0.0
+        stationaryAutoStopMonitor.reset()
+        stationaryAutoStopRequested.set(false)
         serviceScope.launch(ioDispatcher) {
             activeTripRepository.setPaused(currentTripId, true)
             updateNotificationAndState(0.0)
@@ -695,6 +737,8 @@ class LocationTrackingService : Service() {
     private fun resumeTracking() {
         isPaused = false
         currentSpeedMph = 0.0
+        stationaryAutoStopMonitor.reset()
+        stationaryAutoStopRequested.set(false)
         serviceScope.launch(ioDispatcher) {
             activeTripRepository.setPaused(currentTripId, false)
             updateNotificationAndState(0.0)
@@ -926,6 +970,8 @@ class LocationTrackingService : Service() {
         isStartingOrRunning.set(false)
         isStopping.set(false)
         isDrainingGps.set(false)
+        stationaryAutoStopMonitor.reset()
+        stationaryAutoStopRequested.set(false)
         gpsLocationQueue?.stopConsumer()
         tickerJob?.cancel()
         try {
