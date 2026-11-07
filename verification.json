@@ -1,0 +1,15 @@
+{
+  "versionName": "1.0.10",
+  "versionCode": 11,
+  "package": "com.businesstracker.mileage.debug",
+  "sourceBranch": "feature/reports-view-drives-fix",
+  "sourceCommit": "f07b33f736d33074a4b8d0ef82cc7cb5d8f46adf",
+  "workflowRun": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42385151012",
+  "workflowArtifactId": 13578329688,
+  "unitTests": "debug and release suites passed, including report-month History filtering",
+  "apkSha256": "78cee6b2b4f18c537d383163f3413d8881d5aef9f4335c9c7bd8f08440e66069",
+  "signingCertificateSha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "signatureSchemes": ["v2", "v3"],
+  "payloadComparison": "969 non-signature ZIP entries identical to CI artifact",
+  "physicalNavigationValidation": "NOT RUN"
+}
