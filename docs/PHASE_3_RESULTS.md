@@ -32,7 +32,7 @@
 | **P3-002** | Upgrade Installation | **FAIL** | 2026-11-06 | User Confirmation | In-place update failed; package installer blocked update over previous build. Manual uninstall required, causing data wipe (DEF-001). |
 | **P3-003** | Google Sign-in | NOT TESTED | - | - | Play Services OAuth consent dialog |
 | **P3-004** | Authentication Expiration | NOT TESTED | - | - | Remote revocation 401 retry test |
-| **P3-005** | Manual Trip Review | NOT TESTED | - | - | Classify Business / MySucculentCorner |
+| **P3-005** | Manual Trip Review | **PASS** | 2026-11-06 | User Confirmation | Trip reviewed and classified as Business (MySucculentCorner); persisted across app process kill and restart. |
 | **P3-006** | Personal Classification | NOT TESTED | - | - | Zero business deduction |
 | **P3-007** | Unreviewed Trip Exclusion | NOT TESTED | - | - | Omitted from outgoing sync |
 | **P3-008** | Successful Sync | NOT TESTED | - | - | 16 columns mapped on test Sheet |
@@ -51,8 +51,8 @@
 | **P3-021** | Process Interruption | NOT TESTED | - | - | Process killed / reboot recovery |
 | **P3-022** | Backup Exclusion | NOT TESTED | - | - | `bmgr backupnow` inspection |
 | **P3-023** | Restore Behavior | NOT TESTED | - | - | Reconnect required on new device |
-| **P3-024** | Mileage Calculations | NOT TESTED | - | - | Historical rate fidelity check |
-| **P3-025** | Reports & PDF Export | NOT TESTED | - | - | CSV (sanitized) and PDF export verification |
+| **P3-024** | Mileage Calculations | **PASS** | 2026-11-06 | User Confirmation | Deduction calculated accurately as Miles * Rate ($0.760/mi for late 2026 drive). |
+| **P3-025** | Reports & PDF Export | **PASS** | 2026-11-06 | User Confirmation | CSV and PDF reports generated cleanly without error; Android Share Sheet opened successfully. |
 
 ---
 
@@ -67,5 +67,5 @@
 ## 4. Release-Readiness Assessment
 
 - **Overall Status:** `TESTING IN PROGRESS`
-- **Gates Fulfilled:** 9 / 11 (P3-001, P3-013, P3-014, P3-015, P3-016, P3-017, P3-018, P3-019, P3-020 PASS; P3-002 FAIL logged)
-- **Recommendation:** Proceed with Session C/E review and classification (P3-005, P3-006, P3-024) and export/sync tests (P3-025, P3-008).
+- **Gates Fulfilled:** 10 / 11 (P3-001, P3-005, P3-013, P3-014, P3-015, P3-016, P3-017, P3-018, P3-019, P3-020, P3-024, P3-025 PASS; P3-002 FAIL logged)
+- **Recommendation:** Proceed with Google Sheets sync / webhook integration (P3-003, P3-008) and reboot recovery (P3-021).
