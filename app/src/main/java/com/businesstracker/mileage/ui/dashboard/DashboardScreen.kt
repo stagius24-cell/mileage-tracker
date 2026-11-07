@@ -46,7 +46,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -66,6 +65,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -567,8 +567,8 @@ private fun DriveTrackingTable(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             // Table Header: Title + Tesla Badge + GPS Indicator
             Row(
@@ -576,7 +576,10 @@ private fun DriveTrackingTable(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Surface(
                         shape = CircleShape,
                         color = if (serviceState.isTracking) SucculentPrimary.copy(alpha = 0.15f) else SlateNeutral.copy(alpha = 0.15f),
@@ -604,17 +607,22 @@ private fun DriveTrackingTable(
                         )
                         Text(
                             text = if (serviceState.isTracking) {
-                                if (serviceState.isPaused) "Tracking Paused" else "Recording in Tesla Model Y"
+                                if (serviceState.isPaused) "Paused • ${serviceState.waypointCount} points"
+                                else "Tesla Model Y • ${serviceState.waypointCount} points"
                             } else if (serviceState.isRecoveryRequired) {
                                 serviceState.statusMessage ?: "Recovery Required • Preserved"
                             } else {
-                                "Tesla Model Y • Ready"
+                                "Tesla Model Y • Ready • ${serviceState.waypointCount} points"
                             },
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 // GPS Accuracy Badge
                 Surface(
@@ -642,19 +650,26 @@ private fun DriveTrackingTable(
                 }
             }
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-            // Table Main Section: Live Miles & Dim Screen
+            // One compact statistics row: duration | live miles | speed.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                TableMetricCell(
+                    label = "DURATION",
+                    value = formattedDuration,
+                    modifier = Modifier.weight(1f)
+                )
+
+                Column(
+                    modifier = Modifier.weight(1.35f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
                     Text(
                         text = String.format(Locale.US, "%.2f", serviceState.distanceMiles),
                         style = MaterialTheme.typography.displayMedium.copy(
-                            fontSize = 44.sp,
+                            fontSize = 40.sp,
                             fontWeight = FontWeight.Black
                         ),
                         color = MaterialTheme.colorScheme.onBackground
@@ -667,42 +682,11 @@ private fun DriveTrackingTable(
                     )
                 }
 
-                if (serviceState.isTracking) {
-                    OutlinedButton(
-                        onClick = onDimScreen,
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BrightnessLow,
-                            contentDescription = null,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Dim Screen", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
-
-            // Table Metrics Grid: DURATION | SPEED | WAYPOINTS
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 10.dp, horizontal = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TableMetricCell(label = "DURATION", value = formattedDuration)
-                    Box(modifier = Modifier.height(24.dp).width(1.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)))
-                    TableMetricCell(label = "SPEED", value = "${String.format(Locale.US, "%.0f", serviceState.currentSpeedMph)} mph")
-                    Box(modifier = Modifier.height(24.dp).width(1.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)))
-                    TableMetricCell(label = "WAYPOINTS", value = serviceState.waypointCount.toString())
-                }
+                TableMetricCell(
+                    label = "SPEED",
+                    value = "${String.format(Locale.US, "%.0f", serviceState.currentSpeedMph)} mph",
+                    modifier = Modifier.weight(1f)
+                )
             }
 
             // Table Actions: Start Drive (when idle) OR Pause/Resume + End Trip (when tracking)
@@ -738,6 +722,19 @@ private fun DriveTrackingTable(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    OutlinedButton(
+                        onClick = onDimScreen,
+                        modifier = Modifier.size(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(0.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BrightnessLow,
+                            contentDescription = "Dim screen",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
                     Button(
                         onClick = { if (serviceState.isPaused) onResume() else onPause() },
                         modifier = Modifier
@@ -798,9 +795,10 @@ private fun DriveTrackingTable(
 @Composable
 private fun TableMetricCell(
     label: String,
-    value: String
+    value: String,
+    modifier: Modifier = Modifier
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
