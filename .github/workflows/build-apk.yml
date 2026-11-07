@@ -36,20 +36,14 @@ jobs:
           gradle wrapper
           chmod +x gradlew
 
-      - name: Restore Verified Run 96 Debug Signing Key
-        env:
-          RUN96_KEYSTORE: ${{ secrets.RUN96_DEBUG_KEYSTORE_BASE64 }}
+      # CI uses a disposable debug key. The tested APK is re-signed outside CI
+      # with the recovered run 96 key before being provided as an update.
+      - name: Create Disposable CI Debug Key
         run: |
           set -euo pipefail
-          if [ -z "$RUN96_KEYSTORE" ]; then
-            echo "Run 96 signing key is required; refusing to generate an incompatible key."
-            exit 1
-          fi
           umask 077
           mkdir -p app/keystore
-          printf '%s' "$RUN96_KEYSTORE" | base64 --decode > app/keystore/debug.keystore
-          keytool -exportcert -keystore app/keystore/debug.keystore -storepass android -alias androiddebugkey -file "$RUNNER_TEMP/run96-cert.der"
-          echo "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948  $RUNNER_TEMP/run96-cert.der" | sha256sum --check
+          keytool -genkeypair -keystore app/keystore/debug.keystore -storetype PKCS12 -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=CI Intermediate,O=Android,C=US"
 
       - name: Run Unit Tests & Assemble Debug APK
         run: ./gradlew testDebugUnitTest testReleaseUnitTest assembleDebug --stacktrace
@@ -70,19 +64,18 @@ jobs:
           echo "Found APK at: $APK_PATH"
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
 
-      - name: Verify APK Signature Matches Installed Run 96
+      - name: Verify Intermediate APK Signature
         env:
           APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
         run: |
           set -euo pipefail
           APK_SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
           "$APK_SIGNER" verify --verbose --print-certs "$APK_PATH" > "$RUNNER_TEMP/apk-signature.txt"
-          grep -F "Signer #1 certificate SHA-256 digest: 43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948" "$RUNNER_TEMP/apk-signature.txt"
 
       - name: Upload APK as Downloadable Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BusinessMileageTracker-debug
+          name: CI-intermediate-APK-needs-run96-signing
           path: ${{ steps.find_apk.outputs.apk_path }}
           retention-days: 30
           if-no-files-found: error
