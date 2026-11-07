@@ -1,0 +1,44 @@
+{
+  "source_commit": "e5712bbb29fbde35fe9e4518f15af52fd89b6091",
+  "ci_run": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42344422801",
+  "debug_unit_tests": "PASS",
+  "release_unit_tests": "PASS",
+  "manual_sync_thread_regressions": "PASS (Robolectric/intercepted HTTP)",
+  "apk_sha256": "aacb82b50c77347f7d76d31c6e55b48ce60320fb210d6b868bc6b1a000b9497f",
+  "signer_certificate_sha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "matches_run96_certificate": true,
+  "apk_signature_v2_verified": true,
+  "apk_signature_v3_verified": true,
+  "payload_matches_tested_ci_apk": true,
+  "previous_manifest": {
+    "manifest": {
+      "versionCode": 2,
+      "versionName": "1.0.1",
+      "compileSdkVersion": 35,
+      "compileSdkVersionCodename": "15",
+      "package": "com.businesstracker.mileage.debug",
+      "platformBuildVersionCode": 35,
+      "platformBuildVersionName": 15
+    },
+    "uses-sdk": {
+      "minSdkVersion": 26,
+      "targetSdkVersion": 35
+    }
+  },
+  "update_manifest": {
+    "manifest": {
+      "versionCode": 3,
+      "versionName": "1.0.2",
+      "compileSdkVersion": 35,
+      "compileSdkVersionCodename": "15",
+      "package": "com.businesstracker.mileage.debug",
+      "platformBuildVersionCode": 35,
+      "platformBuildVersionName": 15
+    },
+    "uses-sdk": {
+      "minSdkVersion": 26,
+      "targetSdkVersion": 35
+    }
+  },
+  "live_google_sheets_upload": "NOT RUN; requires phone validation"
+}
