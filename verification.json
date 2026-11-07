@@ -1,14 +1,16 @@
 {
   "source_branch": "main",
-  "source_commit": "6fac9e9338b3826da867c99e148e1fd3c7d46412",
-  "ci_run_id": 42416025963,
-  "ci_artifact_id": 13591442758,
+  "source_commit": "5af64ee51ce8cb56d81995724578da6f23d47a46",
+  "ci_run_id": 42419223460,
   "package": "com.businesstracker.mileage.debug",
-  "version_code": 20,
-  "version_name": "1.0.19",
-  "sha256": "b88a6325a3da83da928b7d919a54320c4474deae9c2caa245056e1070b408cda",
+  "version_code": 21,
+  "version_name": "1.0.20",
+  "sha256": "308039ea03168e703da6979f7617b851eb972ecfb6865b69b413deecfbb79172",
   "signer_certificate_sha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
   "signer_certificate_sha1": "32d6afa108beed313e181a08176ded0fd960af43",
   "matches_run96_certificate": true,
-  "signature_schemes": ["v2", "v3"]
+  "signature_schemes": [
+    "v2",
+    "v3"
+  ]
 }
