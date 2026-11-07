@@ -1,12 +1,11 @@
 {
-  "source_branch": "feature/two-column-trip-summary",
-  "source_commit": "ad421e697da2a346bd41ef684d202825ac23c2c3",
-  "ci_run_id": 42410481159,
-  "ci_artifact_id": 13588763762,
+  "source_branch": "main",
+  "source_commit": "6dc5df269ae8a3389039d354bad00705b85803ff",
+  "ci_run_id": 42412167052,
+  "ci_artifact_id": 13589789352,
   "package": "com.businesstracker.mileage.debug",
-  "version_code": 18,
-  "version_name": "1.0.17",
-  "sha256": "5e8fbc1c36bfa2eec5fae80b55aa07423049efdf820ec8a488618a37b41613c0",
-  "signature_schemes": ["v2", "v3"],
-  "non_signature_entries_verified": 969
+  "version_code": 19,
+  "version_name": "1.0.18",
+  "sha256": "54e51da0f93266585897a0c669772f0018f52a49d7c1e0b35be0579a20df8052",
+  "signature_schemes": ["v2", "v3"]
 }
