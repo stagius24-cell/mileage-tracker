@@ -604,7 +604,7 @@ private fun DriveTrackingTable(
                         )
                         Text(
                             text = if (serviceState.isTracking) {
-                                if (serviceState.isPaused) "Tracking Paused" else "Recording in Tesla Model Y"
+                                if (serviceState.isPaused) "Tracking Paused" else "Recording in Tesla Model Y • ${serviceState.waypointCount} waypoints"
                             } else if (serviceState.isRecoveryRequired) {
                                 serviceState.statusMessage ?: "Recovery Required • Preserved"
                             } else {
@@ -616,75 +616,57 @@ private fun DriveTrackingTable(
                     }
                 }
 
-                // GPS Accuracy Badge
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = if (isHighAccuracy) HighAccuracyGreen.copy(alpha = 0.15f) else WeakGpsAmber.copy(alpha = 0.15f)
+                // Header Actions: Dim Screen (when tracking) + GPS Accuracy Badge
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    if (serviceState.isTracking) {
+                        OutlinedButton(
+                            onClick = onDimScreen,
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.BrightnessLow,
+                                contentDescription = null,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Dim", style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp))
+                        }
+                    }
+
+                    // GPS Accuracy Badge
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (isHighAccuracy) HighAccuracyGreen.copy(alpha = 0.15f) else WeakGpsAmber.copy(alpha = 0.15f)
                     ) {
-                        Icon(
-                            imageVector = if (isHighAccuracy) Icons.Default.GpsFixed else Icons.Default.GpsNotFixed,
-                            contentDescription = null,
-                            tint = if (isHighAccuracy) HighAccuracyGreen else WeakGpsAmber,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (isHighAccuracy) "High GPS" else "GPS...",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                            fontWeight = FontWeight.Bold,
-                            color = if (isHighAccuracy) HighAccuracyGreen else WeakGpsAmber
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (isHighAccuracy) Icons.Default.GpsFixed else Icons.Default.GpsNotFixed,
+                                contentDescription = null,
+                                tint = if (isHighAccuracy) HighAccuracyGreen else WeakGpsAmber,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isHighAccuracy) "High GPS" else "GPS...",
+                                style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                                fontWeight = FontWeight.Bold,
+                                color = if (isHighAccuracy) HighAccuracyGreen else WeakGpsAmber
+                            )
+                        }
                     }
                 }
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
 
-            // Table Main Section: Live Miles & Dim Screen
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = String.format(Locale.US, "%.2f", serviceState.distanceMiles),
-                        style = MaterialTheme.typography.displayMedium.copy(
-                            fontSize = 44.sp,
-                            fontWeight = FontWeight.Black
-                        ),
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Text(
-                        text = "LIVE MILES",
-                        style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.2.sp),
-                        fontWeight = FontWeight.Bold,
-                        color = SucculentPrimary
-                    )
-                }
-
-                if (serviceState.isTracking) {
-                    OutlinedButton(
-                        onClick = onDimScreen,
-                        shape = RoundedCornerShape(12.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BrightnessLow,
-                            contentDescription = null,
-                            modifier = Modifier.size(15.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Dim Screen", style = MaterialTheme.typography.labelSmall)
-                    }
-                }
-            }
-
-            // Table Metrics Grid: DURATION | SPEED | WAYPOINTS
+            // Table Main Section: Compact Metrics Bar (DURATION | LIVE MILES | SPEED)
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -693,15 +675,55 @@ private fun DriveTrackingTable(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 10.dp, horizontal = 12.dp),
+                        .padding(vertical = 12.dp, horizontal = 8.dp),
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TableMetricCell(label = "DURATION", value = formattedDuration)
-                    Box(modifier = Modifier.height(24.dp).width(1.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)))
-                    TableMetricCell(label = "SPEED", value = "${String.format(Locale.US, "%.0f", serviceState.currentSpeedMph)} mph")
-                    Box(modifier = Modifier.height(24.dp).width(1.dp).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)))
-                    TableMetricCell(label = "WAYPOINTS", value = serviceState.waypointCount.toString())
+                    TableMetricCell(
+                        label = "DURATION",
+                        value = formattedDuration,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .height(36.dp)
+                            .width(1.dp)
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1.3f)
+                    ) {
+                        Text(
+                            text = String.format(Locale.US, "%.2f", serviceState.distanceMiles),
+                            style = MaterialTheme.typography.displayMedium.copy(
+                                fontSize = 36.sp,
+                                fontWeight = FontWeight.Black
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "LIVE MILES",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                letterSpacing = 1.2.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = SucculentPrimary
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .height(36.dp)
+                            .width(1.dp)
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                    )
+                    TableMetricCell(
+                        label = "SPEED",
+                        value = "${String.format(Locale.US, "%.0f", serviceState.currentSpeedMph)} mph",
+                        subValue = if (serviceState.isTracking) "${serviceState.waypointCount} pts" else null,
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
 
@@ -798,12 +820,17 @@ private fun DriveTrackingTable(
 @Composable
 private fun TableMetricCell(
     label: String,
-    value: String
+    value: String,
+    subValue: String? = null,
+    modifier: Modifier = Modifier
 ) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+    ) {
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurface
         )
         Spacer(modifier = Modifier.height(2.dp))
@@ -816,6 +843,17 @@ private fun TableMetricCell(
             ),
             color = SlateNeutral
         )
+        if (!subValue.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = subValue,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Medium
+                ),
+                color = SlateNeutral.copy(alpha = 0.7f)
+            )
+        }
     }
 }
 
