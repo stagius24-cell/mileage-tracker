@@ -38,7 +38,7 @@ class SensitivePreferencesMigrationTest {
     private val KEY_CF_CLIENT_SECRET = stringPreferencesKey("cf_client_secret")
 
     @Before
-    fun setUp() = runTest {
+    fun setUp() {
         context = RuntimeEnvironment.getApplication()
         testKeyProvider = TestSoftwareKeyProvider()
         secureStorageManager = SecureStorageManager(context, testKeyProvider)
@@ -47,7 +47,9 @@ class SensitivePreferencesMigrationTest {
         preferencesManager = TrackingPreferencesManager(context, secureStorageManager)
 
         // Clear any leftover DataStore keys
-        context.testDataStore.edit { it.clear() }
+        kotlinx.coroutines.runBlocking {
+            context.testDataStore.edit { it.clear() }
+        }
     }
 
     @Test

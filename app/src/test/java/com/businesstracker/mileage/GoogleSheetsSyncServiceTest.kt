@@ -130,8 +130,8 @@ class GoogleSheetsSyncServiceTest {
 
     private suspend fun configureWebhook(url: String = "https://example.com/macros/exec") {
         preferencesManager.setSheetsSpreadsheetId("")
+        secureStorageManager.clearOAuthCredentials()
         preferencesManager.setSheetsWebhookUrl(url)
-        secureStorageManager.clearAllCredentials()
     }
 
     private fun createService(authManager: GoogleAuthManager? = null): GoogleSheetsSyncService {

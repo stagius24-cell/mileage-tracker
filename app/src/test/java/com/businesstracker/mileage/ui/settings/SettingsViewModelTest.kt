@@ -52,10 +52,11 @@ class SettingsViewModelTest {
     private lateinit var googleAuthManager: GoogleAuthManager
     private lateinit var sheetsSyncService: GoogleSheetsSyncService
     private var currentViewModel: SettingsViewModel? = null
-    private val testDispatcher = StandardTestDispatcher()
+    private lateinit var testDispatcher: StandardTestDispatcher
 
     @Before
     fun setUp() {
+        testDispatcher = StandardTestDispatcher()
         Dispatchers.setMain(testDispatcher)
         context = RuntimeEnvironment.getApplication()
         database = Room.inMemoryDatabaseBuilder(context, ExpenseTrackerDatabase::class.java)
