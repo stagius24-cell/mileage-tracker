@@ -207,7 +207,7 @@ class DashboardViewModelStateTest {
 
         // Clear active trip from DB (simulating finalization)
         database.activeTripDao().clearActiveTrip()
-        val stoppedState = viewModel.serviceState.first { it.tripId.isEmpty() }
+        val stoppedState = viewModel.serviceState.first { it.tripId.isNullOrEmpty() }
 
         assertFalse("Dashboard must immediately transition to not-tracking after active trip cleared", stoppedState.isTracking)
     }
