@@ -192,7 +192,7 @@ class ReportsCsvSecurityTest {
     }
 
     @Test
-    fun exportToCsv_withMaliciousPayload_escapesSafelyAndPreservesOriginalData() = runTest {
+    fun exportToCsv_withMaliciousPayload_escapesSafelyAndPreservesOriginalData() = runTest(testDispatcher) {
         val appCtx = RuntimeEnvironment.getApplication()
         val maliciousTrip = createDummyTrip(
             id = "malicious-1",

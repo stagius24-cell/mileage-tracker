@@ -201,13 +201,14 @@ class DashboardViewModelStateTest {
         )
         advanceUntilIdle()
 
-        assertFalse(viewModel.serviceState.value.isTracking)
-        assertEquals("Finalizing Trip...", viewModel.serviceState.value.statusMessage)
+        val state = viewModel.serviceState.first { it.tripId == tripId }
+        assertFalse(state.isTracking)
+        assertEquals("Finalizing Trip...", state.statusMessage)
 
         // Clear active trip from DB (simulating finalization)
         database.activeTripDao().clearActiveTrip()
-        advanceUntilIdle()
+        val stoppedState = viewModel.serviceState.first { it.tripId.isEmpty() }
 
-        assertFalse("Dashboard must immediately transition to not-tracking after active trip cleared", viewModel.serviceState.value.isTracking)
+        assertFalse("Dashboard must immediately transition to not-tracking after active trip cleared", stoppedState.isTracking)
     }
 }

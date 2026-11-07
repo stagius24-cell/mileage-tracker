@@ -171,7 +171,7 @@ class LocationTrackingServiceNullIntentRecoveryTest {
         database.gpsInboxDao().insertFixes(
             listOf(
                 GpsInboxEntity(id = 1, tripId = tripId, sequenceNumber = 1, latitude = 37.771, longitude = -122.411, timestamp = 1500L, accuracy = 5f, speed = 12f),
-                GpsInboxEntity(id = 2, tripId = tripId, sequenceNumber = 2, latitude = 37.772, longitude = -122.412, timestamp = 2000L, accuracy = 5f, speed = 12f)
+                GpsInboxEntity(id = 2, tripId = tripId, sequenceNumber = 2, latitude = 37.772, longitude = -122.412, timestamp = 15000L, accuracy = 5f, speed = 12f)
             )
         )
 

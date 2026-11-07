@@ -95,27 +95,13 @@ class GpsLocationQueue(
                     database.withTransaction {
                         gpsInboxDao.insertFixes(batch.entities)
                         if (batch.tripId.isNotEmpty() && tripSequenceDao != null) {
-                            val lastSeq = tripSequenceDao.getLastSequenceNumber(batch.tripId) ?: 0L
-                            val newSeq = maxOf(lastSeq, batch.sequence)
-                            tripSequenceDao.insertOrUpdate(
-                                TripSequenceEntity(
-                                    tripId = batch.tripId,
-                                    lastSequenceNumber = newSeq
-                                )
-                            )
+                            tripSequenceDao.advanceSequence(batch.tripId, batch.sequence)
                         }
                     }
                 } else {
                     gpsInboxDao.insertFixes(batch.entities)
                     if (batch.tripId.isNotEmpty() && tripSequenceDao != null) {
-                        val lastSeq = tripSequenceDao.getLastSequenceNumber(batch.tripId) ?: 0L
-                        val newSeq = maxOf(lastSeq, batch.sequence)
-                        tripSequenceDao.insertOrUpdate(
-                            TripSequenceEntity(
-                                tripId = batch.tripId,
-                                lastSequenceNumber = newSeq
-                            )
-                        )
+                        tripSequenceDao.advanceSequence(batch.tripId, batch.sequence)
                     }
                 }
                 signalChannel.trySend(Unit)
@@ -382,6 +368,14 @@ class GpsLocationQueue(
             consumerJob?.join()
         } catch (e: Exception) {
             Log.w("GpsLocationQueue", "Interrupted awaiting consumer drain: ${e.message}")
+        }
+
+        val finalAllocatedSeq = admissionBarrier.currentSequence()
+        val currentTripId = tripIdProvider()
+        if (finalAllocatedSeq > 0 && currentTripId.isNotEmpty() && tripSequenceDao != null) {
+            try {
+                tripSequenceDao.advanceSequence(currentTripId, finalAllocatedSeq)
+            } catch (_: Exception) {}
         }
 
         processingError?.let { err ->

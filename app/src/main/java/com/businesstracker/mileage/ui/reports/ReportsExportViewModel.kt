@@ -318,11 +318,15 @@ class ReportsExportViewModel @Inject constructor(
                 }
             }
 
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                csvFile
-            )
+            val uri = try {
+                FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    csvFile
+                )
+            } catch (_: Exception) {
+                android.net.Uri.fromFile(csvFile)
+            }
 
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "text/csv"
