@@ -1,11 +1,14 @@
 package com.businesstracker.mileage
 
+import android.graphics.BitmapFactory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import java.io.File
-import javax.imageio.ImageIO
 
+@RunWith(RobolectricTestRunner::class)
 class AppIconConfigurationTest {
     @Test
     fun launcherAndRoundIcon_useSuppliedArtwork() {
@@ -19,10 +22,10 @@ class AppIconConfigurationTest {
     @Test
     fun suppliedArtwork_isSquareAndHighResolution() {
         val artwork = projectFile("src/main/res/drawable-nodpi/app_icon_artwork.jpg")
-        val image = ImageIO.read(artwork)
+        val image = BitmapFactory.decodeFile(artwork.absolutePath)
 
-        assertEquals(1280, image.width)
-        assertEquals(1280, image.height)
+        assertEquals(1280, image?.width)
+        assertEquals(1280, image?.height)
         assertTrue("Launcher artwork must not be empty", artwork.length() > 10_000L)
     }
 
