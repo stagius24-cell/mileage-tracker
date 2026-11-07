@@ -1,0 +1,15 @@
+{
+  "versionName": "1.0.9",
+  "versionCode": 10,
+  "package": "com.businesstracker.mileage.debug",
+  "sourceBranch": "feature/history-mobile-streamline",
+  "sourceCommit": "9052fef33d786ece02aab1791eea66a4ab068936",
+  "workflowRun": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42384308696",
+  "workflowArtifactId": 13578737767,
+  "unitTests": "debug and release suites passed",
+  "apkSha256": "d8f0a666abf9d1d6871d1d736a13c9f50106d6fdc79aa73c50a31e894c8faee2",
+  "signingCertificateSha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "signatureSchemes": ["v2", "v3"],
+  "payloadComparison": "969 non-signature ZIP entries identical to CI artifact",
+  "physicalHistoryUiValidation": "NOT RUN"
+}
