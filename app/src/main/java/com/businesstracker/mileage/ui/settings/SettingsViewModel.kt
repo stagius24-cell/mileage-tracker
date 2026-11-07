@@ -1,6 +1,8 @@
 package com.businesstracker.mileage.ui.settings
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
@@ -38,6 +40,10 @@ data class SettingsUiState(
     val cfClientSecret: String = "",
     val cfBearerToken: String = "",
     val defaultVehicle: String = "Tesla Model Y",
+    val bluetoothAutoStopEnabled: Boolean = false,
+    val vehicleBluetoothAddress: String = "",
+    val vehicleBluetoothName: String = "",
+    val pairedBluetoothDevices: List<VehicleBluetoothDevice> = emptyList(),
     // Google Sheets Sync State - No raw tokens exposed in UI state
     val isSheetsConnected: Boolean = false,
     val hasOAuthCredential: Boolean = false,
@@ -51,9 +57,20 @@ data class SettingsUiState(
     val isSyncing: Boolean = false
 )
 
+data class VehicleBluetoothDevice(
+    val address: String,
+    val name: String
+)
+
 private data class GeneralPrefs(
     val autoTrackingEnabled: Boolean,
     val defaultVehicle: String
+)
+
+private data class BluetoothPrefs(
+    val enabled: Boolean,
+    val address: String,
+    val name: String
 )
 
 private data class SchedulePrefs(
@@ -91,6 +108,7 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _isSyncing = MutableStateFlow(false)
+    private val _pairedBluetoothDevices = MutableStateFlow<List<VehicleBluetoothDevice>>(emptyList())
 
     private val generalFlow = combine(
         preferencesManager.isAutoTrackingEnabled,
@@ -111,6 +129,14 @@ class SettingsViewModel @Inject constructor(
             .filter { it.isNotEmpty() }
             .toSet()
         SchedulePrefs(enabled, daysSet, start, end, behavior)
+    }
+
+    private val bluetoothFlow = combine(
+        preferencesManager.isBluetoothAutoStopEnabled,
+        preferencesManager.vehicleBluetoothAddress,
+        preferencesManager.vehicleBluetoothName
+    ) { enabled, address, name ->
+        BluetoothPrefs(enabled, address, name)
     }
 
     private val cloudflareFlow = combine(
@@ -157,15 +183,17 @@ class SettingsViewModel @Inject constructor(
     private data class ConfigState(
         val general: GeneralPrefs,
         val schedule: SchedulePrefs,
-        val cloudflare: CloudflarePrefs
+        val cloudflare: CloudflarePrefs,
+        val bluetooth: BluetoothPrefs
     )
 
     private val configFlow = combine(
         generalFlow,
         scheduleFlow,
-        cloudflareFlow
-    ) { general, schedule, cf ->
-        ConfigState(general, schedule, cf)
+        cloudflareFlow,
+        bluetoothFlow
+    ) { general, schedule, cf, bluetooth ->
+        ConfigState(general, schedule, cf, bluetooth)
     }
 
     private val pendingCountFlow = tripRepository.getAllTrips().map { allTrips ->
@@ -176,8 +204,9 @@ class SettingsViewModel @Inject constructor(
         configFlow,
         sheetsFlow,
         pendingCountFlow,
-        _isSyncing
-    ) { config, sheets, pendingCount, isSyncing ->
+        _isSyncing,
+        _pairedBluetoothDevices
+    ) { config, sheets, pendingCount, isSyncing, pairedDevices ->
         val hasBg = hasBackgroundLocationPermission()
         val isReady = config.general.autoTrackingEnabled && hasRequiredPermissions()
 
@@ -195,6 +224,10 @@ class SettingsViewModel @Inject constructor(
             workHoursEnd = config.schedule.endTime,
             outsideScheduleBehavior = config.schedule.behavior,
             defaultVehicle = config.general.defaultVehicle,
+            bluetoothAutoStopEnabled = config.bluetooth.enabled,
+            vehicleBluetoothAddress = config.bluetooth.address,
+            vehicleBluetoothName = config.bluetooth.name,
+            pairedBluetoothDevices = pairedDevices,
             cfEndpoint = config.cloudflare.endpoint,
             cfClientId = config.cloudflare.clientId,
             cfClientSecret = config.cloudflare.clientSecret,
@@ -279,6 +312,43 @@ class SettingsViewModel @Inject constructor(
     fun setDefaultVehicle(vehicle: String) {
         viewModelScope.launch {
             preferencesManager.setDefaultVehicle(vehicle)
+        }
+    }
+
+    fun setBluetoothAutoStopEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setBluetoothAutoStopEnabled(enabled)
+        }
+    }
+
+    fun selectVehicleBluetoothDevice(device: VehicleBluetoothDevice) {
+        viewModelScope.launch {
+            preferencesManager.setVehicleBluetoothDevice(device.address, device.name)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun refreshPairedBluetoothDevices() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            _pairedBluetoothDevices.value = emptyList()
+            return
+        }
+
+        _pairedBluetoothDevices.value = try {
+            val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
+            adapter?.bondedDevices.orEmpty()
+                .map { device ->
+                    VehicleBluetoothDevice(
+                        address = device.address,
+                        name = device.name?.takeIf { it.isNotBlank() } ?: "Paired device"
+                    )
+                }
+                .sortedBy { it.name.lowercase() }
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

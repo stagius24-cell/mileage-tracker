@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.Data
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
@@ -42,11 +43,23 @@ class TripDebounceWorker @AssistedInject constructor(
 
     companion object {
         const val WORK_NAME = "trip_debounce_stop_work"
+        internal const val INPUT_TRIGGER = "debounce_trigger"
+        internal const val TRIGGER_ACTIVITY = "activity"
+        internal const val TRIGGER_BLUETOOTH = "bluetooth"
         private const val DEBOUNCE_DELAY_MINUTES = 4L
 
         fun scheduleDebounce(context: Context) {
+            scheduleDebounce(context, TRIGGER_ACTIVITY)
+        }
+
+        fun scheduleBluetoothDebounce(context: Context) {
+            scheduleDebounce(context, TRIGGER_BLUETOOTH)
+        }
+
+        private fun scheduleDebounce(context: Context, trigger: String) {
             val debounceRequest = OneTimeWorkRequestBuilder<TripDebounceWorker>()
                 .setInitialDelay(DEBOUNCE_DELAY_MINUTES, TimeUnit.MINUTES)
+                .setInputData(Data.Builder().putString(INPUT_TRIGGER, trigger).build())
                 .addTag(WORK_NAME)
                 .build()
 
@@ -64,6 +77,14 @@ class TripDebounceWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
+            val trigger = inputData.getString(INPUT_TRIGGER) ?: TRIGGER_ACTIVITY
+            if (trigger == TRIGGER_BLUETOOTH &&
+                (!preferencesManager.isBluetoothAutoStopActive() ||
+                    !preferencesManager.isBluetoothDisconnectPending())
+            ) {
+                return Result.success()
+            }
+
             // 1. Verify in-vehicle state is still false (vehicle motion has not resumed)
             val isInVehicle = preferencesManager.isInVehicle()
             if (isInVehicle) {
@@ -76,6 +97,7 @@ class TripDebounceWorker @AssistedInject constructor(
             if (activeTrip == null) {
                 // Trip already finalized by service or discarded
                 preferencesManager.clearVehicleAnchor()
+                preferencesManager.setBluetoothDisconnectPending(false)
                 return Result.success()
             }
 
@@ -120,6 +142,7 @@ class TripDebounceWorker @AssistedInject constructor(
                 // Finalization confirmed by service
                 preferencesManager.clearActiveTripId(activeTrip.id)
                 preferencesManager.clearVehicleAnchor()
+                preferencesManager.setBluetoothDisconnectPending(false)
                 return Result.success()
             }
 
@@ -155,6 +178,7 @@ class TripDebounceWorker @AssistedInject constructor(
             // Only clear preferences after confirmed finalization
             preferencesManager.clearActiveTripId(activeTrip.id)
             preferencesManager.clearVehicleAnchor()
+            preferencesManager.setBluetoothDisconnectPending(false)
 
             Result.success()
         } catch (e: Exception) {

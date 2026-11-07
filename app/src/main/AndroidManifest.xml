@@ -25,6 +25,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Bluetooth for optional car bluetooth trigger -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
     <application
@@ -99,6 +100,17 @@
             android:name=".receiver.ServiceActionReceiver"
             android:enabled="true"
             android:exported="false" />
+
+        <!-- Optional selected-vehicle Bluetooth stop signal. System broadcasts only. -->
+        <receiver
+            android:name=".receiver.VehicleBluetoothReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+            </intent-filter>
+        </receiver>
 
         <!-- FileProvider for CSV Report Sharing -->
         <provider

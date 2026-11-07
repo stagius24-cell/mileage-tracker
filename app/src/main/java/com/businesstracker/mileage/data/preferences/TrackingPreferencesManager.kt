@@ -38,6 +38,10 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_IN_VEHICLE_STATE = booleanPreferencesKey("in_vehicle_state")
         private val KEY_ACTIVE_TRIP_ID = stringPreferencesKey("active_trip_id")
         private val KEY_DISCARDED_TRIP_IDS = stringSetPreferencesKey("discarded_trip_ids")
+        private val KEY_BLUETOOTH_AUTO_STOP_ENABLED = booleanPreferencesKey("bluetooth_auto_stop_enabled")
+        private val KEY_VEHICLE_BLUETOOTH_ADDRESS = stringPreferencesKey("vehicle_bluetooth_address")
+        private val KEY_VEHICLE_BLUETOOTH_NAME = stringPreferencesKey("vehicle_bluetooth_name")
+        private val KEY_BLUETOOTH_DISCONNECT_PENDING = booleanPreferencesKey("bluetooth_disconnect_pending")
 
         // Cloudflare D1 & Sync Configuration
         private val KEY_CF_ENDPOINT = stringPreferencesKey("cf_endpoint")
@@ -82,6 +86,48 @@ class TrackingPreferencesManager @Inject constructor(
             prefs[KEY_AUTO_TRACKING_ENABLED] = enabled
         }
     }
+
+    val isBluetoothAutoStopEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_BLUETOOTH_AUTO_STOP_ENABLED] ?: false
+    }
+
+    suspend fun setBluetoothAutoStopEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_BLUETOOTH_AUTO_STOP_ENABLED] = enabled
+            if (!enabled) prefs[KEY_BLUETOOTH_DISCONNECT_PENDING] = false
+        }
+    }
+
+    val vehicleBluetoothAddress: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_VEHICLE_BLUETOOTH_ADDRESS] ?: ""
+    }
+
+    val vehicleBluetoothName: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_VEHICLE_BLUETOOTH_NAME] ?: ""
+    }
+
+    suspend fun setVehicleBluetoothDevice(address: String, name: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_VEHICLE_BLUETOOTH_ADDRESS] = address.trim().uppercase()
+            prefs[KEY_VEHICLE_BLUETOOTH_NAME] = name.trim()
+            prefs[KEY_BLUETOOTH_DISCONNECT_PENDING] = false
+        }
+    }
+
+    suspend fun getVehicleBluetoothAddress(): String =
+        context.dataStore.data.first()[KEY_VEHICLE_BLUETOOTH_ADDRESS].orEmpty()
+
+    suspend fun isBluetoothAutoStopActive(): Boolean =
+        context.dataStore.data.first()[KEY_BLUETOOTH_AUTO_STOP_ENABLED] ?: false
+
+    suspend fun setBluetoothDisconnectPending(pending: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_BLUETOOTH_DISCONNECT_PENDING] = pending
+        }
+    }
+
+    suspend fun isBluetoothDisconnectPending(): Boolean =
+        context.dataStore.data.first()[KEY_BLUETOOTH_DISCONNECT_PENDING] ?: false
 
     // Work Schedule & Drive Filtering
     val isScheduleFilteringEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->

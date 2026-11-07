@@ -1,5 +1,8 @@
 package com.businesstracker.mileage.ui.settings
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -30,6 +33,8 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedButton
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import java.text.SimpleDateFormat
@@ -55,6 +60,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,6 +74,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.ui.theme.SlateNeutral
@@ -85,6 +92,19 @@ fun SettingsScreen(
         contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
     ) { result ->
         viewModel.handleGoogleSignInResult(result.data)
+    }
+
+    val bluetoothPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.refreshPairedBluetoothDevices()
+            viewModel.setBluetoothAutoStopEnabled(true)
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshPairedBluetoothDevices()
     }
 
     LazyColumn(
@@ -496,6 +516,7 @@ fun SettingsScreen(
 
         // Primary Vehicle Information Card (Tesla Model Y)
         item {
+            var isBluetoothMenuExpanded by remember { mutableStateOf(false) }
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -529,6 +550,94 @@ fun SettingsScreen(
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp)
                     )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Stop Using Vehicle Bluetooth",
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Starts the safe stop timer when your selected car disconnects.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        }
+                        Switch(
+                            checked = state.bluetoothAutoStopEnabled,
+                            onCheckedChange = { enabled ->
+                                if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                                    ContextCompat.checkSelfPermission(
+                                        localContext,
+                                        Manifest.permission.BLUETOOTH_CONNECT
+                                    ) != PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                                } else {
+                                    viewModel.setBluetoothAutoStopEnabled(enabled)
+                                    if (enabled) viewModel.refreshPairedBluetoothDevices()
+                                }
+                            },
+                            colors = SwitchDefaults.colors(checkedThumbColor = SucculentPrimary)
+                        )
+                    }
+
+                    if (state.bluetoothAutoStopEnabled) {
+                        Text(
+                            text = if (state.vehicleBluetoothName.isNotBlank()) {
+                                "Vehicle: ${state.vehicleBluetoothName}"
+                            } else {
+                                "Select your paired vehicle"
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (state.vehicleBluetoothName.isNotBlank()) {
+                                SucculentPrimary
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            }
+                        )
+
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.refreshPairedBluetoothDevices()
+                                    isBluetoothMenuExpanded = true
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Choose Vehicle Bluetooth")
+                            }
+                            DropdownMenu(
+                                expanded = isBluetoothMenuExpanded,
+                                onDismissRequest = { isBluetoothMenuExpanded = false }
+                            ) {
+                                if (state.pairedBluetoothDevices.isEmpty()) {
+                                    DropdownMenuItem(
+                                        text = { Text("No paired devices found") },
+                                        onClick = {},
+                                        enabled = false
+                                    )
+                                } else {
+                                    state.pairedBluetoothDevices.forEach { device ->
+                                        DropdownMenuItem(
+                                            text = { Text(device.name) },
+                                            onClick = {
+                                                viewModel.selectVehicleBluetoothDevice(device)
+                                                isBluetoothMenuExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

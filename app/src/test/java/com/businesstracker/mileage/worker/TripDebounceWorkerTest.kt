@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ListenableWorker
+import androidx.work.Data
 import androidx.work.testing.TestListenableWorkerBuilder
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.entity.ActiveTripEntity
@@ -93,8 +94,9 @@ class TripDebounceWorkerTest {
         LocationTrackingService.resetGuardForTesting()
     }
 
-    private fun createWorker(): TripDebounceWorker {
+    private fun createWorker(inputData: Data = Data.EMPTY): TripDebounceWorker {
         return TestListenableWorkerBuilder<TripDebounceWorker>(context)
+            .setInputData(inputData)
             .setWorkerFactory(object : androidx.work.WorkerFactory() {
                 override fun createWorker(
                     appContext: Context,
@@ -116,6 +118,32 @@ class TripDebounceWorkerTest {
                 }
             })
             .build()
+    }
+
+    @Test
+    fun bluetoothTriggeredWork_afterOptionDisabled_preservesActiveTrip() = runBlocking {
+        val tripId = "bluetooth-option-disabled"
+        activeTripRepository.createActiveTrip(
+            tripId,
+            37.3382,
+            -121.8863,
+            "AUTO_DETECTED",
+            "MySucculentCorner"
+        )
+        preferencesManager.setActiveTripId(tripId)
+        preferencesManager.setInVehicleState(false)
+        preferencesManager.setBluetoothDisconnectPending(true)
+        preferencesManager.setBluetoothAutoStopEnabled(false)
+
+        val worker = createWorker(
+            Data.Builder()
+                .putString(TripDebounceWorker.INPUT_TRIGGER, TripDebounceWorker.TRIGGER_BLUETOOTH)
+                .build()
+        )
+
+        assertEquals(ListenableWorker.Result.success(), worker.doWork())
+        assertEquals(tripId, activeTripRepository.getActiveTrip()?.id)
+        assertNull(tripRepository.getTripById(tripId))
     }
 
     // Test 13: When service is still draining, doWork() returns Result.retry() and active preferences remain intact
