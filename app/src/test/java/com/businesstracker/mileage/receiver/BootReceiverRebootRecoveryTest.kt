@@ -40,7 +40,7 @@ class BootReceiverRebootRecoveryTest {
         database = Room.inMemoryDatabaseBuilder(context, ExpenseTrackerDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        activeTripRepository = ActiveTripRepositoryImpl(database.activeTripDao(), Dispatchers.Main)
+        activeTripRepository = ActiveTripRepositoryImpl(database.activeTripDao(), Dispatchers.Default)
         preferencesManager = TrackingPreferencesManager(context)
 
         bootReceiver = BootReceiver()

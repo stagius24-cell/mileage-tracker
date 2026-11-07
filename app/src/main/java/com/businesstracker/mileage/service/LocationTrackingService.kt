@@ -195,7 +195,7 @@ class LocationTrackingService : Service() {
 
         if (!hasFine && !hasCoarse) {
             Log.w("LocationTrackingService", "Location permissions missing during process recreation; preserving active trip state.")
-            serviceScope.launch(ioDispatcher) {
+            lastRecoveryJob = serviceScope.launch(ioDispatcher) {
                 try {
                     val activeTrip = activeTripRepository.getActiveTrip()
                     if (activeTrip != null) {

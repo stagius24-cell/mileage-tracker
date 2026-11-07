@@ -64,7 +64,7 @@ class BootReceiver : BroadcastReceiver() {
                         }
                     }
                 } finally {
-                    pendingResult.finish()
+                    pendingResult?.finish()
                 }
             }
         }

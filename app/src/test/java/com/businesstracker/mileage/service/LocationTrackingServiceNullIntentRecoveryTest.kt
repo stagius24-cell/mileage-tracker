@@ -55,7 +55,7 @@ class LocationTrackingServiceNullIntentRecoveryTest {
         database = Room.inMemoryDatabaseBuilder(context, ExpenseTrackerDatabase::class.java)
             .allowMainThreadQueries()
             .build()
-        activeTripRepository = ActiveTripRepositoryImpl(database.activeTripDao(), Dispatchers.Main)
+        activeTripRepository = ActiveTripRepositoryImpl(database.activeTripDao(), Dispatchers.Default)
         preferencesManager = TrackingPreferencesManager(context)
         notificationHelper = NotificationHelper(context)
 
@@ -251,6 +251,8 @@ class LocationTrackingServiceNullIntentRecoveryTest {
         val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         val service = createService(testScope)
         service.onStartCommand(null, 0, 1)
+
+        service.lastRecoveryJob?.join()
 
         val activeTrip = database.activeTripDao().getActiveTripById(tripId)
         assertNotNull("Active trip must NOT be deleted when permissions are missing", activeTrip)

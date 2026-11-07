@@ -142,9 +142,10 @@ class GpsLocationQueue(
                             batchLimit = batchFetchLimit,
                             onFixProcessed = onFixProcessed
                         )
-                        if (isStopping.get()) {
+                        val areJobsInFlight = (ingestionJob?.isActive == true) || spilloverJobs.isNotEmpty() || admissionBarrier.inFlight() > 0
+                        if (isStopping.get() && !areJobsInFlight) {
                             val count = gpsInboxDao.getPendingCount(currentTripId)
-                            if (count == 0 && admissionBarrier.inFlight() == 0) {
+                            if (count == 0) {
                                 break
                             }
                         }
@@ -201,13 +202,15 @@ class GpsLocationQueue(
                             break
                         }
 
-                        if (isStopping.get() && count == 0 && admissionBarrier.inFlight() == 0) {
+                        val areJobsInFlight = (ingestionJob?.isActive == true) || spilloverJobs.isNotEmpty() || admissionBarrier.inFlight() > 0
+                        if (isStopping.get() && !areJobsInFlight && count == 0) {
                             break
                         }
                         signalChannel.receiveCatching()
                     }
                 } else {
-                    if (isStopping.get() && admissionBarrier.inFlight() == 0) {
+                    val areJobsInFlight = (ingestionJob?.isActive == true) || spilloverJobs.isNotEmpty() || admissionBarrier.inFlight() > 0
+                    if (isStopping.get() && !areJobsInFlight) {
                         break
                     }
                     signalChannel.receiveCatching()
@@ -261,14 +264,18 @@ class GpsLocationQueue(
             if (sendResult.isFailure) {
                 // Bounded in-memory capacity reached.
                 // Employ durable Room-backed spillover: persist asynchronously without blocking caller thread.
-                val spilloverJob = scope.launch(dispatcher) {
+                var spilloverJob: Job? = null
+                spilloverJob = scope.launch(dispatcher) {
                     try {
                         persistBatch(batch)
                     } finally {
-                        coroutineContext[Job]?.let { spilloverJobs.remove(it) }
+                        spilloverJob?.let { spilloverJobs.remove(it) }
                     }
                 }
                 spilloverJobs.add(spilloverJob)
+                if (!spilloverJob.isActive) {
+                    spilloverJobs.remove(spilloverJob)
+                }
             }
         } finally {
             admissionBarrier.releaseSequence()
