@@ -9,9 +9,11 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -112,37 +114,41 @@ open class GoogleSheetsSyncService @Inject constructor(
 
     /**
      * Executes synchronization of all pending reviewed trips with Google Sheets.
-     * Serialized with an in-process Mutex to eliminate local race conditions.
+     * Serialized with an in-process Mutex and dispatched on Dispatchers.IO to eliminate local race conditions
+     * and prevent NetworkOnMainThreadException.
      */
-    open suspend fun syncPendingTrips(): SheetsSyncResult = syncMutex.withLock {
-        val spreadsheetId = preferencesManager.sheetsSpreadsheetId.first().trim()
-        val webhookUrl = preferencesManager.sheetsWebhookUrl.first().trim()
+    open suspend fun syncPendingTrips(): SheetsSyncResult = withContext(Dispatchers.IO) {
+        syncMutex.withLock {
+            val spreadsheetId = preferencesManager.sheetsSpreadsheetId.first().trim()
+            val webhookUrl = preferencesManager.sheetsWebhookUrl.first().trim()
 
-        // Safely migrate any legacy DataStore plaintext token and resolve strictly from Keystore
-        preferencesManager.migrateLegacyAuthToken(secureStorageManager)
-        val authToken = secureStorageManager.getOAuthToken()?.trim().orEmpty()
+            // Safely migrate any legacy DataStore plaintext token and resolve strictly from Keystore
+            preferencesManager.migrateLegacyAuthToken(secureStorageManager)
+            val authToken = secureStorageManager.getOAuthToken()?.trim().orEmpty()
 
-        if (spreadsheetId.isBlank() && webhookUrl.isBlank()) {
-            return@withLock SheetsSyncResult.NotConfigured
-        }
-
-        val pendingTrips = tripRepository.getPendingSyncTrips()
-        // Strict business rule: Never sync UNREVIEWED trips as confirmed mileage
-        val eligibleTrips = pendingTrips.filter { it.classification != "UNREVIEWED" }
-
-        if (eligibleTrips.isEmpty()) {
-            return@withLock SheetsSyncResult.Success(0, 0)
-        }
-
-        return@withLock if (webhookUrl.isNotBlank()) {
-            syncViaWebhook(webhookUrl, eligibleTrips)
-        } else {
-            if (authToken.isBlank()) {
-                val err = "Google Sheets authentication token missing. Please connect your account."
-                preferencesManager.setSheetsLastError(err)
-                return@withLock SheetsSyncResult.TokenExpired(err)
+            if (spreadsheetId.isBlank() && webhookUrl.isBlank()) {
+                return@withLock SheetsSyncResult.NotConfigured
             }
-            syncViaSheetsApi(spreadsheetId, authToken, eligibleTrips, isRetryAfterRefresh = false)
+
+            val pendingTrips = tripRepository.getPendingSyncTrips()
+            // Strict business rule: Never sync UNREVIEWED trips as confirmed mileage
+            val eligibleTrips = pendingTrips.filter { it.classification != "UNREVIEWED" }
+
+            if (eligibleTrips.isEmpty()) {
+                return@withLock SheetsSyncResult.Success(0, 0)
+            }
+
+            if (webhookUrl.isNotBlank()) {
+                syncViaWebhook(webhookUrl, eligibleTrips)
+            } else {
+                if (authToken.isBlank()) {
+                    val err = "Google Sheets authentication token missing. Please connect your account."
+                    preferencesManager.setSheetsLastError(err)
+                    SheetsSyncResult.TokenExpired(err)
+                } else {
+                    syncViaSheetsApi(spreadsheetId, authToken, eligibleTrips, isRetryAfterRefresh = false)
+                }
+            }
         }
     }
 
@@ -515,7 +521,7 @@ open class GoogleSheetsSyncService @Inject constructor(
             preferencesManager.setSheetsLastError(msg)
             return SheetsSyncResult.NetworkError(msg, e)
         } catch (e: Exception) {
-            val msg = e.localizedMessage ?: "Unexpected sync error"
+            val msg = e.localizedMessage?.takeIf { it.isNotBlank() } ?: "Unexpected sync error: ${e.javaClass.simpleName}"
             preferencesManager.setSheetsLastError(msg)
             return SheetsSyncResult.UnexpectedError(e)
         }

@@ -38,10 +38,12 @@ class MileageTrackerApp : Application(), Configuration.Provider {
                 preferencesManager.migrateSensitivePreferences()
             } catch (_: Exception) {}
 
-            val autoTrackEnabled = preferencesManager.isAutoTrackingEnabled.first()
-            if (autoTrackEnabled) {
-                activityTransitionManager.registerTransitions()
-            }
+            try {
+                val autoTrackEnabled = preferencesManager.isAutoTrackingEnabled.first()
+                if (autoTrackEnabled) {
+                    activityTransitionManager.registerTransitions()
+                }
+            } catch (_: Exception) {}
         }
     }
 }

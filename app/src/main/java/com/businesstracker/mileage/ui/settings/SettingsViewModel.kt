@@ -367,7 +367,7 @@ class SettingsViewModel @Inject constructor(
     fun syncSheetsNow() {
         if (_isSyncing.value) return
         _isSyncing.value = true
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 sheetsSyncService.syncPendingTrips()
             } finally {
