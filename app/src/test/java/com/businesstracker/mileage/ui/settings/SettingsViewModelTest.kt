@@ -2,6 +2,7 @@ package com.businesstracker.mileage.ui.settings
 
 import android.content.Context
 import androidx.room.Room
+import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
@@ -18,6 +19,8 @@ import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -48,10 +51,11 @@ class SettingsViewModelTest {
     private lateinit var activityTransitionManager: ActivityTransitionManager
     private lateinit var googleAuthManager: GoogleAuthManager
     private lateinit var sheetsSyncService: GoogleSheetsSyncService
+    private var currentViewModel: SettingsViewModel? = null
     private val testDispatcher = StandardTestDispatcher()
 
     @Before
-    fun setUp() {
+    fun setUp() = runTest(testDispatcher) {
         Dispatchers.setMain(testDispatcher)
         context = RuntimeEnvironment.getApplication()
         database = Room.inMemoryDatabaseBuilder(context, ExpenseTrackerDatabase::class.java)
@@ -75,10 +79,18 @@ class SettingsViewModelTest {
         )
 
         LocationTrackingService.resetGuardForTesting()
+
+        // Prime Room and DataStore flows
+        preferencesManager.isAutoTrackingEnabled.first()
+        database.tripDao().getAllTrips().first()
     }
 
     @After
     fun tearDown() {
+        currentViewModel?.let { vm ->
+            vm.viewModelScope.coroutineContext[Job]?.cancelChildren()
+        }
+        currentViewModel = null
         LocationTrackingService.resetGuardForTesting()
         Dispatchers.resetMain()
         database.close()
@@ -94,7 +106,7 @@ class SettingsViewModelTest {
             secureStorageManager = secureStorageManager,
             googleAuthManager = googleAuthManager,
             context = context
-        )
+        ).also { currentViewModel = it }
     }
 
     @Test
@@ -152,7 +164,7 @@ class SettingsViewModelTest {
         assertTrue("Callback should be success", callbackResult!!.isSuccess)
         assertEquals(1, callbackResult!!.getOrNull())
 
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.first { it.deletionMessage != null }
         assertFalse("Loading state must be reset to false after deletion", state.isDeletingAllTrips)
         assertNotNull("Success message must be populated", state.deletionMessage)
         assertTrue("Message must mention deletion count", state.deletionMessage!!.contains("Successfully deleted 1 local trip records"))
@@ -182,7 +194,7 @@ class SettingsViewModelTest {
         assertNotNull(callbackResult)
         assertTrue("Callback should report failure", callbackResult!!.isFailure)
 
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.first { it.deletionMessage != null }
         assertFalse("Loading state must reset to false after error", state.isDeletingAllTrips)
         assertNotNull("Error message must be set", state.deletionMessage)
         assertTrue("Message must describe error", state.deletionMessage!!.contains("Failed to delete local trip data"))
@@ -215,7 +227,7 @@ class SettingsViewModelTest {
         assertNotNull(callbackResult)
         assertTrue("Deletion must fail when tracking is active", callbackResult!!.isFailure)
 
-        val state = viewModel.uiState.value
+        val state = viewModel.uiState.first { it.deletionMessage != null }
         assertFalse("Must not enter loading state", state.isDeletingAllTrips)
         assertNotNull("Warning message must be set", state.deletionMessage)
         assertTrue("Message must warn about active tracking", state.deletionMessage!!.contains("Cannot delete while tracking is active"))
@@ -226,15 +238,20 @@ class SettingsViewModelTest {
         val viewModel = createViewModel()
         advanceUntilIdle()
 
-        viewModel.deleteAllTripData()
+        var callbackResult: Result<Int>? = null
+        viewModel.deleteAllTripData { result ->
+            callbackResult = result
+        }
         advanceUntilIdle()
 
-        assertNotNull(viewModel.uiState.value.deletionMessage)
+        val stateWithMessage = viewModel.uiState.first { it.deletionMessage != null }
+        assertNotNull(stateWithMessage.deletionMessage)
 
         viewModel.clearDeletionMessage()
         advanceUntilIdle()
 
-        assertNull("Deletion message must be cleared", viewModel.uiState.value.deletionMessage)
+        val clearedState = viewModel.uiState.first { it.deletionMessage == null }
+        assertNull("Deletion message must be cleared", clearedState.deletionMessage)
     }
 
     @Test
