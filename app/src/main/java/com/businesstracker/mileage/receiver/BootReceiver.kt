@@ -27,6 +27,16 @@ class BootReceiver : BroadcastReceiver() {
     @Inject lateinit var activeTripRepository: ActiveTripRepository
     @Inject lateinit var tripLifecycleDao: TripLifecycleDao
 
+    @VisibleForTesting internal var testActivityTransitionManager: ActivityTransitionManager? = null
+    @VisibleForTesting internal var testPreferencesManager: TrackingPreferencesManager? = null
+    @VisibleForTesting internal var testActiveTripRepository: ActiveTripRepository? = null
+    @VisibleForTesting internal var testTripLifecycleDao: TripLifecycleDao? = null
+
+    private val transitionManager get() = testActivityTransitionManager ?: activityTransitionManager
+    private val prefsManager get() = testPreferencesManager ?: preferencesManager
+    private val activeTripRepo get() = testActiveTripRepository ?: activeTripRepository
+    private val lifecycleDao get() = testTripLifecycleDao ?: tripLifecycleDao
+
     private var receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @VisibleForTesting
@@ -48,7 +58,7 @@ class BootReceiver : BroadcastReceiver() {
                     reconcileBootActiveTrip()
 
                     // 2. Register Activity Transitions if auto tracking enabled and permission granted
-                    val isAutoTrackingEnabled = preferencesManager.isAutoTrackingEnabled.first()
+                    val isAutoTrackingEnabled = prefsManager.isAutoTrackingEnabled.first()
                     val hasActivityRecognition = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
                         androidx.core.content.ContextCompat.checkSelfPermission(
                             context,
@@ -60,7 +70,7 @@ class BootReceiver : BroadcastReceiver() {
                         if (activityTransitionRegistrar != null) {
                             activityTransitionRegistrar?.invoke()
                         } else {
-                            activityTransitionManager.registerTransitions()
+                            transitionManager.registerTransitions()
                         }
                     }
                 } finally {
@@ -76,10 +86,10 @@ class BootReceiver : BroadcastReceiver() {
      * tracking trips to RECOVERY_REQUIRED rather than deleting or prematurely finalizing.
      */
     suspend fun reconcileBootActiveTrip() {
-        val activeTrip = activeTripRepository.getActiveTrip() ?: return
+        val activeTrip = activeTripRepo.getActiveTrip() ?: return
         val tripId = activeTrip.id
 
-        val lifecycle = tripLifecycleDao.getLifecycle(tripId)
+        val lifecycle = lifecycleDao.getLifecycle(tripId)
         val currentState = lifecycle?.state?.let { TripLifecycleState.fromString(it) }
 
         if (currentState == TripLifecycleState.FINALIZED ||
@@ -89,7 +99,7 @@ class BootReceiver : BroadcastReceiver() {
             return
         }
 
-        tripLifecycleDao.insertOrUpdate(
+        lifecycleDao.insertOrUpdate(
             TripLifecycleEntity(
                 tripId = tripId,
                 state = TripLifecycleState.RECOVERY_REQUIRED.value,
@@ -107,6 +117,10 @@ class BootReceiver : BroadcastReceiver() {
         lifecycleDao: TripLifecycleDao,
         scope: CoroutineScope? = null
     ) {
+        this.testActivityTransitionManager = transitionManager
+        this.testPreferencesManager = prefs
+        this.testActiveTripRepository = activeTripRepo
+        this.testTripLifecycleDao = lifecycleDao
         this.activityTransitionManager = transitionManager
         this.preferencesManager = prefs
         this.activeTripRepository = activeTripRepo

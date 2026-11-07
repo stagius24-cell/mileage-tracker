@@ -119,7 +119,7 @@ class DashboardViewModelStateTest {
         )
         advanceUntilIdle()
 
-        val state = viewModel.serviceState.value
+        val state = viewModel.serviceState.first { it.tripId == tripId }
         assertFalse("Must NOT be displayed as actively tracking", state.isTracking)
         assertTrue("Interrupted state must be marked recovery required", state.isRecoveryRequired)
         assertEquals(tripId, state.tripId)
@@ -144,6 +144,12 @@ class DashboardViewModelStateTest {
                 isPaused = true
             )
         )
+        database.tripLifecycleDao().insertOrUpdate(
+            TripLifecycleEntity(
+                tripId = tripId,
+                state = TripLifecycleState.TRACKING.value
+            )
+        )
 
         val viewModel = DashboardViewModel(
             tripRepository = fakeTripRepo,
@@ -155,7 +161,7 @@ class DashboardViewModelStateTest {
         )
         advanceUntilIdle()
 
-        val state = viewModel.serviceState.value
+        val state = viewModel.serviceState.first { it.tripId == tripId }
         assertFalse(state.isTracking)
         assertTrue(state.isPaused)
         assertEquals(tripId, state.tripId)

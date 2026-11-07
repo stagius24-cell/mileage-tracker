@@ -111,6 +111,11 @@ class LocationTrackingService : Service() {
     @Inject lateinit var bootCountProvider: BootCountProvider
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
+    private val safeBootCountProvider: BootCountProvider
+        get() = if (::bootCountProvider.isInitialized) bootCountProvider else object : BootCountProvider {
+            override fun getBootCount(): Int = 1
+        }
+
     private var serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var wakeLock: PowerManager.WakeLock? = null
     private var tickerJob: Job? = null
@@ -305,7 +310,7 @@ class LocationTrackingService : Service() {
                     drainPendingGpsFixesUseCase = drainPendingGpsFixesUseCase,
                     tripSequenceDao = tripSequenceDao,
                     database = database,
-                    bootCountProvider = bootCountProvider,
+                    bootCountProvider = safeBootCountProvider,
                     onFixProcessed = { result ->
                         handleFixProcessed(result)
                     }
@@ -436,7 +441,7 @@ class LocationTrackingService : Service() {
                 drainPendingGpsFixesUseCase = drainPendingGpsFixesUseCase,
                 tripSequenceDao = tripSequenceDao,
                 database = database,
-                bootCountProvider = bootCountProvider,
+                bootCountProvider = safeBootCountProvider,
                 onFixProcessed = { result ->
                     handleFixProcessed(result)
                 }
@@ -865,7 +870,7 @@ class LocationTrackingService : Service() {
         seqDao?.let { this.tripSequenceDao = it }
         db?.let { this.database = it }
         prefs?.let { this.preferencesManager = it }
-        bootProvider?.let { this.bootCountProvider = it }
+        this.bootCountProvider = bootProvider ?: safeBootCountProvider
         fusedClient?.let { this.fusedLocationClient = it }
         dispatcher?.let { this.ioDispatcher = it }
         scope?.let { this.serviceScope = it }

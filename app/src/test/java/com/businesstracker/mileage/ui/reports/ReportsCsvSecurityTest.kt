@@ -22,6 +22,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -191,7 +192,8 @@ class ReportsCsvSecurityTest {
     }
 
     @Test
-    fun exportToCsv_withMaliciousPayload_escapesSafelyAndPreservesOriginalData() = runTest(testDispatcher) {
+    fun exportToCsv_withMaliciousPayload_escapesSafelyAndPreservesOriginalData() = runTest {
+        val appCtx = RuntimeEnvironment.getApplication()
         val maliciousTrip = createDummyTrip(
             id = "malicious-1",
             startAddress = "   =SUM(1,2)",
@@ -221,7 +223,7 @@ class ReportsCsvSecurityTest {
             override suspend fun markSynced(id: String, t: Long) {}
         }
 
-        val viewModel = ReportsExportViewModel(repo, CalculateMileageRateUseCase(), context)
+        val viewModel = ReportsExportViewModel(repo, CalculateMileageRateUseCase(), appCtx)
         advanceUntilIdle()
 
         var capturedIntent: android.content.Intent? = null
@@ -229,11 +231,12 @@ class ReportsCsvSecurityTest {
         advanceUntilIdle()
 
         assertNotNull(capturedIntent)
-        val exportDir = File(context.cacheDir, "exports")
-        val csvFile = exportDir.listFiles { _, name -> name.endsWith(".csv") }?.maxByOrNull { it.lastModified() }
-        assertNotNull(csvFile)
+        val exportDir = File(appCtx.cacheDir, "exports")
+        val csvFiles = exportDir.listFiles { _, name -> name.endsWith(".csv") }
+        assertTrue(csvFiles != null && csvFiles.isNotEmpty())
+        val csvFile = csvFiles!!.maxByOrNull { it.lastModified() }!!
 
-        val content = csvFile!!.readText()
+        val content = csvFile.readText()
         // Verifies the malicious formulas were safely prepended with '
         assertTrue("Formula with leading spaces must be prepended with single quote", content.contains("\"'   =SUM(1,2)\""))
         assertTrue("Formula must be prepended with single quote", content.contains("\"'=cmd|' /C calc'!A0\""))

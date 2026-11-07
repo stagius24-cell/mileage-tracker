@@ -91,6 +91,9 @@ class LocationTrackingServiceNullIntentRecoveryTest {
             seqDao = database.tripSequenceDao(),
             db = database,
             prefs = preferencesManager,
+            bootProvider = object : BootCountProvider {
+                override fun getBootCount(): Int = 1
+            },
             dispatcher = Dispatchers.Default,
             scope = testScope
         )
