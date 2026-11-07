@@ -111,14 +111,16 @@ class UserControlledDeletionTest {
             ActiveTripEntity(
                 id = tripId,
                 startTime = 1000L,
-                startAddress = "100 Start St",
-                suggestedBusiness = "MySucculentCorner",
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                lastLatitude = 37.7750,
+                lastLongitude = -122.4195,
+                lastTimestamp = 1500L,
+                totalDistanceMeters = 5000.0,
                 trackingMethod = TrackingMethod.AUTO_DETECTED.value,
-                totalDistanceMeters = 5000f,
-                lastMovementTimestamp = 1500L,
-                isStationary = false,
-                isCandidate = false,
-                isConfirmed = true
+                isPaused = false,
+                pausedDurationMillis = 0L,
+                suggestedBusiness = "MySucculentCorner"
             )
         )
         database.activeTripDao().insertWaypoint(
