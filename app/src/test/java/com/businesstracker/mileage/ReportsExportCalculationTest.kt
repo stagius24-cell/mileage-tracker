@@ -141,6 +141,25 @@ class ReportsExportCalculationTest {
     }
 
     @Test
+    fun monthlySummaries_followEntityAndClassificationFilters() = runTest {
+        val context = RuntimeEnvironment.getApplication()
+        val viewModel = ReportsExportViewModel(fakeRepo, CalculateMileageRateUseCase(), context)
+        advanceUntilIdle()
+
+        viewModel.selectYear("2026")
+        viewModel.selectBusinessEntity("Personal")
+        viewModel.selectClassification("PERSONAL")
+        advanceUntilIdle()
+
+        val summariesWithTrips = viewModel.uiState.value.monthlySummaries.filter { it.totalDrives > 0 }
+        assertEquals(1, summariesWithTrips.size)
+        assertEquals("2026-07", summariesWithTrips.single().monthIso)
+        assertEquals(1, summariesWithTrips.single().totalDrives)
+        assertEquals(30.0, summariesWithTrips.single().totalMiles, 0.01)
+        assertEquals(0.0, summariesWithTrips.single().loggedDeduction, 0.01)
+    }
+
+    @Test
     fun pdfGenerator_generatesValidPdfDocument() {
         val context = RuntimeEnvironment.getApplication()
         val reportData = ReportSummaryData(

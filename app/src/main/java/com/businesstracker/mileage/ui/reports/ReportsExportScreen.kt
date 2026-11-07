@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -19,18 +18,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
@@ -76,7 +71,6 @@ fun ReportsExportScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    var yearDropdownExpanded by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = modifier
@@ -85,58 +79,22 @@ fun ReportsExportScreen(
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Top Header: Year Selector & Export Buttons (CSV + PDF)
         item {
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Year Selector / Header Title
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { yearDropdownExpanded = true }
-                            .padding(vertical = 4.dp, horizontal = 4.dp)
-                    ) {
-                        Text(
-                            text = "${state.selectedYear} Reports",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Black
-                            ),
-                            color = MaterialTheme.colorScheme.onBackground
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Default.ArrowDropDown,
-                            contentDescription = "Select Year",
-                            tint = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.size(24.dp)
-                        )
+                    Text(
+                        text = "Reports",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold
+                    )
 
-                        DropdownMenu(
-                            expanded = yearDropdownExpanded,
-                            onDismissRequest = { yearDropdownExpanded = false }
-                        ) {
-                            state.availableYears.forEach { yr ->
-                                DropdownMenuItem(
-                                    text = { Text("$yr Tax Year") },
-                                    onClick = {
-                                        viewModel.selectYear(yr)
-                                        yearDropdownExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-
-                    // Export Buttons Row
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(
                             onClick = {
@@ -169,35 +127,60 @@ fun ReportsExportScreen(
                     }
                 }
 
-                // Filter Chips (Entity & Category)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val entities = listOf("ALL" to "All Entities", "MySucculentCorner" to "MySucculentCorner", "Personal" to "Personal")
-                    items(entities) { (key, label) ->
-                        val isSelected = state.selectedBusinessEntity == key
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { viewModel.selectBusinessEntity(key) },
-                            label = { Text(label) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = SucculentPrimary,
-                                selectedLabelColor = Color.White
-                            )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(end = 8.dp)
+                ) {
+                    item {
+                        CompactFilterMenu(
+                            label = state.selectedYear,
+                            options = state.availableYears.map { it to "$it tax year" },
+                            onSelect = viewModel::selectYear
                         )
                     }
-                }
-
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val categories = listOf("ALL" to "All Drives", "BUSINESS" to "Business", "PERSONAL" to "Personal", "UNREVIEWED" to "Unreviewed")
-                    items(categories) { (key, label) ->
-                        val isSelected = state.selectedClassification == key
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { viewModel.selectClassification(key) },
-                            label = { Text(label, fontSize = 12.sp) }
+                    item {
+                        CompactFilterMenu(
+                            label = when (state.selectedBusinessEntity) {
+                                "ALL" -> "All entities"
+                                else -> state.selectedBusinessEntity
+                            },
+                            options = listOf(
+                                "ALL" to "All entities",
+                                "MySucculentCorner" to "MySucculentCorner",
+                                "Personal" to "Personal"
+                            ),
+                            onSelect = viewModel::selectBusinessEntity
+                        )
+                    }
+                    item {
+                        CompactFilterMenu(
+                            label = when (state.selectedClassification) {
+                                "ALL" -> "All drives"
+                                "BUSINESS" -> "Business"
+                                "PERSONAL" -> "Personal"
+                                else -> "Unreviewed"
+                            },
+                            options = listOf(
+                                "ALL" to "All drives",
+                                "BUSINESS" to "Business",
+                                "PERSONAL" to "Personal",
+                                "UNREVIEWED" to "Unreviewed"
+                            ),
+                            onSelect = viewModel::selectClassification
                         )
                     }
                 }
             }
+        }
+
+        item {
+            YearlyStatsChartCard(
+                year = state.selectedYear,
+                ytdLogged = state.ytdLoggedDeduction,
+                ytdPotential = state.ytdPotentialDeduction,
+                ytdMiles = state.ytdBusinessMiles,
+                monthlySummaries = state.monthlySummaries
+            )
         }
 
         // Comprehensive Metrics Summary Card
@@ -306,31 +289,51 @@ fun ReportsExportScreen(
             }
         }
 
-        // Yearly Overview & Interactive Mileage/Money Chart Card
         item {
-            YearlyStatsChartCard(
-                year = state.selectedYear,
-                ytdLogged = state.ytdLoggedDeduction,
-                ytdPotential = state.ytdPotentialDeduction,
-                ytdMiles = state.ytdBusinessMiles,
-                ytdTotalMiles = state.ytdTotalMiles,
-                monthlySummaries = state.monthlySummaries
-            )
-        }
-
-        // Monthly Summary Cards (MileIQ Style as shown in reference)
-        items(state.monthlySummaries, key = { it.monthIso }) { summary ->
-            MonthlySummaryCard(
-                summary = summary,
-                onExportMonth = {
-                    viewModel.exportToCsv(summary.monthIso) { intent ->
-                        context.startActivity(intent)
-                    }
+            MonthlyDetailsSection(
+                summaries = state.monthlySummaries,
+                onExportMonth = { monthIso ->
+                    viewModel.exportToCsv(monthIso) { intent -> context.startActivity(intent) }
                 },
-                onViewMonthDrives = {
-                    onNavigateToTrips?.invoke(summary.monthIso)
+                onViewMonthDrives = { monthIso ->
+                    onNavigateToTrips?.invoke(monthIso)
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun CompactFilterMenu(
+    label: String,
+    options: List<Pair<String, String>>,
+    onSelect: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(10.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+            Spacer(Modifier.width(2.dp))
+            Icon(
+                Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { (key, title) ->
+                DropdownMenuItem(
+                    text = { Text(title) },
+                    onClick = {
+                        onSelect(key)
+                        expanded = false
+                    }
+                )
+            }
         }
     }
 }
@@ -341,7 +344,6 @@ private fun YearlyStatsChartCard(
     ytdLogged: Double,
     ytdPotential: Double,
     ytdMiles: Double,
-    ytdTotalMiles: Double,
     monthlySummaries: List<MonthSummary>,
     modifier: Modifier = Modifier
 ) {
@@ -506,174 +508,193 @@ private fun YearlyStatsChartCard(
 }
 
 @Composable
-private fun MonthlySummaryCard(
-    summary: MonthSummary,
-    onExportMonth: () -> Unit,
-    onViewMonthDrives: () -> Unit,
-    modifier: Modifier = Modifier
+private fun MonthlyDetailsSection(
+    summaries: List<MonthSummary>,
+    onExportMonth: (String) -> Unit,
+    onViewMonthDrives: (String) -> Unit
 ) {
-    var isExpanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(200),
+        label = "monthly_details_rotation"
+    )
 
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            // Row 1: Month Title & Logged Amount
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column {
-                    Text(
-                        text = summary.monthName,
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black
-                        ),
-                        color = MaterialTheme.colorScheme.onBackground
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (summary.unreviewedDrives > 0) {
-                            Icon(
-                                imageVector = Icons.Default.Lock,
-                                contentDescription = null,
-                                tint = Color(0xFFDC2626),
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                        }
-                        Text(
-                            text = "${summary.totalDrives} Drives • ${String.format(Locale.US, "%.0f", summary.totalMiles)} Miles",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = if (summary.unreviewedDrives > 0) Color(0xFFDC2626) else SlateNeutral
-                        )
-                    }
-                }
-
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "\$${String.format(Locale.US, "%.2f", summary.loggedDeduction)}",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Black
-                        ),
-                        color = SucculentPrimary
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = if (summary.percentComplete >= 100) "100% Complete" else "${summary.percentComplete}% Complete",
-                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                        color = if (summary.percentComplete >= 100) SucculentPrimary else SlateNeutral
-                    )
-                }
-            }
-
-            // Row 2: Dual-Color Progress Bar (Dark Green = Logged, Light Green = Potential)
-            val loggedFrac = if (summary.potentialDeduction > 0) {
-                (summary.loggedDeduction / summary.potentialDeduction).toFloat().coerceIn(0.01f, 1f)
-            } else 1f
-            val potentialFrac = 1f - loggedFrac
-
+        Column(modifier = Modifier.fillMaxWidth()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(26.dp)
-                    .clip(RoundedCornerShape(13.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                if (loggedFrac > 0f) {
-                    Box(
-                        modifier = Modifier
-                            .weight(loggedFrac.coerceAtLeast(0.01f))
-                            .fillMaxHeight()
-                            .background(SucculentPrimary)
-                    )
-                }
-                if (potentialFrac > 0.001f) {
-                    Box(
-                        modifier = Modifier
-                            .weight(potentialFrac.coerceAtLeast(0.01f))
-                            .fillMaxHeight()
-                            .background(SucculentSecondary)
-                    )
-                }
-            }
-
-            // Row 3: Logged vs Potential Readouts
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .clickable { expanded = !expanded }
+                    .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "\$${String.format(Locale.US, "%.2f", summary.loggedDeduction)}",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
-                        color = SucculentPrimary
+                        "Monthly details",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "logged",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = SlateNeutral
-                    )
-                }
-
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "\$${String.format(Locale.US, "%.2f", summary.potentialDeduction)}",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Black),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "potential",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = SlateNeutral
+                        if (expanded) "Tap a month for actions" else "${summaries.size} months hidden",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Icon(
+                    Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Hide monthly details" else "Show monthly details",
+                    modifier = Modifier.rotate(rotation)
+                )
             }
 
-            // Collapsible / Action Buttons
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Button(
-                    onClick = onExportMonth,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB))
-                ) {
-                    Text(
-                        text = "Submit ${summary.monthName} Report",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
-                    )
-                }
-
-                OutlinedButton(
-                    onClick = onViewMonthDrives,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(
-                        text = "View ${summary.monthName} Drives",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+            AnimatedVisibility(visible = expanded) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    summaries.forEachIndexed { index, summary ->
+                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        CompactMonthRow(
+                            summary = summary,
+                            onExportMonth = { onExportMonth(summary.monthIso) },
+                            onViewMonthDrives = { onViewMonthDrives(summary.monthIso) }
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun CompactMonthRow(
+    summary: MonthSummary,
+    onExportMonth: () -> Unit,
+    onViewMonthDrives: () -> Unit
+) {
+    var expanded by remember(summary.monthIso) { mutableStateOf(false) }
+    val rotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(150),
+        label = "month_rotation_${summary.monthIso}"
+    )
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        summary.monthName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (summary.unreviewedDrives > 0) {
+                        Spacer(Modifier.width(6.dp))
+                        Icon(
+                            Icons.Default.Lock,
+                            contentDescription = "Unreviewed drives",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+                Text(
+                    "${summary.totalDrives} drives • ${String.format(Locale.US, "%.1f", summary.totalMiles)} mi",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                "\$${String.format(Locale.US, "%.2f", summary.loggedDeduction)}",
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+                color = SucculentPrimary
+            )
+            Spacer(Modifier.width(6.dp))
+            Icon(
+                Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(20.dp)
+                    .rotate(rotation)
+            )
+        }
+
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                val loggedFraction = if (summary.potentialDeduction > 0.0) {
+                    (summary.loggedDeduction / summary.potentialDeduction).toFloat().coerceIn(0f, 1f)
+                } else 1f
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(loggedFraction)
+                            .height(8.dp)
+                            .background(SucculentPrimary)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    MonthMetric("Potential", "\$${String.format(Locale.US, "%.2f", summary.potentialDeduction)}")
+                    MonthMetric("Complete", "${summary.percentComplete}%", Alignment.CenterHorizontally)
+                    MonthMetric("Unreviewed", summary.unreviewedDrives.toString(), Alignment.End)
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onExportMonth,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Export CSV")
+                    }
+                    Button(
+                        onClick = onViewMonthDrives,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                    ) {
+                        Text("View drives")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthMetric(
+    label: String,
+    value: String,
+    alignment: Alignment.Horizontal = Alignment.Start
+) {
+    Column(horizontalAlignment = alignment) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
     }
 }

@@ -158,7 +158,9 @@ class ReportsExportViewModel @Inject constructor(
         }.sortedByDescending { it.totalMiles }
 
         // Monthly Summaries (for the selected year)
-        val yearTrips = trips.filter { year == "ALL" || it.date.startsWith(year) }
+        // Monthly rows must reflect the same year, entity, classification, and date filters
+        // shown in the report header so displayed totals match exports and YTD metrics.
+        val yearTrips = filtered
         val monthsMap = mutableMapOf<String, MutableList<TripEntity>>()
         for (i in 1..12) {
             val yrPrefix = if (year == "ALL") currentYear else year
