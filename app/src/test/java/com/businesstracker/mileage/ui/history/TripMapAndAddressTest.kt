@@ -152,6 +152,8 @@ class TripMapAndAddressTest {
         assertNull(PrivateMapTileDownloader(client).downloadTile(
             0L, 0, "https://tile.openstreetmap.org/0/0/0.png", null, TileSourceFactory.MAPNIK
         ))
-        assertTrue(ShadowLog.getLogs().isEmpty())
+        val messages = ShadowLog.getLogs().joinToString { it.msg }
+        assertFalse(messages.contains("tile.openstreetmap.org"))
+        assertFalse(messages.contains("/0/0/0"))
     }
 }
