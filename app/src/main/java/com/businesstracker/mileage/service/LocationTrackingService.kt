@@ -192,22 +192,25 @@ class LocationTrackingService : Service() {
 
         if (!hasFine && !hasCoarse) {
             Log.w("LocationTrackingService", "Location permissions missing during process recreation; preserving active trip state.")
-            val tripId = preferencesManager.getActiveTripId()
-            if (!tripId.isNullOrBlank()) {
-                serviceScope.launch(ioDispatcher) {
-                    try {
-                        tripLifecycleDao.updateState(
-                            tripId,
-                            TripLifecycleState.RECOVERY_REQUIRED.value
+            serviceScope.launch(ioDispatcher) {
+                try {
+                    val activeTrip = activeTripRepository.getActiveTrip()
+                    if (activeTrip != null) {
+                        try {
+                            tripLifecycleDao.updateState(
+                                activeTrip.id,
+                                TripLifecycleState.RECOVERY_REQUIRED.value
+                            )
+                        } catch (_: Exception) {}
+                        _serviceState.value = TrackingServiceState(
+                            isTracking = false,
+                            isRecoveryRequired = true,
+                            tripId = activeTrip.id,
+                            distanceMiles = activeTrip.totalDistanceMeters * 0.000621371,
+                            statusMessage = "Drive Interrupted: Permission Required"
                         )
-                    } catch (_: Exception) {}
-                }
-                _serviceState.value = TrackingServiceState(
-                    isTracking = false,
-                    isRecoveryRequired = true,
-                    tripId = tripId,
-                    statusMessage = "Drive Interrupted: Permission Required"
-                )
+                    }
+                } catch (_: Exception) {}
             }
             isStartingOrRunning.set(false)
             stopSelf()
