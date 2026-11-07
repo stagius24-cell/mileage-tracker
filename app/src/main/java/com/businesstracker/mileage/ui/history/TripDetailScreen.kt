@@ -147,7 +147,7 @@ fun TripDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Compact two-column summary: distance on the left, trip facts on the right.
+            // Compact two-column summary: trip facts on the left, distance on the right.
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -160,31 +160,6 @@ fun TripDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(
-                        modifier = Modifier.weight(0.43f),
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "TOTAL DISTANCE",
-                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
-                            color = SlateNeutral,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Row(verticalAlignment = Alignment.Bottom) {
-                            Text(
-                                text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
-                                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Black)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "miles",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = SlateNeutral,
-                                modifier = Modifier.padding(bottom = 5.dp)
-                            )
-                        }
-                    }
-
                     Column(
                         modifier = Modifier.weight(0.57f),
                         verticalArrangement = Arrangement.spacedBy(5.dp)
@@ -228,6 +203,32 @@ fun TripDetailScreen(
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (trip.syncStatus == "SYNCED") SucculentPrimary else SlateNeutral,
                                 fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
+                    Column(
+                        modifier = Modifier.weight(0.43f),
+                        verticalArrangement = Arrangement.Center,
+                        horizontalAlignment = Alignment.End
+                    ) {
+                        Text(
+                            text = "TOTAL DISTANCE",
+                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
+                            color = SlateNeutral,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            Text(
+                                text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
+                                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Black)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "miles",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = SlateNeutral,
+                                modifier = Modifier.padding(bottom = 5.dp)
                             )
                         }
                     }
@@ -332,10 +333,10 @@ fun TripDetailScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Tax & Classification", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("More info", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         Icon(
                             imageVector = if (showTaxDetails) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (showTaxDetails) "Hide tax details" else "Show tax details",
+                            contentDescription = if (showTaxDetails) "Hide more info" else "Show more info",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
