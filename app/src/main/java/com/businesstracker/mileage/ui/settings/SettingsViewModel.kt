@@ -95,6 +95,8 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _isSyncing = MutableStateFlow(false)
+    private val _isDeletingAllTrips = MutableStateFlow(false)
+    private val _deletionMessage = MutableStateFlow<String?>(null)
 
     private val generalFlow = combine(
         preferencesManager.isAutoTrackingEnabled,
@@ -180,8 +182,10 @@ class SettingsViewModel @Inject constructor(
         configFlow,
         sheetsFlow,
         pendingCountFlow,
-        _isSyncing
-    ) { config, sheets, pendingCount, isSyncing ->
+        _isSyncing,
+        _isDeletingAllTrips,
+        _deletionMessage
+    ) { config, sheets, pendingCount, isSyncing, isDeleting, deletionMsg ->
         val hasBg = hasBackgroundLocationPermission()
         val isReady = config.general.autoTrackingEnabled && hasRequiredPermissions()
 
@@ -212,7 +216,9 @@ class SettingsViewModel @Inject constructor(
             sheetsLastSyncTime = sheets.lastSyncTime,
             sheetsLastError = sheets.lastError,
             pendingTripsCount = pendingCount,
-            isSyncing = isSyncing
+            isSyncing = isSyncing,
+            isDeletingAllTrips = isDeleting,
+            deletionMessage = deletionMsg
         )
     }.stateIn(
         scope = viewModelScope,
@@ -400,35 +406,27 @@ class SettingsViewModel @Inject constructor(
             val failure = Result.failure<Int>(
                 IllegalStateException("Tracking is currently active. Please end the active drive before deleting trip data.")
             )
-            _uiState.update { it.copy(deletionMessage = "Cannot delete while tracking is active. End your drive first.") }
+            _deletionMessage.value = "Cannot delete while tracking is active. End your drive first."
             onResult(failure)
             return
         }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isDeletingAllTrips = true) }
+            _isDeletingAllTrips.value = true
             try {
                 val deletedCount = tripRepository.deleteAllTripData()
-                _uiState.update {
-                    it.copy(
-                        isDeletingAllTrips = false,
-                        deletionMessage = "Successfully deleted $deletedCount local trip records and cleared report cache."
-                    )
-                }
+                _isDeletingAllTrips.value = false
+                _deletionMessage.value = "Successfully deleted $deletedCount local trip records and cleared report cache."
                 onResult(Result.success(deletedCount))
             } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isDeletingAllTrips = false,
-                        deletionMessage = "Failed to delete local trip data: ${e.message}"
-                    )
-                }
+                _isDeletingAllTrips.value = false
+                _deletionMessage.value = "Failed to delete local trip data: ${e.message}"
                 onResult(Result.failure(e))
             }
         }
     }
 
     fun clearDeletionMessage() {
-        _uiState.update { it.copy(deletionMessage = null) }
+        _deletionMessage.value = null
     }
 }
