@@ -50,6 +50,19 @@ interface TripDao {
     @Query("SELECT * FROM trips WHERE id = :tripId LIMIT 1")
     suspend fun getTripById(tripId: String): TripEntity?
 
+    // Fill missing labels only. Never replace coordinates, trip totals, edits or existing addresses.
+    @Query("""
+        UPDATE trips SET
+          startAddress = CASE WHEN startAddress IS NULL OR TRIM(startAddress) = '' OR startAddress = 'Unknown Location'
+            THEN COALESCE(:startAddress, startAddress) ELSE startAddress END,
+          endAddress = CASE WHEN endAddress IS NULL OR TRIM(endAddress) = '' OR endAddress = 'Unknown Location'
+            THEN COALESCE(:endAddress, endAddress) ELSE endAddress END
+        WHERE id = :tripId AND startLatitude = :startLat AND startLongitude = :startLon
+          AND endLatitude = :endLat AND endLongitude = :endLon
+    """)
+    suspend fun fillMissingAddresses(tripId: String, startAddress: String?, endAddress: String?,
+        startLat: Double, startLon: Double, endLat: Double, endLon: Double): Int
+
     @Query("SELECT * FROM trips WHERE id = :tripId LIMIT 1")
     fun observeTripById(tripId: String): Flow<TripEntity?>
 

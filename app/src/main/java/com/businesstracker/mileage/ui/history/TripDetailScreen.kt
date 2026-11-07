@@ -50,6 +50,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,11 +63,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.businesstracker.mileage.domain.usecase.ResolveTripAddressesUseCase
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.model.TripPurpose
-import com.businesstracker.mileage.ui.components.TripSummaryMap
+import com.businesstracker.mileage.ui.components.TripRouteMap
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
@@ -81,9 +86,15 @@ fun TripDetailScreen(
     onBack: () -> Unit,
     onSaveTrip: (tripId: String, classification: String, businessEntity: String, purpose: String, notes: String?) -> Unit,
     onDeleteTrip: (tripId: String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    addressViewModel: TripAddressViewModel = hiltViewModel()
 ) {
     var showEditSheet by remember { mutableStateOf(false) }
+    val addressState by addressViewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(trip.id, trip.startAddress, trip.endAddress) { addressViewModel.resolve(trip) }
+    DisposableEffect(trip.id) { onDispose { addressViewModel.cancelLookup() } }
+    val startAddress = addressState.takeIf { it.tripId == trip.id }?.start ?: trip.startAddress
+    val endAddress = addressState.takeIf { it.tripId == trip.id }?.end ?: trip.endAddress
 
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     val dateFormatter = remember { SimpleDateFormat("EEEE, MMMM d, yyyy", Locale.getDefault()) }
@@ -252,7 +263,7 @@ fun TripDetailScreen(
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
-                    TripSummaryMap(trip = trip, modifier = Modifier.height(180.dp))
+                    TripRouteMap(trip = trip, modifier = Modifier.height(260.dp))
                 }
             }
 
@@ -294,7 +305,9 @@ fun TripDetailScreen(
                         Column {
                             Text(text = "Start Location", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
                             Text(
-                                text = trip.startAddress ?: "Recorded GPS (${String.format(Locale.US, "%.4f", trip.startLatitude)}, ${String.format(Locale.US, "%.4f", trip.startLongitude)})",
+                                text = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                                    ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
+                                    else "Address unavailable (GPS: ${String.format(Locale.US, "%.4f", trip.startLatitude)}, ${String.format(Locale.US, "%.4f", trip.startLongitude)})",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium
                             )
@@ -317,7 +330,9 @@ fun TripDetailScreen(
                         Column {
                             Text(text = "Ending Destination", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
                             Text(
-                                text = trip.endAddress ?: "Recorded GPS (${String.format(Locale.US, "%.4f", trip.endLatitude)}, ${String.format(Locale.US, "%.4f", trip.endLongitude)})",
+                                text = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                                    ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
+                                    else "Address unavailable (GPS: ${String.format(Locale.US, "%.4f", trip.endLatitude)}, ${String.format(Locale.US, "%.4f", trip.endLongitude)})",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium
                             )

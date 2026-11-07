@@ -148,6 +148,9 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.gson)
 
+    // Street maps for saved routes; no API key or native map binaries required.
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
+
     // Unit Testing
     testImplementation(libs.junit)
     testImplementation("androidx.room:room-testing:2.6.1")
