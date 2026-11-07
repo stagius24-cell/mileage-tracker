@@ -23,6 +23,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.TestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -52,7 +53,7 @@ class SettingsViewModelTest {
     private lateinit var googleAuthManager: GoogleAuthManager
     private lateinit var sheetsSyncService: GoogleSheetsSyncService
     private var currentViewModel: SettingsViewModel? = null
-    private lateinit var testDispatcher: StandardTestDispatcher
+    private lateinit var testDispatcher: TestDispatcher
 
     @Before
     fun setUp() {
