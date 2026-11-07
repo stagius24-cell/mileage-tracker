@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudQueue
@@ -38,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -71,6 +73,7 @@ private data class HistoryFilterOption(val value: String, val label: String)
 fun TripHistoryScreen(
     viewModel: TripHistoryViewModel = hiltViewModel(),
     initialMonthIso: String = "",
+    onBackToReports: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -106,7 +109,8 @@ fun TripHistoryScreen(
             onClassificationChange = viewModel::setClassificationFilter,
             onEntityChange = viewModel::setBusinessEntityFilter,
             onSyncChange = viewModel::setSyncStatusFilter,
-            onClearDateFilter = { viewModel.setDateRange("", "") }
+            onClearDateFilter = { viewModel.setDateRange("", "") },
+            onBackToReports = onBackToReports
         )
 
         if (state.trips.isEmpty()) {
@@ -157,7 +161,8 @@ private fun HistoryControls(
     onClassificationChange: (String) -> Unit,
     onEntityChange: (String) -> Unit,
     onSyncChange: (String) -> Unit,
-    onClearDateFilter: () -> Unit
+    onClearDateFilter: () -> Unit,
+    onBackToReports: (() -> Unit)?
 ) {
     Column(
         modifier = Modifier
@@ -175,11 +180,23 @@ private fun HistoryControls(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
-            Text(
-                text = "${state.trips.size} drives  •  ${formatMiles(state.totalFilteredMiles)} mi",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (onBackToReports != null) {
+                TextButton(onClick = onBackToReports) {
+                    Icon(
+                        Icons.Default.ArrowBack,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text("Back to Reports")
+                }
+            } else {
+                Text(
+                    text = "${state.trips.size} drives  •  ${formatMiles(state.totalFilteredMiles)} mi",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         Row(

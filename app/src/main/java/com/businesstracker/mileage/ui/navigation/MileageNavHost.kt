@@ -48,8 +48,14 @@ fun MileageNavHost(
                 }
             )
         ) { backStackEntry ->
+            val monthIso = backStackEntry.arguments?.getString("month").orEmpty()
             TripHistoryScreen(
-                initialMonthIso = backStackEntry.arguments?.getString("month").orEmpty()
+                initialMonthIso = monthIso,
+                onBackToReports = if (monthIso.isNotBlank()) {
+                    { navController.popBackStack() }
+                } else {
+                    null
+                }
             )
         }
         composable(Screen.Reports.route) {
