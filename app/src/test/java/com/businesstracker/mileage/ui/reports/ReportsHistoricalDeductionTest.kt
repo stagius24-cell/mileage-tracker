@@ -233,5 +233,4 @@ class ReportsHistoricalDeductionTest {
 
         assertEquals(148.50, viewModel.uiState.value.ytdLoggedDeduction, 0.01)
     }
-    }
 }
