@@ -1,0 +1,46 @@
+{
+  "source_commit": "f5390197a1b68aeb2877fd52551101990cc86249",
+  "ci_run": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42346672553",
+  "debug_tests_passed": 244,
+  "release_tests_passed": 244,
+  "room_schema_unchanged": true,
+  "map_overlay_cache_and_address_tests": "PASS (Robolectric, synthetic fixtures)",
+  "world_tile_https_probe": "PASS (256x256 PNG, no trip locations used)",
+  "apk_sha256": "e325a8d98ebba34626f131eedd7bb19d5f8cf373e64afd51b79718d6a6b4249a",
+  "signer_certificate_sha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "matches_run96_certificate": true,
+  "apk_signature_v2_verified": true,
+  "apk_signature_v3_verified": true,
+  "payload_matches_tested_ci_apk": true,
+  "previous_manifest": {
+    "manifest": {
+      "versionCode": 3,
+      "versionName": "1.0.2",
+      "compileSdkVersion": 35,
+      "compileSdkVersionCodename": "15",
+      "package": "com.businesstracker.mileage.debug",
+      "platformBuildVersionCode": 35,
+      "platformBuildVersionName": 15
+    },
+    "uses-sdk": {
+      "minSdkVersion": 26,
+      "targetSdkVersion": 35
+    }
+  },
+  "update_manifest": {
+    "manifest": {
+      "versionCode": 4,
+      "versionName": "1.0.3",
+      "compileSdkVersion": 35,
+      "compileSdkVersionCodename": "15",
+      "package": "com.businesstracker.mileage.debug",
+      "platformBuildVersionCode": 35,
+      "platformBuildVersionName": 15
+    },
+    "uses-sdk": {
+      "minSdkVersion": 26,
+      "targetSdkVersion": 35
+    }
+  },
+  "physical_phone_rendering_address_accuracy_and_upgrade": "NOT RUN"
+}
