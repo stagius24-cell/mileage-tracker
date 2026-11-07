@@ -3,8 +3,10 @@ package com.businesstracker.mileage.ui.navigation
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import com.businesstracker.mileage.ui.dashboard.DashboardScreen
 import com.businesstracker.mileage.ui.history.TripHistoryScreen
 import com.businesstracker.mileage.ui.reports.ReportsExportScreen
@@ -37,11 +39,27 @@ fun MileageNavHost(
         composable(Screen.TrackTrip.route) {
             TrackTripScreen()
         }
-        composable(Screen.History.route) {
-            TripHistoryScreen()
+        composable(
+            route = "${Screen.History.route}?month={month}",
+            arguments = listOf(
+                navArgument("month") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                }
+            )
+        ) { backStackEntry ->
+            TripHistoryScreen(
+                initialMonthIso = backStackEntry.arguments?.getString("month").orEmpty()
+            )
         }
         composable(Screen.Reports.route) {
-            ReportsExportScreen()
+            ReportsExportScreen(
+                onNavigateToTrips = { monthIso ->
+                    navController.navigate("${Screen.History.route}?month=$monthIso") {
+                        launchSingleTop = true
+                    }
+                }
+            )
         }
         composable(Screen.Settings.route) {
             SettingsScreen()

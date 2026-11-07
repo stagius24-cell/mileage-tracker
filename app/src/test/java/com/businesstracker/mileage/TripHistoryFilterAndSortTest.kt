@@ -170,4 +170,30 @@ class TripHistoryFilterAndSortTest {
         assertEquals(1, trips.size)
         assertEquals("4", trips[0].id)
     }
+
+    @Test
+    fun dateRange_fromReportMonth_returnsOnlyThatMonthsTrips() = runTest {
+        val repository = object : TripRepository by fakeRepository {
+            override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(
+                sampleTrips + createTrip(
+                    id = "october",
+                    date = "2026-10-31",
+                    startTime = 5000L,
+                    distance = 8.0,
+                    classification = "PERSONAL"
+                )
+            )
+        }
+        val viewModel = TripHistoryViewModel(repository)
+        advanceUntilIdle()
+
+        viewModel.setDateRange("2026-11-01", "2026-11-30")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(4, state.trips.size)
+        assertTrue(state.trips.all { it.date.startsWith("2026-11") })
+        assertEquals("2026-11-01", state.startDateFilter)
+        assertEquals("2026-11-30", state.endDateFilter)
+    }
 }

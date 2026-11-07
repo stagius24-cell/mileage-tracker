@@ -47,8 +47,9 @@ fun MileageBottomBar(
 ) {
     val navBackStackEntry = navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry.value?.destination?.route
+    val currentBaseRoute = currentRoute?.substringBefore("?")
 
-    val selectedIndex = Screen.bottomNavItems.indexOfFirst { it.route == currentRoute }.let {
+    val selectedIndex = Screen.bottomNavItems.indexOfFirst { it.route == currentBaseRoute }.let {
         if (it == -1) 0 else it
     }
 
@@ -122,7 +123,7 @@ fun MileageBottomBar(
                                 .fillMaxHeight()
                                 .clip(RoundedCornerShape(percent = 50))
                                 .clickable {
-                                    if (currentRoute != screen.route) {
+                                    if (currentBaseRoute != screen.route) {
                                         navController.navigate(screen.route) {
                                             popUpTo(Screen.Dashboard.route) {
                                                 saveState = true

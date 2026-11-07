@@ -39,6 +39,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +59,9 @@ import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import java.text.SimpleDateFormat
+import java.time.YearMonth
+import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 import java.util.Date
 import java.util.Locale
 
@@ -66,9 +70,17 @@ private data class HistoryFilterOption(val value: String, val label: String)
 @Composable
 fun TripHistoryScreen(
     viewModel: TripHistoryViewModel = hiltViewModel(),
+    initialMonthIso: String = "",
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(initialMonthIso) {
+        if (initialMonthIso.matches(Regex("\\d{4}-\\d{2}"))) {
+            val month = YearMonth.parse(initialMonthIso)
+            viewModel.setDateRange(month.atDay(1).toString(), month.atEndOfMonth().toString())
+        }
+    }
 
     if (state.selectedTripForDetails != null) {
         TripDetailScreen(
@@ -93,7 +105,8 @@ fun TripHistoryScreen(
             onSortChange = viewModel::setSortOrder,
             onClassificationChange = viewModel::setClassificationFilter,
             onEntityChange = viewModel::setBusinessEntityFilter,
-            onSyncChange = viewModel::setSyncStatusFilter
+            onSyncChange = viewModel::setSyncStatusFilter,
+            onClearDateFilter = { viewModel.setDateRange("", "") }
         )
 
         if (state.trips.isEmpty()) {
@@ -143,7 +156,8 @@ private fun HistoryControls(
     onSortChange: (SortOrder) -> Unit,
     onClassificationChange: (String) -> Unit,
     onEntityChange: (String) -> Unit,
-    onSyncChange: (String) -> Unit
+    onSyncChange: (String) -> Unit,
+    onClearDateFilter: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -206,6 +220,34 @@ private fun HistoryControls(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(end = 8.dp)
         ) {
+            if (state.startDateFilter.isNotBlank()) {
+                item {
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable(onClick = onClearDateFilter),
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(start = 10.dp, end = 6.dp, top = 7.dp, bottom = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Month: ${formatMonthFilter(state.startDateFilter)}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Clear month filter",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                }
+            }
             item {
                 CompactFilterMenu(
                     label = "Type",
@@ -516,4 +558,11 @@ private fun formatHistoryDate(date: String): String {
         val formatter = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
         formatter.format(requireNotNull(parser.parse(date)))
     }.getOrDefault(date)
+}
+
+private fun formatMonthFilter(startDate: String): String {
+    return runCatching {
+        val month = YearMonth.parse(startDate.take(7), DateTimeFormatter.ofPattern("yyyy-MM"))
+        "${month.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())} ${month.year}"
+    }.getOrDefault(startDate.take(7))
 }
