@@ -36,7 +36,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Person
@@ -81,7 +80,6 @@ fun SettingsScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val localContext = androidx.compose.ui.platform.LocalContext.current
-    var isD1Expanded by remember { mutableStateOf(false) }
 
     val googleSignInLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
@@ -473,78 +471,26 @@ fun SettingsScreen(
             }
         }
 
-        // Background Tracking & Battery Optimization Guidance Card
+        // Battery optimization shortcut
         item {
-            val localContext = androidx.compose.ui.platform.LocalContext.current
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(SucculentPrimary.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Security,
-                                contentDescription = null,
-                                tint = SucculentPrimary,
-                                modifier = Modifier.size(24.dp)
-                            )
-                        }
-                        Column {
-                            Text(
-                                text = "Background Reliability & Battery",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = "Prevent OS background termination during drives",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-                    Text(
-                        text = "Aggressive power-saving policies on Samsung One UI and modern Android devices (such as Sleeping Apps or deep Doze) may terminate background GPS tracking during long drives. Setting Business Mileage Tracker's battery usage to 'Unrestricted' helps ensure uninterrupted tracking. Exemption does not guarantee tracking if device power is exhausted.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
-                    )
-
-                    OutlinedButton(
-                        onClick = {
-                            try {
-                                val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
-                                localContext.startActivity(intent)
-                            } catch (_: Exception) {
-                                try {
-                                    val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                        data = android.net.Uri.fromParts("package", localContext.packageName, null)
-                                    }
-                                    localContext.startActivity(intent)
-                                } catch (_: Exception) {}
+            OutlinedButton(
+                onClick = {
+                    try {
+                        val intent = android.content.Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                        localContext.startActivity(intent)
+                    } catch (_: Exception) {
+                        try {
+                            val intent = android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = android.net.Uri.fromParts("package", localContext.packageName, null)
                             }
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Text("Configure Battery Optimization")
+                            localContext.startActivity(intent)
+                        } catch (_: Exception) {}
                     }
-                }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text("Configure Battery Optimization")
             }
         }
 
@@ -661,11 +607,6 @@ fun SettingsScreen(
                                         )
                                     }
                                 }
-                                Text(
-                                    text = if (isSheetsCardExpanded) "Tap to collapse settings" else "Tap to configure Google Sheets",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                )
                             }
                         }
 
@@ -694,31 +635,6 @@ fun SettingsScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Text(
-                                        text = "Dedicated 16-Column Mileage Format",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.Bold,
-                                        color = SucculentPrimary
-                                    )
-                                    Text(
-                                        text = "Syncs: Trip ID, Date, Start/End Time, Addresses, Miles, Business Miles, Classification, Entity, Purpose, Rate, Deduction, Notes, Tracking Method, Last Updated.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                    )
-                                    Text(
-                                        text = "Duplicate-Proof: Matches Trip ID in Column A and updates existing records idempotently.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                    )
-                                }
-                            }
 
                             // Status Details
                             Row(
@@ -755,14 +671,13 @@ fun SettingsScreen(
                                 color = if (state.hasOAuthCredential) SucculentPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
+                                Column(
                                     modifier = Modifier.padding(14.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Icon(
                                             imageVector = if (state.hasOAuthCredential) Icons.Default.CheckCircle else Icons.Default.Security,
@@ -773,20 +688,17 @@ fun SettingsScreen(
                                         Spacer(modifier = Modifier.width(10.dp))
                                         Column {
                                             Text(
-                                                text = if (state.hasOAuthCredential) "Google Account Connected" else "Google OAuth 2.0 Authorization",
+                                                text = if (state.hasOAuthCredential) "Google Account" else "Connect Google Account",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.Bold
                                             )
-                                            val accountSubtitle = if (state.hasOAuthCredential) {
-                                                state.connectedAccountEmail ?: "Tokens encrypted in Android Keystore"
-                                            } else {
-                                                "Scope: sheets.googleapis.com (Keystore AES-GCM)"
+                                            state.connectedAccountEmail?.takeIf { it.isNotBlank() }?.let { email ->
+                                                Text(
+                                                    text = email,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = SlateNeutral
+                                                )
                                             }
-                                            Text(
-                                                text = accountSubtitle,
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = SlateNeutral
-                                            )
                                         }
                                     }
 
@@ -836,211 +748,22 @@ fun SettingsScreen(
                                 shape = RoundedCornerShape(12.dp)
                             )
 
-                            OutlinedTextField(
-                                value = state.sheetsWebhookUrl,
-                                onValueChange = { viewModel.setSheetsWebhookUrl(it) },
-                                label = { Text("Or Apps Script Webhook URL (HTTPS only)") },
-                                placeholder = { Text("https://script.google.com/macros/s/...") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Button(
-                                    onClick = { viewModel.syncSheetsNow() },
-                                    enabled = !state.isSyncing,
-                                    modifier = Modifier.weight(1f).height(48.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-                                ) {
-                                    if (state.isSyncing) {
-                                        CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text("Syncing...", fontWeight = FontWeight.Bold, color = Color.White)
-                                    } else {
-                                        Icon(Icons.Default.Sync, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text("Sync Sheets Now", fontWeight = FontWeight.Bold, color = Color.White)
-                                    }
-                                }
-
-                                if (state.isSheetsConnected) {
-                                    OutlinedButton(
-                                        onClick = { viewModel.disconnectSheets() },
-                                        modifier = Modifier.height(48.dp),
-                                        shape = RoundedCornerShape(12.dp)
-                                    ) {
-                                        Text("Disconnect", color = SpeedRed)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Cloudflare D1 Database & Google Sheets Sync (Expandable Table, Collapsed by Default)
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    // Clickable Header to Expand / Collapse Table
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable { isD1Expanded = !isD1Expanded },
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = SucculentPrimary.copy(alpha = 0.15f),
-                                modifier = Modifier.size(38.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.CloudSync,
-                                    contentDescription = null,
-                                    tint = SucculentPrimary,
-                                    modifier = Modifier.padding(8.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column {
-                                Text(
-                                    text = "Cloudflare D1 Database & Sync",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = if (isD1Expanded) "Tap to collapse credentials" else "Tap to expand credentials table",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                )
-                            }
-                        }
-
-                        val rotationAngle by animateFloatAsState(
-                            targetValue = if (isD1Expanded) 180f else 0f,
-                            animationSpec = tween(durationMillis = 400),
-                            label = "d1_expand_rotation"
-                        )
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (isD1Expanded) "Collapse" else "Expand",
-                            modifier = Modifier
-                                .size(28.dp)
-                                .rotate(rotationAngle),
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                        )
-                    }
-
-                    // Collapsible Table Content
-                    AnimatedVisibility(
-                        visible = isD1Expanded,
-                        enter = expandVertically(animationSpec = tween(400)) + fadeIn(animationSpec = tween(400)),
-                        exit = shrinkVertically(animationSpec = tween(400)) + fadeOut(animationSpec = tween(400))
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Security,
-                                        contentDescription = null,
-                                        tint = SucculentPrimary,
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Syncs mileage logs directly into Cloudflare D1 and Google Sheets.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                    )
-                                }
-                            }
-
-                            OutlinedTextField(
-                                value = state.cfEndpoint,
-                                onValueChange = { viewModel.setCfEndpoint(it) },
-                                label = { Text("API Endpoint URL") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            OutlinedTextField(
-                                value = state.cfClientId,
-                                onValueChange = { viewModel.setCfClientId(it) },
-                                label = { Text("CF-Access-Client-Id") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            OutlinedTextField(
-                                value = state.cfClientSecret,
-                                onValueChange = { viewModel.setCfClientSecret(it) },
-                                label = { Text("CF-Access-Client-Secret") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            OutlinedTextField(
-                                value = state.cfBearerToken,
-                                onValueChange = { viewModel.setCfBearerToken(it) },
-                                label = { Text("Bearer Token (Optional)") },
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
                             Button(
-                                onClick = { viewModel.triggerSyncNow() },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(50.dp),
+                                onClick = { viewModel.syncSheetsNow() },
+                                enabled = !state.isSyncing,
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
                                 shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = SucculentPrimary,
-                                    contentColor = Color.White
-                                ),
-                                elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp)
+                                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
                             ) {
-                                Icon(Icons.Default.CloudSync, contentDescription = null, tint = Color.White)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Trigger Cloud Sync Now", fontWeight = FontWeight.Bold, color = Color.White)
+                                if (state.isSyncing) {
+                                    CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Syncing...", fontWeight = FontWeight.Bold, color = Color.White)
+                                } else {
+                                    Icon(Icons.Default.Sync, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Sync Sheets", fontWeight = FontWeight.Bold, color = Color.White)
+                                }
                             }
                         }
                     }
