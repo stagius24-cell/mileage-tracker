@@ -145,7 +145,7 @@ class UserControlledDeletionTest {
                 timestamp = 1060L
             )
         )
-        database.tripLifecycleDao().upsertLifecycle(
+        database.tripLifecycleDao().insertOrUpdate(
             TripLifecycleEntity(
                 tripId = tripId,
                 state = "RUNNING",
@@ -153,10 +153,10 @@ class UserControlledDeletionTest {
                 reason = "AUTO_DRIVE_STARTED"
             )
         )
-        database.tripSequenceDao().upsertSequence(
+        database.tripSequenceDao().insertOrUpdate(
             TripSequenceEntity(
                 tripId = tripId,
-                lastSequenceNumber = 5
+                lastSequenceNumber = 5L
             )
         )
 
@@ -164,9 +164,9 @@ class UserControlledDeletionTest {
         assertNotNull(database.tripDao().getTripById(tripId))
         assertNotNull(database.activeTripDao().getActiveTripById(tripId))
         assertEquals(1, database.activeTripDao().getWaypointsForTrip(tripId).size)
-        assertEquals(1, database.gpsInboxDao().getPendingFixesCount(tripId))
+        assertEquals(1, database.gpsInboxDao().getPendingCount(tripId))
         assertNotNull(database.tripLifecycleDao().getLifecycle(tripId))
-        assertEquals(5, database.tripSequenceDao().getLastSequenceNumber(tripId))
+        assertEquals(5L, database.tripSequenceDao().getLastSequenceNumber(tripId))
 
         // Create export cache files
         val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
@@ -185,9 +185,9 @@ class UserControlledDeletionTest {
         assertEquals(0, database.tripDao().getAllTrips().first().size)
         assertNull(database.activeTripDao().getActiveTripById(tripId))
         assertEquals(0, database.activeTripDao().getWaypointsForTrip(tripId).size)
-        assertEquals(0, database.gpsInboxDao().getPendingFixesCount(tripId))
+        assertEquals(0, database.gpsInboxDao().getPendingCount(tripId))
         assertNull(database.tripLifecycleDao().getLifecycle(tripId))
-        assertEquals(0, database.tripSequenceDao().getLastSequenceNumber(tripId))
+        assertNull(database.tripSequenceDao().getLastSequenceNumber(tripId))
 
         // Verify export cache was purged
         assertFalse("Test PDF must be deleted", testPdf.exists())
