@@ -41,13 +41,13 @@
 | **P3-011** | Network Failure | NOT TESTED | - | - | Offline airplane mode check |
 | **P3-012** | Invalid Configuration | NOT TESTED | - | - | Pre-flight rejection of bad URL/ID |
 | **P3-013** | Permission Setup | **PASS** | 2026-11-06 | User Confirmation | Location ("Allow all the time" + precise), Physical Activity, Notifications granted; Samsung Battery Unrestricted. Clean 0.0 mi dashboard and smooth tab navigation. |
-| **P3-014** | Real Vehicle Trip | NOT TESTED | - | - | Controlled test drive |
-| **P3-015** | Screen-Off Tracking | NOT TESTED | - | - | Background continuous tracking with screen locked |
+| **P3-014** | Real Vehicle Trip | **PASS** | 2026-11-06 | User Confirmation | Controlled physical drive tracked accurately. Mileage, start/end timestamps, and addresses populated cleanly without jump artifacts. |
+| **P3-015** | Screen-Off Tracking | **PASS** | 2026-11-06 | User Confirmation | Background tracking operated continuously with the screen turned off/locked under Samsung battery whitelist. |
 | **P3-016** | Short Movement (<200m) | **PASS** | 2026-11-06 | User Confirmation | Stationary drift test passed. Zero false/phantom trips created while sitting still; dashboard remained at 0.0 mi. |
 | **P3-017** | Continuous Confirmation (>200m)| **PASS** | 2026-11-06 | User Confirmation | Continuous vehicle drive (>200m) confirmed and tracking activated reliably. |
 | **P3-018** | STILL_ENTER Behavior | **PASS** | 2026-11-06 | User Confirmation | Stopping at traffic lights / stop signs (`STILL_ENTER`) did not end or interrupt the active drive. |
-| **P3-019** | Four-Minute Exit Debounce | NOT TESTED | - | - | Resumed drive before 4m |
-| **P3-020** | Confirmed Trip End | NOT TESTED | - | - | Finalization after 4m park |
+| **P3-019** | Four-Minute Exit Debounce | **PASS** | 2026-11-06 | User Confirmation | 4-minute vehicle exit debounce verified on device. Foreground tracking sustained until park timeout. |
+| **P3-020** | Confirmed Trip End | **PASS** | 2026-11-06 | User Confirmation | Trip auto-finalized at 4-minute park mark. Notification dispatched, and single unreviewed trip appeared in History without duplicates. |
 | **P3-021** | Process Interruption | NOT TESTED | - | - | Process killed / reboot recovery |
 | **P3-022** | Backup Exclusion | NOT TESTED | - | - | `bmgr backupnow` inspection |
 | **P3-023** | Restore Behavior | NOT TESTED | - | - | Reconnect required on new device |
@@ -67,5 +67,5 @@
 ## 4. Release-Readiness Assessment
 
 - **Overall Status:** `TESTING IN PROGRESS`
-- **Gates Fulfilled:** 5 / 11 (P3-001 PASS, P3-013 PASS, P3-016 PASS, P3-017 PASS, P3-018 PASS; P3-002 FAIL logged)
-- **Recommendation:** Proceed with Session C vehicle exit debounce (P3-019, P3-020) and Session D trip details inspection (P3-014, P3-015).
+- **Gates Fulfilled:** 9 / 11 (P3-001, P3-013, P3-014, P3-015, P3-016, P3-017, P3-018, P3-019, P3-020 PASS; P3-002 FAIL logged)
+- **Recommendation:** Proceed with Session C/E review and classification (P3-005, P3-006, P3-024) and export/sync tests (P3-025, P3-008).
