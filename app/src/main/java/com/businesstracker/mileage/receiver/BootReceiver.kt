@@ -26,7 +26,7 @@ class BootReceiver : BroadcastReceiver() {
     @Inject lateinit var activeTripRepository: ActiveTripRepository
     @Inject lateinit var tripLifecycleDao: TripLifecycleDao
 
-    private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
@@ -93,11 +93,13 @@ class BootReceiver : BroadcastReceiver() {
         transitionManager: ActivityTransitionManager,
         prefs: TrackingPreferencesManager,
         activeTripRepo: ActiveTripRepository,
-        lifecycleDao: TripLifecycleDao
+        lifecycleDao: TripLifecycleDao,
+        scope: CoroutineScope? = null
     ) {
         this.activityTransitionManager = transitionManager
         this.preferencesManager = prefs
         this.activeTripRepository = activeTripRepo
         this.tripLifecycleDao = lifecycleDao
+        scope?.let { this.receiverScope = it }
     }
 }

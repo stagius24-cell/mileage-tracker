@@ -7,6 +7,7 @@ import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.GpsInboxDao
 import com.businesstracker.mileage.data.local.TripSequenceDao
 import com.businesstracker.mileage.data.local.entity.GpsInboxEntity
+import com.businesstracker.mileage.data.local.entity.TripSequenceEntity
 import com.businesstracker.mileage.domain.service.BootCountProvider
 import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
@@ -49,9 +50,14 @@ class GpsLocationQueue(
     initialSequence: Long = 0L,
     private val database: ExpenseTrackerDatabase? = null,
     private val bootCountProvider: BootCountProvider? = null,
+    private val inMemoryCapacity: Int = DEFAULT_IN_MEMORY_CAPACITY,
     private val onFixProcessed: ((GpsInboxProcessor.ProcessResult) -> Unit)? = null,
     private val onLocationProcessed: (suspend (Location) -> Unit)? = null
 ) {
+    companion object {
+        const val DEFAULT_IN_MEMORY_CAPACITY = 32
+    }
+
     private data class AdmittedBatch(
         val sequence: Long,
         val tripId: String,
@@ -59,7 +65,8 @@ class GpsLocationQueue(
     )
 
     private val signalChannel = Channel<Unit>(Channel.CONFLATED)
-    private val batchInsertionChannel = Channel<AdmittedBatch>(Channel.UNLIMITED)
+    private val batchInsertionChannel = Channel<AdmittedBatch>(inMemoryCapacity)
+    private val spilloverJobs = java.util.concurrent.ConcurrentHashMap.newKeySet<Job>()
     private val isStopping = AtomicBoolean(false)
     val admissionBarrier = GpsAdmissionBarrier(initialSequence = initialSequence)
     private var ingestionJob: Job? = null
@@ -76,29 +83,47 @@ class GpsLocationQueue(
     private fun startIngestion() {
         ingestionJob = scope.launch(dispatcher) {
             for (batch in batchInsertionChannel) {
-                withContext(NonCancellable) {
-                    try {
-                        if (database != null) {
-                            database.withTransaction {
-                                gpsInboxDao.insertFixes(batch.entities)
-                                if (batch.tripId.isNotEmpty()) {
-                                    tripSequenceDao?.advanceSequence(batch.tripId, batch.sequence)
-                                }
-                            }
-                        } else {
-                            gpsInboxDao.insertFixes(batch.entities)
-                            if (batch.tripId.isNotEmpty()) {
-                                tripSequenceDao?.advanceSequence(batch.tripId, batch.sequence)
-                            }
+                persistBatch(batch)
+            }
+        }
+    }
+
+    private suspend fun persistBatch(batch: AdmittedBatch) {
+        withContext(NonCancellable) {
+            try {
+                if (database != null) {
+                    database.withTransaction {
+                        gpsInboxDao.insertFixes(batch.entities)
+                        if (batch.tripId.isNotEmpty() && tripSequenceDao != null) {
+                            val lastSeq = tripSequenceDao.getLastSequenceNumber(batch.tripId) ?: 0L
+                            val newSeq = maxOf(lastSeq, batch.sequence)
+                            tripSequenceDao.insertOrUpdate(
+                                TripSequenceEntity(
+                                    tripId = batch.tripId,
+                                    lastSequenceNumber = newSeq
+                                )
+                            )
                         }
-                        signalChannel.trySend(Unit)
-                    } catch (e: Throwable) {
-                        Log.e("GpsLocationQueue", "Critical error inserting fixes into inbox: ${e.message}", e)
-                        processingError = e
-                    } finally {
-                        admissionBarrier.releaseSequence()
+                    }
+                } else {
+                    gpsInboxDao.insertFixes(batch.entities)
+                    if (batch.tripId.isNotEmpty() && tripSequenceDao != null) {
+                        val lastSeq = tripSequenceDao.getLastSequenceNumber(batch.tripId) ?: 0L
+                        val newSeq = maxOf(lastSeq, batch.sequence)
+                        tripSequenceDao.insertOrUpdate(
+                            TripSequenceEntity(
+                                tripId = batch.tripId,
+                                lastSequenceNumber = newSeq
+                            )
+                        )
                     }
                 }
+                signalChannel.trySend(Unit)
+            } catch (e: Throwable) {
+                Log.e("GpsLocationQueue", "Critical error inserting fixes into inbox: ${e.message}", e)
+                processingError = e
+            } finally {
+                admissionBarrier.releaseSequence()
             }
         }
     }
@@ -233,9 +258,19 @@ class GpsLocationQueue(
                 )
             }
 
-            val sendResult = batchInsertionChannel.trySend(AdmittedBatch(sequence, currentTripId, entities))
+            val batch = AdmittedBatch(sequence, currentTripId, entities)
+            val sendResult = batchInsertionChannel.trySend(batch)
             if (sendResult.isFailure) {
-                admissionBarrier.releaseSequence()
+                // Bounded in-memory capacity reached.
+                // Employ durable Room-backed spillover: persist asynchronously without blocking caller thread.
+                val spilloverJob = scope.launch(dispatcher) {
+                    try {
+                        persistBatch(batch)
+                    } finally {
+                        coroutineContext[Job]?.let { spilloverJobs.remove(it) }
+                    }
+                }
+                spilloverJobs.add(spilloverJob)
             }
         } catch (e: Throwable) {
             admissionBarrier.releaseSequence()
@@ -249,7 +284,7 @@ class GpsLocationQueue(
         if (currentTripId.isEmpty()) return
 
         val sequence = admissionBarrier.acquireSequenceOrNull() ?: return
-        try {
+        val batch = try {
             val sorted = locations.sortedWith(
                 compareBy<Location> { loc ->
                     if (loc.elapsedRealtimeNanos != 0L) loc.elapsedRealtimeNanos else loc.time * 1_000_000L
@@ -276,25 +311,12 @@ class GpsLocationQueue(
                     bootCount = currentBoot
                 )
             }
-            withContext(NonCancellable) {
-                if (database != null) {
-                    database.withTransaction {
-                        gpsInboxDao.insertFixes(entities)
-                        if (currentTripId.isNotEmpty()) {
-                            tripSequenceDao?.advanceSequence(currentTripId, sequence)
-                        }
-                    }
-                } else {
-                    gpsInboxDao.insertFixes(entities)
-                    if (currentTripId.isNotEmpty()) {
-                        tripSequenceDao?.advanceSequence(currentTripId, sequence)
-                    }
-                }
-                signalChannel.trySend(Unit)
-            }
-        } finally {
+            AdmittedBatch(sequence, currentTripId, entities)
+        } catch (e: Throwable) {
             admissionBarrier.releaseSequence()
+            throw e
         }
+        persistBatch(batch)
     }
 
     /**
@@ -337,7 +359,20 @@ class GpsLocationQueue(
             Log.w("GpsLocationQueue", "Interrupted awaiting ingestion job: ${e.message}")
         }
 
-        // 3. Wake consumer to drain
+        // 3. Await all in-flight spillover persist jobs
+        while (spilloverJobs.isNotEmpty()) {
+            val jobs = spilloverJobs.toList()
+            jobs.forEach {
+                try {
+                    it.join()
+                } catch (e: Exception) {
+                    Log.w("GpsLocationQueue", "Interrupted awaiting spillover job: ${e.message}")
+                }
+            }
+            spilloverJobs.removeAll(jobs.toSet())
+        }
+
+        // 4. Wake consumer to drain
         signalChannel.trySend(Unit)
 
         try {
@@ -350,7 +385,7 @@ class GpsLocationQueue(
             throw IllegalStateException("Waypoint processing failed during tracking: ${err.message}", err)
         }
 
-        // 4. Verify exact pending count is 0
+        // 5. Verify exact pending count is 0
         val currentTripId = tripIdProvider()
         if (currentTripId.isNotEmpty()) {
             val pendingCount = gpsInboxDao.getPendingCount(currentTripId)
@@ -369,6 +404,8 @@ class GpsLocationQueue(
         admissionBarrier.closeAndWait()
         batchInsertionChannel.close()
         ingestionJob?.cancel()
+        spilloverJobs.forEach { it.cancel() }
+        spilloverJobs.clear()
         consumerJob?.cancel()
     }
 

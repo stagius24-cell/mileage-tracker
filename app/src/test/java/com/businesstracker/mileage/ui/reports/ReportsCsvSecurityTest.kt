@@ -90,13 +90,61 @@ class ReportsCsvSecurityTest {
         }
         val viewModel = ReportsExportViewModel(dummyRepo, CalculateMileageRateUseCase(), context)
 
-        // Verifies prefixes: =, +, -, @, \t, \r
+        // Verifies prefixes: =, +, -, @, \t, \r, |, %
         assertEquals("'=SUM(A1:A10)", viewModel.escapeCsv("=SUM(A1:A10)"))
         assertEquals("'+123456", viewModel.escapeCsv("+123456"))
         assertEquals("'-cmd|' /C calc'!A0", viewModel.escapeCsv("-cmd|' /C calc'!A0"))
         assertEquals("'@SUM(1,2)", viewModel.escapeCsv("@SUM(1,2)"))
         assertEquals("'\tTabSeparated", viewModel.escapeCsv("\tTabSeparated"))
         assertEquals("'\rReturnSeparated", viewModel.escapeCsv("\rReturnSeparated"))
+        assertEquals("'\nNewlineSeparated", viewModel.escapeCsv("\nNewlineSeparated"))
+        assertEquals("'|pipeTrigger", viewModel.escapeCsv("|pipeTrigger"))
+        assertEquals("'%percentTrigger", viewModel.escapeCsv("%percentTrigger"))
+    }
+
+    @Test
+    fun escapeCsv_neutralizesLeadingWhitespaceAndTabsAndNewlinesWithFormulaTriggers() {
+        val dummyRepo = object : TripRepository {
+            override fun getAllTrips() = flowOf(emptyList<TripEntity>())
+            override fun getUnclassifiedTrips() = flowOf(emptyList<TripEntity>())
+            override fun getUnclassifiedTripsCount() = flowOf(0)
+            override fun getTripsByDateRange(s: String, e: String) = flowOf(emptyList<TripEntity>())
+            override fun getTripsByBusinessEntity(entity: String) = flowOf(emptyList<TripEntity>())
+            override fun getBusinessEntitySummaries() = flowOf(emptyList<com.businesstracker.mileage.data.local.model.BusinessEntitySummary>())
+            override fun getBusinessEntitySummariesForDateRange(s: String, e: String) = flowOf(emptyList<com.businesstracker.mileage.data.local.model.BusinessEntitySummary>())
+            override fun getTripCountByClassification() = flowOf(emptyList<com.businesstracker.mileage.data.local.model.ClassificationCount>())
+            override suspend fun getTripById(id: String) = null
+            override fun observeTripById(id: String) = flowOf(null)
+            override suspend fun insertTrip(trip: TripEntity) {}
+            override suspend fun updateTrip(trip: TripEntity) {}
+            override suspend fun deleteTrip(id: String) {}
+            override suspend fun classifyTrip(id: String, c: String, b: String, p: String, n: String?) {}
+            override suspend fun updateTripDetails(id: String, c: String, b: String, p: String, n: String?) {}
+            override fun getTripsBySyncStatus(s: String) = flowOf(emptyList<TripEntity>())
+            override fun getTripsByClassification(c: String) = flowOf(emptyList<TripEntity>())
+            override suspend fun getPendingSyncTrips() = emptyList<TripEntity>()
+            override suspend fun markSynced(id: String, t: Long) {}
+        }
+        val viewModel = ReportsExportViewModel(dummyRepo, CalculateMileageRateUseCase(), context)
+
+        // Leading spaces followed by formula triggers
+        assertEquals("'   =SUM(1,2)", viewModel.escapeCsv("   =SUM(1,2)"))
+        assertEquals("'  +4412345", viewModel.escapeCsv("  +4412345"))
+        assertEquals("' -cmd|' /C calc'!A0", viewModel.escapeCsv(" -cmd|' /C calc'!A0"))
+        assertEquals("'    @dangerous_macro", viewModel.escapeCsv("    @dangerous_macro"))
+        assertEquals("'  |pipeTrigger", viewModel.escapeCsv("  |pipeTrigger"))
+        assertEquals("'  %percentTrigger", viewModel.escapeCsv("  %percentTrigger"))
+
+        // Leading tabs and carriage returns / newlines before formula
+        assertEquals("'\t=cmd", viewModel.escapeCsv("\t=cmd"))
+        assertEquals("'\r+2+5", viewModel.escapeCsv("\r+2+5"))
+        assertEquals("'\n-10", viewModel.escapeCsv("\n-10"))
+        assertEquals("' \t  =SUM(A1:A5)", viewModel.escapeCsv(" \t  =SUM(A1:A5)"))
+
+        // Neutral whitespace without triggers
+        assertEquals("   ", viewModel.escapeCsv("   "))
+        assertEquals("", viewModel.escapeCsv(""))
+        assertEquals("Just regular notes", viewModel.escapeCsv("Just regular notes"))
     }
 
     @Test
@@ -136,6 +184,7 @@ class ReportsCsvSecurityTest {
     fun exportToCsv_withMaliciousPayload_escapesSafelyAndPreservesOriginalData() = runTest(testDispatcher) {
         val maliciousTrip = createDummyTrip(
             id = "malicious-1",
+            startAddress = "   =SUM(1,2)",
             purpose = "=cmd|' /C calc'!A0",
             notes = "@dangerous_macro"
         )
@@ -176,10 +225,12 @@ class ReportsCsvSecurityTest {
 
         val content = csvFile!!.readText()
         // Verifies the malicious formulas were safely prepended with '
+        assertTrue("Formula with leading spaces must be prepended with single quote", content.contains("\"'   =SUM(1,2)\""))
         assertTrue("Formula must be prepended with single quote", content.contains("\"'=cmd|' /C calc'!A0\""))
         assertTrue("Macro must be prepended with single quote", content.contains("\"'@dangerous_macro\""))
 
         // Original database entity must remain unmutated
+        assertEquals("   =SUM(1,2)", maliciousTrip.startAddress)
         assertEquals("=cmd|' /C calc'!A0", maliciousTrip.purpose)
         assertEquals("@dangerous_macro", maliciousTrip.notes)
     }

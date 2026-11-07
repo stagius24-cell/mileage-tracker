@@ -5,7 +5,9 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.businesstracker.mileage.data.local.TripLifecycleDao
 import com.businesstracker.mileage.data.local.entity.TripEntity
+import com.businesstracker.mileage.data.local.entity.TripLifecycleState
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.DashboardSummary
 import com.businesstracker.mileage.domain.model.TimeFilter
@@ -53,7 +55,8 @@ class DashboardViewModel @Inject constructor(
     private val rateUseCase: CalculateMileageRateUseCase,
     private val summaryUseCase: GetDashboardSummaryUseCase,
     @ApplicationContext private val appContext: Context,
-    private val activeTripRepository: ActiveTripRepository? = null
+    private val activeTripRepository: ActiveTripRepository? = null,
+    private val tripLifecycleDao: TripLifecycleDao? = null
 ) : ViewModel() {
 
     private val now = LocalDate.now()
@@ -75,14 +78,65 @@ class DashboardViewModel @Inject constructor(
             if (liveState.isTracking) {
                 liveState
             } else if (activeTrip != null) {
-                TrackingServiceState(
-                    isTracking = true,
-                    tripId = activeTrip.id,
-                    distanceMeters = activeTrip.totalDistanceMeters,
-                    distanceMiles = activeTrip.totalDistanceMeters * 0.000621371,
-                    isPaused = activeTrip.isPaused,
-                    durationMillis = maxOf(0L, System.currentTimeMillis() - activeTrip.startTime)
-                )
+                val lifecycleStateStr = tripLifecycleDao?.getState(activeTrip.id)
+                val lifecycle = TripLifecycleState.fromString(lifecycleStateStr)
+                val distanceM = activeTrip.totalDistanceMeters
+                val distanceMi = distanceM * 0.000621371
+                val duration = maxOf(0L, (activeTrip.lastTimestamp.takeIf { it > 0 } ?: System.currentTimeMillis()) - activeTrip.startTime)
+
+                when (lifecycle) {
+                    TripLifecycleState.RECOVERY_REQUIRED -> {
+                        TrackingServiceState(
+                            isTracking = false,
+                            isPaused = false,
+                            isRecoveryRequired = true,
+                            tripId = activeTrip.id,
+                            distanceMeters = distanceM,
+                            distanceMiles = distanceMi,
+                            durationMillis = duration,
+                            statusMessage = "Drive Interrupted: Recovery Required"
+                        )
+                    }
+                    TripLifecycleState.DRAINING,
+                    TripLifecycleState.READY_TO_FINALIZE -> {
+                        TrackingServiceState(
+                            isTracking = false,
+                            isPaused = false,
+                            tripId = activeTrip.id,
+                            distanceMeters = distanceM,
+                            distanceMiles = distanceMi,
+                            durationMillis = duration,
+                            statusMessage = "Finalizing Trip..."
+                        )
+                    }
+                    TripLifecycleState.FINALIZED,
+                    TripLifecycleState.DISCARDED -> {
+                        liveState.copy(isTracking = false)
+                    }
+                    else -> {
+                        if (activeTrip.isPaused) {
+                            TrackingServiceState(
+                                isTracking = false,
+                                isPaused = true,
+                                tripId = activeTrip.id,
+                                distanceMeters = distanceM,
+                                distanceMiles = distanceMi,
+                                durationMillis = duration,
+                                statusMessage = "Trip Paused"
+                            )
+                        } else {
+                            TrackingServiceState(
+                                isTracking = false,
+                                isRecoveryRequired = true,
+                                tripId = activeTrip.id,
+                                distanceMeters = distanceM,
+                                distanceMiles = distanceMi,
+                                durationMillis = duration,
+                                statusMessage = "Drive Interrupted: Recovery Required"
+                            )
+                        }
+                    }
+                }
             } else {
                 liveState
             }

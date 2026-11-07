@@ -146,4 +146,48 @@ class GpsLocationQueueStressTest {
         val count = database.gpsInboxDao().getPendingCount(tripId)
         assertEquals(2, count)
     }
+
+    @Test(timeout = 15000)
+    fun boundedCapacity_underSustainedSlowDatabase_spillsOverDurablyWithZeroDrops() = runBlocking {
+        val tripId = "bounded-spillover-trip"
+        val processedFixes = Collections.synchronizedList(mutableListOf<Long>())
+
+        // Small in-memory channel capacity of 3 batches to force spillover quickly
+        val queue = GpsLocationQueue(
+            scope = queueScope,
+            dispatcher = Dispatchers.Default,
+            gpsInboxDao = database.gpsInboxDao(),
+            tripIdProvider = { tripId },
+            tripSequenceDao = database.tripSequenceDao(),
+            batchFetchLimit = 5,
+            inMemoryCapacity = 3,
+            database = database
+        ) { loc ->
+            // Simulate slow database processing
+            delay(1)
+            processedFixes.add(loc.time)
+        }
+
+        val totalBatches = 30
+        val fixesPerBatch = 3
+        // Enqueue 30 batches without blocking the caller thread
+        for (i in 1..totalBatches) {
+            val batch = (1..fixesPerBatch).map { j ->
+                val time = 10_000L * i + j
+                createLocation(37.1 + i * 0.001, -122.1 + j * 0.001, time, time * 1_000_000L)
+            }
+            queue.enqueueBatch(batch)
+        }
+
+        // drainAndClose waits for both in-memory and spillover jobs to persist and be processed
+        queue.drainAndClose()
+
+        val expectedTotal = totalBatches * fixesPerBatch
+        assertEquals("All $expectedTotal fixes must be durably admitted and processed despite bounded buffer", expectedTotal, processedFixes.size)
+        assertEquals(0, database.gpsInboxDao().getPendingCount(tripId))
+
+        // Verify sequence numbers advanced monotonically
+        val finalSeq = database.tripSequenceDao().getLastSequenceNumber(tripId) ?: 0L
+        assertTrue("Sequence numbers must advance monotonically through spillover", finalSeq >= totalBatches.toLong())
+    }
 }

@@ -6,6 +6,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.entity.ActiveTripEntity
 import com.businesstracker.mileage.data.local.entity.TripEntity
+import com.businesstracker.mileage.data.local.entity.TripLifecycleEntity
+import com.businesstracker.mileage.data.local.entity.TripLifecycleState
 import com.businesstracker.mileage.data.repository.ActiveTripRepositoryImpl
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.repository.TripRepository
@@ -81,8 +83,8 @@ class DashboardViewModelStateTest {
     }
 
     @Test
-    fun dashboard_whenServiceRecreatedWithActiveTripInDb_showsTrackingActive() = runTest(testDispatcher) {
-        val tripId = "db-active-trip"
+    fun dashboard_whenTripMarkedRecoveryRequired_showsInterruptedWithoutActivelyTracking() = runTest(testDispatcher) {
+        val tripId = "db-interrupted-trip"
         database.activeTripDao().insertActiveTrip(
             ActiveTripEntity(
                 id = tripId,
@@ -97,8 +99,14 @@ class DashboardViewModelStateTest {
                 isPaused = false
             )
         )
+        database.tripLifecycleDao().insertOrUpdate(
+            TripLifecycleEntity(
+                tripId = tripId,
+                state = TripLifecycleState.RECOVERY_REQUIRED.value
+            )
+        )
 
-        // In-memory serviceState is stopped (simulating fresh process startup after kill)
+        // In-memory serviceState is stopped
         assertFalse(LocationTrackingService.serviceState.value.isTracking)
 
         val viewModel = DashboardViewModel(
@@ -106,15 +114,52 @@ class DashboardViewModelStateTest {
             rateUseCase = CalculateMileageRateUseCase(),
             summaryUseCase = GetDashboardSummaryUseCase(),
             appContext = context,
-            activeTripRepository = activeTripRepository
+            activeTripRepository = activeTripRepository,
+            tripLifecycleDao = database.tripLifecycleDao()
         )
         advanceUntilIdle()
 
         val state = viewModel.serviceState.value
-        assertTrue("Dashboard must reflect active trip from DB even if service in-memory state is stopped", state.isTracking)
+        assertFalse("Must NOT be displayed as actively tracking", state.isTracking)
+        assertTrue("Interrupted state must be marked recovery required", state.isRecoveryRequired)
         assertEquals(tripId, state.tripId)
         assertEquals(1.0, state.distanceMiles, 0.01)
         assertFalse(state.isPaused)
+    }
+
+    @Test
+    fun dashboard_whenTripPaused_preservesPausedStatus() = runTest(testDispatcher) {
+        val tripId = "db-paused-trip"
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = System.currentTimeMillis() - 60000L,
+                startLatitude = 37.77,
+                startLongitude = -122.41,
+                lastLatitude = 37.78,
+                lastLongitude = -122.42,
+                lastTimestamp = System.currentTimeMillis(),
+                totalDistanceMeters = 3218.688, // 2.00 miles
+                trackingMethod = "AUTO_DETECTED",
+                isPaused = true
+            )
+        )
+
+        val viewModel = DashboardViewModel(
+            tripRepository = fakeTripRepo,
+            rateUseCase = CalculateMileageRateUseCase(),
+            summaryUseCase = GetDashboardSummaryUseCase(),
+            appContext = context,
+            activeTripRepository = activeTripRepository,
+            tripLifecycleDao = database.tripLifecycleDao()
+        )
+        advanceUntilIdle()
+
+        val state = viewModel.serviceState.value
+        assertFalse(state.isTracking)
+        assertTrue(state.isPaused)
+        assertEquals(tripId, state.tripId)
+        assertEquals(2.0, state.distanceMiles, 0.01)
     }
 
     @Test
@@ -133,17 +178,25 @@ class DashboardViewModelStateTest {
                 trackingMethod = "AUTO_DETECTED"
             )
         )
+        database.tripLifecycleDao().insertOrUpdate(
+            TripLifecycleEntity(
+                tripId = tripId,
+                state = TripLifecycleState.DRAINING.value
+            )
+        )
 
         val viewModel = DashboardViewModel(
             tripRepository = fakeTripRepo,
             rateUseCase = CalculateMileageRateUseCase(),
             summaryUseCase = GetDashboardSummaryUseCase(),
             appContext = context,
-            activeTripRepository = activeTripRepository
+            activeTripRepository = activeTripRepository,
+            tripLifecycleDao = database.tripLifecycleDao()
         )
         advanceUntilIdle()
 
-        assertTrue(viewModel.serviceState.value.isTracking)
+        assertFalse(viewModel.serviceState.value.isTracking)
+        assertEquals("Finalizing Trip...", viewModel.serviceState.value.statusMessage)
 
         // Clear active trip from DB (simulating finalization)
         database.activeTripDao().clearActiveTrip()

@@ -181,7 +181,10 @@ class ReportsExportViewModel @Inject constructor(
             val mTotalMiles = mTrips.sumOf { it.totalDistanceMiles }
             val mBMiles = mBusiness.sumOf { it.businessMiles }
             val logged = mBusiness.sumOf { it.calculatedDeduction }
-            val unreviewedPotential = mUnreviewed.sumOf { it.totalDistanceMiles * it.applicableRate }
+            val unreviewedPotential = mUnreviewed.sumOf { trip ->
+                val rate = if (trip.applicableRate > 0.0) trip.applicableRate else rateUseCase.getApplicableRate(trip.date)
+                trip.totalDistanceMiles * rate
+            }
             val potential = logged + unreviewedPotential
 
             val percent = if (potential > 0.0) {
@@ -296,22 +299,22 @@ class ReportsExportViewModel @Inject constructor(
                     val startStr = if (trip.startTime > 0) timeFmt.format(java.util.Date(trip.startTime)) else ""
                     val endStr = if (trip.endTime > 0) timeFmt.format(java.util.Date(trip.endTime)) else ""
 
-                    writer.append("\"${trip.id}\",")
-                    writer.append("\"${trip.date}\",")
-                    writer.append("\"$startStr\",")
-                    writer.append("\"$endStr\",")
+                    writer.append("\"${escapeCsv(trip.id)}\",")
+                    writer.append("\"${escapeCsv(trip.date)}\",")
+                    writer.append("\"${escapeCsv(startStr)}\",")
+                    writer.append("\"${escapeCsv(endStr)}\",")
                     writer.append("\"${escapeCsv(trip.startAddress.orEmpty())}\",")
                     writer.append("\"${escapeCsv(trip.endAddress.orEmpty())}\",")
                     writer.append("${trip.totalDistanceMiles},")
                     writer.append("${trip.businessMiles},")
-                    writer.append("\"${trip.classification}\",")
-                    writer.append("\"${trip.businessEntity}\",")
+                    writer.append("\"${escapeCsv(trip.classification)}\",")
+                    writer.append("\"${escapeCsv(trip.businessEntity)}\",")
                     writer.append("\"${escapeCsv(trip.purpose)}\",")
                     writer.append("${trip.applicableRate},")
                     writer.append("${trip.calculatedDeduction},")
                     writer.append("\"${escapeCsv(trip.notes.orEmpty())}\",")
-                    writer.append("\"${trip.trackingMethod}\",")
-                    writer.append("\"${trip.syncStatus}\"\n")
+                    writer.append("\"${escapeCsv(trip.trackingMethod)}\",")
+                    writer.append("\"${escapeCsv(trip.syncStatus)}\"\n")
                 }
             }
 
@@ -381,15 +384,20 @@ class ReportsExportViewModel @Inject constructor(
 
     internal fun escapeCsv(value: String): String {
         // Protect against spreadsheet formula injection (CSV Injection / CWE-1236)
-        // Values starting with '=', '+', '-', '@', '\t', or '\r' must be prefixed with a single quote (')
-        val sanitized = if (
-            value.startsWith('=') ||
-            value.startsWith('+') ||
-            value.startsWith('-') ||
-            value.startsWith('@') ||
-            value.startsWith('\t') ||
-            value.startsWith('\r')
-        ) {
+        // Values starting with formula triggers ('=', '+', '-', '@', '|', '%')
+        // even after leading whitespace/control characters (' ', '\t', '\r', '\n')
+        // or starting directly with whitespace/control characters must be prefixed with a single quote (')
+        val trimmed = value.trimStart(' ', '\t', '\r', '\n')
+        val hasFormulaTrigger = trimmed.isNotEmpty() && (
+            trimmed.startsWith('=') ||
+            trimmed.startsWith('+') ||
+            trimmed.startsWith('-') ||
+            trimmed.startsWith('@') ||
+            trimmed.startsWith('|') ||
+            trimmed.startsWith('%')
+        )
+        val hasControlPrefix = value.startsWith('\t') || value.startsWith('\r') || value.startsWith('\n')
+        val sanitized = if (hasFormulaTrigger || hasControlPrefix) {
             "'$value"
         } else {
             value

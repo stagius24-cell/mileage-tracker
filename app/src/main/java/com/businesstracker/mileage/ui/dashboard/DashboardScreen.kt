@@ -592,14 +592,24 @@ private fun DriveTrackingTable(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = if (serviceState.isTracking) "Active Drive Tracking" else "Drive Tracker",
+                            text = if (serviceState.isTracking) {
+                                "Active Drive Tracking"
+                            } else if (serviceState.isRecoveryRequired) {
+                                "Drive Interrupted"
+                            } else {
+                                "Drive Tracker"
+                            },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
                             text = if (serviceState.isTracking) {
                                 if (serviceState.isPaused) "Tracking Paused" else "Recording in Tesla Model Y"
-                            } else "Tesla Model Y • Ready",
+                            } else if (serviceState.isRecoveryRequired) {
+                                serviceState.statusMessage ?: "Recovery Required • Preserved"
+                            } else {
+                                "Tesla Model Y • Ready"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         )

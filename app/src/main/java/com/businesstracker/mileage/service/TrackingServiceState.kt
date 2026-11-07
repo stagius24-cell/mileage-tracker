@@ -11,5 +11,7 @@ data class TrackingServiceState(
     val durationMillis: Long = 0L,
     val currentSpeedMph: Double = 0.0,
     val lastWaypoint: Waypoint? = null,
-    val waypointCount: Int = 0
+    val waypointCount: Int = 0,
+    val isRecoveryRequired: Boolean = false,
+    val statusMessage: String? = null
 )

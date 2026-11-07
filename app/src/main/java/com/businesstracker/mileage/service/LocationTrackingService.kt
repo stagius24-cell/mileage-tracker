@@ -161,8 +161,17 @@ class LocationTrackingService : Service() {
         return START_STICKY // System will recreate service if killed, enabling interruption recovery
     }
 
+    @VisibleForTesting
+    internal var locationUpdatesRegistrar: (suspend () -> Boolean)? = null
+
+    @VisibleForTesting
+    internal fun attachContextForTesting(context: Context) {
+        attachBaseContext(context)
+    }
+
     /**
      * Safe process recreation recovery when the OS restarts the service with a null intent.
+     * Enters foreground promptly on main thread before lengthy operations to satisfy Android 14+ requirements.
      * Inspects persistent active trip and recovers existing trip state without generating new IDs.
      */
     private fun recoverActiveTripSession() {
@@ -171,42 +180,64 @@ class LocationTrackingService : Service() {
             return
         }
 
+        // Check location permissions safely without crashing
+        val hasFine = ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarse = ContextCompat.checkSelfPermission(
+            this,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
+
+        if (!hasFine && !hasCoarse) {
+            Log.w("LocationTrackingService", "Location permissions missing during process recreation; preserving active trip state.")
+            val tripId = preferencesManager.getActiveTripId()
+            if (!tripId.isNullOrBlank()) {
+                serviceScope.launch(ioDispatcher) {
+                    try {
+                        tripLifecycleDao.updateState(
+                            tripId,
+                            TripLifecycleState.RECOVERY_REQUIRED.value
+                        )
+                    } catch (_: Exception) {}
+                }
+                _serviceState.value = TrackingServiceState(
+                    isTracking = false,
+                    isRecoveryRequired = true,
+                    tripId = tripId,
+                    statusMessage = "Drive Interrupted: Permission Required"
+                )
+            }
+            isStartingOrRunning.set(false)
+            stopSelf()
+            return
+        }
+
+        // Satisfy Android foreground service timing requirements immediately on main thread
+        val initialNotification = notificationHelper.buildTrackingNotification(
+            distanceMiles = 0.0,
+            durationMillis = 0L,
+            isPaused = false
+        )
+        val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        } else {
+            0
+        }
+        ServiceCompat.startForeground(
+            this,
+            NotificationHelper.NOTIFICATION_TRACKING_ID,
+            initialNotification,
+            foregroundType
+        )
+
         serviceScope.launch(ioDispatcher) {
             try {
                 val activeTrip = activeTripRepository.getActiveTrip()
                 if (activeTrip == null) {
                     Log.d("LocationTrackingService", "Null intent received but no active trip found; stopping service.")
                     isStartingOrRunning.set(false)
-                    stopForeground(STOP_FOREGROUND_REMOVE)
-                    stopSelf()
-                    return@launch
-                }
-
-                // Check location permissions safely without crashing
-                val hasFine = ContextCompat.checkSelfPermission(
-                    this@LocationTrackingService,
-                    android.Manifest.permission.ACCESS_FINE_LOCATION
-                ) == PackageManager.PERMISSION_GRANTED
-                val hasCoarse = ContextCompat.checkSelfPermission(
-                    this@LocationTrackingService,
-                    android.Manifest.permission.ACCESS_COARSE_LOCATION
-                ) == PackageManager.PERMISSION_GRANTED
-
-                if (!hasFine && !hasCoarse) {
-                    Log.w("LocationTrackingService", "Location permissions missing during process recreation; preserving active trip state.")
-                    try {
-                        tripLifecycleDao.updateState(
-                            activeTrip.id,
-                            TripLifecycleState.RECOVERY_REQUIRED.value
-                        )
-                    } catch (_: Exception) {}
-                    isStartingOrRunning.set(false)
-                    _serviceState.value = TrackingServiceState(
-                        isTracking = false,
-                        tripId = activeTrip.id,
-                        distanceMiles = activeTrip.totalDistanceMeters * 0.000621371,
-                        isPaused = activeTrip.isPaused
-                    )
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                     return@launch
@@ -222,22 +253,11 @@ class LocationTrackingService : Service() {
 
                 preferencesManager.setActiveTripId(currentTripId)
 
-                // Restore persistent ongoing notification
-                val initialNotification = notificationHelper.buildTrackingNotification(
+                // Update notification with recovered metrics
+                notificationHelper.updateTrackingNotification(
                     distanceMiles = totalDistanceMeters * 0.000621371,
                     durationMillis = maxOf(0L, System.currentTimeMillis() - tripStartTime),
                     isPaused = isPaused
-                )
-                val foregroundType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-                } else {
-                    0
-                }
-                ServiceCompat.startForeground(
-                    this@LocationTrackingService,
-                    NotificationHelper.NOTIFICATION_TRACKING_ID,
-                    initialNotification,
-                    foregroundType
                 )
 
                 // Recover waypoints and displacement confirmation state
@@ -310,6 +330,21 @@ class LocationTrackingService : Service() {
                     Log.w("LocationTrackingService", "Error draining inbox fixes during recovery: ${e.message}")
                 }
 
+                if (isPaused) {
+                    _serviceState.value = TrackingServiceState(
+                        isTracking = true,
+                        isPaused = true,
+                        tripId = currentTripId,
+                        distanceMeters = totalDistanceMeters,
+                        distanceMiles = totalDistanceMeters * 0.000621371,
+                        durationMillis = maxOf(0L, System.currentTimeMillis() - tripStartTime),
+                        currentSpeedMph = 0.0,
+                        lastWaypoint = lastAcceptedWaypoint,
+                        waypointCount = waypointCount
+                    )
+                    return@launch
+                }
+
                 // Register location updates with FusedLocationProviderClient on dedicated HandlerThread
                 val updatesRegistered = startLocationUpdates()
                 if (isStopping.get()) {
@@ -318,6 +353,18 @@ class LocationTrackingService : Service() {
 
                 if (!updatesRegistered) {
                     Log.e("LocationTrackingService", "Location updates could not be started during recovery; preserving active trip state.")
+                    try {
+                        tripLifecycleDao.updateState(currentTripId, TripLifecycleState.RECOVERY_REQUIRED.value)
+                    } catch (_: Exception) {}
+                    _serviceState.value = TrackingServiceState(
+                        isTracking = false,
+                        isRecoveryRequired = true,
+                        tripId = currentTripId,
+                        distanceMeters = totalDistanceMeters,
+                        distanceMiles = totalDistanceMeters * 0.000621371,
+                        durationMillis = maxOf(0L, System.currentTimeMillis() - tripStartTime),
+                        statusMessage = "Drive Interrupted: Registration Failed"
+                    )
                     cleanupFailedStartup()
                     return@launch
                 }
@@ -326,6 +373,11 @@ class LocationTrackingService : Service() {
                 updateServiceState()
             } catch (e: Exception) {
                 Log.e("LocationTrackingService", "Failed during process recreation recovery", e)
+                try {
+                    if (currentTripId.isNotEmpty()) {
+                        tripLifecycleDao.updateState(currentTripId, TripLifecycleState.RECOVERY_REQUIRED.value)
+                    }
+                } catch (_: Exception) {}
                 cleanupFailedStartup()
             }
         }
@@ -490,7 +542,6 @@ class LocationTrackingService : Service() {
             fusedLocationClient.removeLocationUpdates(locationCallback)
         } catch (_: Exception) {}
         stopGpsHandlerThread()
-        stopGpsHandlerThread()
         if (wakeLock?.isHeld == true) {
             try { wakeLock?.release() } catch (_: Exception) {}
         }
@@ -501,7 +552,9 @@ class LocationTrackingService : Service() {
         anchorWaypoint = null
         isDisplacementConfirmed = false
         currentSpeedMph = 0.0
-        _serviceState.value = TrackingServiceState(isTracking = false)
+        if (!_serviceState.value.isRecoveryRequired) {
+            _serviceState.value = TrackingServiceState(isTracking = false)
+        }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -519,6 +572,7 @@ class LocationTrackingService : Service() {
 
     @SuppressLint("MissingPermission")
     private suspend fun startLocationUpdates(): Boolean {
+        locationUpdatesRegistrar?.let { return it.invoke() }
         val locationRequest = LocationRequest.Builder(
             Priority.PRIORITY_HIGH_ACCURACY,
             LOCATION_INTERVAL_MILLIS
@@ -783,12 +837,30 @@ class LocationTrackingService : Service() {
         activeTripRepo: ActiveTripRepository,
         helper: NotificationHelper,
         tripId: String = "test-trip",
-        startTime: Long = System.currentTimeMillis()
+        startTime: Long = System.currentTimeMillis(),
+        lifecycleDao: TripLifecycleDao? = null,
+        inboxDao: GpsInboxDao? = null,
+        drainUseCase: DrainPendingGpsFixesUseCase? = null,
+        seqDao: TripSequenceDao? = null,
+        db: ExpenseTrackerDatabase? = null,
+        prefs: TrackingPreferencesManager? = null,
+        bootProvider: BootCountProvider? = null,
+        fusedClient: FusedLocationProviderClient? = null,
+        dispatcher: CoroutineDispatcher? = null
     ) {
         this.activeTripRepository = activeTripRepo
         this.notificationHelper = helper
         this.currentTripId = tripId
         this.tripStartTime = startTime
+        lifecycleDao?.let { this.tripLifecycleDao = it }
+        inboxDao?.let { this.gpsInboxDao = it }
+        drainUseCase?.let { this.drainPendingGpsFixesUseCase = it }
+        seqDao?.let { this.tripSequenceDao = it }
+        db?.let { this.database = it }
+        prefs?.let { this.preferencesManager = it }
+        bootProvider?.let { this.bootCountProvider = it }
+        fusedClient?.let { this.fusedLocationClient = it }
+        dispatcher?.let { this.ioDispatcher = it }
     }
 
     @VisibleForTesting
