@@ -1,1 +1,1 @@
-308039ea03168e703da6979f7617b851eb972ecfb6865b69b413deecfbb79172  BusinessMileageTracker-1.0.20-contrast-compact.apk
+c2495c917804d77febf85604853c9b6f89cf59521055f664515f08b1bbef1da1  BusinessMileageTracker-1.0.21-trip-details-3col.apk
