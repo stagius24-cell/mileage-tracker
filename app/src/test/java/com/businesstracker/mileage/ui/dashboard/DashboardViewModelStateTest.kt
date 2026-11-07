@@ -3,6 +3,7 @@ package com.businesstracker.mileage.ui.dashboard
 import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
+import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.entity.ActiveTripEntity
 import com.businesstracker.mileage.data.local.entity.TripEntity
@@ -17,6 +18,8 @@ import com.businesstracker.mileage.service.LocationTrackingService
 import com.businesstracker.mileage.service.TrackingServiceState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -40,6 +43,7 @@ class DashboardViewModelStateTest {
     private lateinit var context: Context
     private lateinit var database: ExpenseTrackerDatabase
     private lateinit var activeTripRepository: ActiveTripRepositoryImpl
+    private var currentViewModel: DashboardViewModel? = null
     private val testDispatcher = StandardTestDispatcher()
 
     private val fakeTripRepo = object : TripRepository {
@@ -62,6 +66,8 @@ class DashboardViewModelStateTest {
         override fun getTripsByClassification(c: String) = flowOf(emptyList<TripEntity>())
         override suspend fun getPendingSyncTrips() = emptyList<TripEntity>()
         override suspend fun markSynced(id: String, t: Long) {}
+        override suspend fun deleteAllTripData(): Int = 0
+        override fun clearExportCache(): Boolean = true
     }
 
     @Before
@@ -77,6 +83,10 @@ class DashboardViewModelStateTest {
 
     @After
     fun tearDown() {
+        currentViewModel?.let { vm ->
+            vm.viewModelScope.coroutineContext[Job]?.cancelChildren()
+        }
+        currentViewModel = null
         LocationTrackingService.resetGuardForTesting()
         Dispatchers.resetMain()
         database.close()
@@ -116,7 +126,7 @@ class DashboardViewModelStateTest {
             appContext = context,
             activeTripRepository = activeTripRepository,
             tripLifecycleDao = database.tripLifecycleDao()
-        )
+        ).also { currentViewModel = it }
         advanceUntilIdle()
 
         val state = viewModel.serviceState.first { it.tripId == tripId }
@@ -158,7 +168,7 @@ class DashboardViewModelStateTest {
             appContext = context,
             activeTripRepository = activeTripRepository,
             tripLifecycleDao = database.tripLifecycleDao()
-        )
+        ).also { currentViewModel = it }
         advanceUntilIdle()
 
         val state = viewModel.serviceState.first { it.tripId == tripId }
@@ -198,7 +208,7 @@ class DashboardViewModelStateTest {
             appContext = context,
             activeTripRepository = activeTripRepository,
             tripLifecycleDao = database.tripLifecycleDao()
-        )
+        ).also { currentViewModel = it }
         advanceUntilIdle()
 
         val state = viewModel.serviceState.first { it.tripId == tripId }
