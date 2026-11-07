@@ -43,9 +43,9 @@
 | **P3-013** | Permission Setup | **PASS** | 2026-11-06 | User Confirmation | Location ("Allow all the time" + precise), Physical Activity, Notifications granted; Samsung Battery Unrestricted. Clean 0.0 mi dashboard and smooth tab navigation. |
 | **P3-014** | Real Vehicle Trip | NOT TESTED | - | - | Controlled test drive |
 | **P3-015** | Screen-Off Tracking | NOT TESTED | - | - | Background continuous tracking with screen locked |
-| **P3-016** | Short Movement (<200m) | NOT TESTED | - | - | Movement discarded / unconfirmed |
-| **P3-017** | Continuous Confirmation (>200m)| NOT TESTED | - | - | Retroactive waypoint confirmation |
-| **P3-018** | STILL_ENTER Behavior | NOT TESTED | - | - | Red light / traffic stationary tolerance |
+| **P3-016** | Short Movement (<200m) | **PASS** | 2026-11-06 | User Confirmation | Stationary drift test passed. Zero false/phantom trips created while sitting still; dashboard remained at 0.0 mi. |
+| **P3-017** | Continuous Confirmation (>200m)| **PASS** | 2026-11-06 | User Confirmation | Continuous vehicle drive (>200m) confirmed and tracking activated reliably. |
+| **P3-018** | STILL_ENTER Behavior | **PASS** | 2026-11-06 | User Confirmation | Stopping at traffic lights / stop signs (`STILL_ENTER`) did not end or interrupt the active drive. |
 | **P3-019** | Four-Minute Exit Debounce | NOT TESTED | - | - | Resumed drive before 4m |
 | **P3-020** | Confirmed Trip End | NOT TESTED | - | - | Finalization after 4m park |
 | **P3-021** | Process Interruption | NOT TESTED | - | - | Process killed / reboot recovery |
@@ -67,5 +67,5 @@
 ## 4. Release-Readiness Assessment
 
 - **Overall Status:** `TESTING IN PROGRESS`
-- **Gates Fulfilled:** 2 / 11 (P3-001 PASS, P3-013 PASS; P3-002 FAIL logged)
-- **Recommendation:** Proceed with Session B drive detection tests (stationary drift P3-016 and candidate drive P3-017) on the validated Samsung installation.
+- **Gates Fulfilled:** 5 / 11 (P3-001 PASS, P3-013 PASS, P3-016 PASS, P3-017 PASS, P3-018 PASS; P3-002 FAIL logged)
+- **Recommendation:** Proceed with Session C vehicle exit debounce (P3-019, P3-020) and Session D trip details inspection (P3-014, P3-015).
