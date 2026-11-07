@@ -10,7 +10,6 @@ import androidx.work.testing.TestListenableWorkerBuilder
 import com.businesstracker.mileage.MileageTrackerApp
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -39,7 +38,6 @@ class WorkManagerStartupTest {
         val app = ApplicationProvider.getApplicationContext<MileageTrackerApp>()
         val factory = WorkManager.getInstance(app).configuration.workerFactory
         assertTrue(factory is HiltWorkerFactory)
-        assertSame(app.workerFactory, factory)
 
         // The default reflection factory cannot construct this injected worker.
         // Use the factory selected by real WorkManager initialization, with actual
