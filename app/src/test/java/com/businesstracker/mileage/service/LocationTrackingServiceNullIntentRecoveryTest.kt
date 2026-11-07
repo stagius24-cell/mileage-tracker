@@ -13,6 +13,7 @@ import com.businesstracker.mileage.data.local.entity.TripLifecycleEntity
 import com.businesstracker.mileage.data.local.entity.TripLifecycleState
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.data.repository.ActiveTripRepositoryImpl
+import com.businesstracker.mileage.domain.service.BootCountProvider
 import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
