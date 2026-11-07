@@ -1,0 +1,15 @@
+{
+  "versionName": "1.0.11",
+  "versionCode": 12,
+  "package": "com.businesstracker.mileage.debug",
+  "sourceBranch": "feature/history-header-alignment",
+  "sourceCommit": "0558707a5081d9073bc2cdc76a59cf92ac81e5ad",
+  "workflowRun": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42385928103",
+  "workflowArtifactId": 13578819431,
+  "unitTests": "debug and release suites passed",
+  "apkSha256": "ab2148509d0ec718a7c59c98d10c4107df26d8aee046360d3241de9081b140b3",
+  "signingCertificateSha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "signatureSchemes": ["v2", "v3"],
+  "payloadComparison": "969 non-signature ZIP entries identical to CI artifact",
+  "physicalHeaderValidation": "NOT RUN"
+}
