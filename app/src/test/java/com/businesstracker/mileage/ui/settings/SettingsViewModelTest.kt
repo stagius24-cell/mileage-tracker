@@ -10,8 +10,6 @@ import com.businesstracker.mileage.data.repository.TripRepositoryImpl
 import com.businesstracker.mileage.data.security.GoogleAuthManager
 import com.businesstracker.mileage.data.security.SecureStorageManager
 import com.businesstracker.mileage.data.security.TestSoftwareKeyProvider
-import com.businesstracker.mileage.domain.model.Classification
-import com.businesstracker.mileage.domain.model.SyncStatus
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.service.LocationTrackingService
@@ -121,18 +119,22 @@ class SettingsViewModelTest {
                 endTime = 2000L,
                 startAddress = "Home",
                 endAddress = "Office",
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                endLatitude = 37.7750,
+                endLongitude = -122.4195,
                 totalDistanceMiles = 8.5,
                 businessMiles = 8.5,
-                classification = Classification.BUSINESS.name,
+                classification = "BUSINESS",
                 businessEntity = "MySucculentCorner",
                 purpose = "Consulting",
                 applicableRate = 0.760,
                 calculatedDeduction = 6.46,
                 trackingMethod = TrackingMethod.AUTO_DETECTED.value,
-                syncStatus = SyncStatus.PENDING.name,
+                syncStatus = "PENDING",
                 syncedAt = null,
                 notes = null,
-                updatedAt = 2000L
+                waypointsJson = "[]"
             )
         )
         assertEquals(1, database.tripDao().getAllTrips().first().size)
@@ -189,14 +191,16 @@ class SettingsViewModelTest {
     @Test
     fun activeTracking_preventsDeletion_andSetsWarningMessage() = runTest(testDispatcher) {
         // Simulate active tracking in progress
-        LocationTrackingService._serviceState.value = TrackingServiceState(
-            isTracking = true,
-            isPaused = false,
-            tripId = "active_trip_in_progress",
-            distanceMeters = 500.0,
-            distanceMiles = 0.31,
-            durationMillis = 30000L,
-            statusMessage = "Tracking active"
+        LocationTrackingService.setServiceStateForTesting(
+            TrackingServiceState(
+                isTracking = true,
+                isPaused = false,
+                tripId = "active_trip_in_progress",
+                distanceMeters = 500.0,
+                distanceMiles = 0.31,
+                durationMillis = 30000L,
+                statusMessage = "Tracking active"
+            )
         )
 
         val viewModel = createViewModel()

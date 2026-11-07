@@ -14,8 +14,6 @@ import com.businesstracker.mileage.data.repository.TripRepositoryImpl
 import com.businesstracker.mileage.data.security.GoogleAuthManager
 import com.businesstracker.mileage.data.security.SecureStorageManager
 import com.businesstracker.mileage.data.security.TestSoftwareKeyProvider
-import com.businesstracker.mileage.domain.model.Classification
-import com.businesstracker.mileage.domain.model.SyncStatus
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.service.LocationTrackingService
@@ -89,18 +87,22 @@ class UserControlledDeletionTest {
                 endTime = 2000L,
                 startAddress = "100 Start St",
                 endAddress = "200 End Ave",
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                endLatitude = 37.7750,
+                endLongitude = -122.4195,
                 totalDistanceMiles = 15.5,
                 businessMiles = 15.5,
-                classification = Classification.BUSINESS.name,
+                classification = "BUSINESS",
                 businessEntity = "MySucculentCorner",
                 purpose = "Client Delivery",
                 applicableRate = 0.760,
                 calculatedDeduction = 11.78,
                 trackingMethod = TrackingMethod.AUTO_DETECTED.value,
-                syncStatus = SyncStatus.PENDING.name,
+                syncStatus = "PENDING",
                 syncedAt = null,
                 notes = "Confidential business trip note",
-                updatedAt = 2000L
+                waypointsJson = "[]"
             )
         )
 
@@ -208,18 +210,22 @@ class UserControlledDeletionTest {
                 endTime = 2000L,
                 startAddress = "A",
                 endAddress = "B",
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                endLatitude = 37.7750,
+                endLongitude = -122.4195,
                 totalDistanceMiles = 5.0,
                 businessMiles = 5.0,
-                classification = Classification.BUSINESS.name,
+                classification = "BUSINESS",
                 businessEntity = "MySucculentCorner",
                 purpose = "Delivery",
                 applicableRate = 0.760,
                 calculatedDeduction = 3.80,
                 trackingMethod = TrackingMethod.AUTO_DETECTED.value,
-                syncStatus = SyncStatus.SYNCED.name,
+                syncStatus = "SYNCED",
                 syncedAt = 2500L,
                 notes = null,
-                updatedAt = 2000L
+                waypointsJson = "[]"
             )
         )
 
@@ -247,18 +253,22 @@ class UserControlledDeletionTest {
                 endTime = 6000L,
                 startAddress = "Warehouse",
                 endAddress = "Store",
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                endLatitude = 37.7750,
+                endLongitude = -122.4195,
                 totalDistanceMiles = 10.0,
                 businessMiles = 10.0,
-                classification = Classification.BUSINESS.name,
+                classification = "BUSINESS",
                 businessEntity = "MySucculentCorner",
                 purpose = "Restock",
                 applicableRate = 0.760,
                 calculatedDeduction = 7.60,
                 trackingMethod = TrackingMethod.AUTO_DETECTED.value,
-                syncStatus = SyncStatus.PENDING.name,
+                syncStatus = "PENDING",
                 syncedAt = null,
                 notes = null,
-                updatedAt = 6000L
+                waypointsJson = "[]"
             )
         )
 

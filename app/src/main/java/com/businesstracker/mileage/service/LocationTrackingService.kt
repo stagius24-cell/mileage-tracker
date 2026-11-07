@@ -94,6 +94,11 @@ class LocationTrackingService : Service() {
             isDrainingGps.set(false)
             _serviceState.value = TrackingServiceState()
         }
+
+        @androidx.annotation.VisibleForTesting
+        fun setServiceStateForTesting(state: TrackingServiceState) {
+            _serviceState.value = state
+        }
     }
 
     @Inject lateinit var fusedLocationClient: FusedLocationProviderClient
