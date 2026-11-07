@@ -147,7 +147,7 @@ fun TripDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Compact two-column summary: trip facts on the left, distance on the right.
+            // 3-Column summary: Sync & Category on left, Total Distance in middle, Timestamp on right
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -156,13 +156,15 @@ fun TripDetailScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        .padding(horizontal = 8.dp, vertical = 14.dp),
+                    horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Column 1 (Left): Sync status & Category / Classification
                     Column(
-                        modifier = Modifier.weight(0.57f),
-                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Surface(
                             shape = RoundedCornerShape(7.dp),
@@ -178,59 +180,113 @@ fun TripDetailScreen(
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
-                        Text(
-                            text = dateFormatted,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = timeRangeStr,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
                             Icon(
                                 imageVector = if (trip.syncStatus == "SYNCED") Icons.Default.CloudDone else Icons.Default.CloudQueue,
                                 contentDescription = null,
                                 tint = if (trip.syncStatus == "SYNCED") SucculentPrimary else SlateNeutral,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(15.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = "${trip.syncStatus} · ${durationMinutes} min",
+                                text = trip.syncStatus,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = if (trip.syncStatus == "SYNCED") SucculentPrimary else SlateNeutral,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
                             )
                         }
                     }
 
+                    // Vertical Separator Line 1
+                    Box(
+                        modifier = Modifier
+                            .height(44.dp)
+                            .width(1.dp)
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                    )
+
+                    // Column 2 (Middle): Total Distance
                     Column(
-                        modifier = Modifier.weight(0.43f),
-                        verticalArrangement = Arrangement.Center,
-                        horizontalAlignment = Alignment.End
+                        modifier = Modifier.weight(1.05f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text(
                             text = "TOTAL DISTANCE",
-                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 9.sp,
+                                letterSpacing = 0.8.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
                             color = SlateNeutral,
-                            fontWeight = FontWeight.Bold
+                            maxLines = 1
                         )
-                        Row(verticalAlignment = Alignment.Bottom) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row(
+                            verticalAlignment = Alignment.Bottom,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
                             Text(
                                 text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
-                                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Black)
+                                style = MaterialTheme.typography.headlineMedium.copy(
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.Black
+                                ),
+                                color = MaterialTheme.colorScheme.onBackground
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
                                 text = "miles",
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = SlateNeutral,
-                                modifier = Modifier.padding(bottom = 5.dp)
+                                modifier = Modifier.padding(bottom = 4.dp)
                             )
                         }
+                    }
+
+                    // Vertical Separator Line 2
+                    Box(
+                        modifier = Modifier
+                            .height(44.dp)
+                            .width(1.dp)
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+                    )
+
+                    // Column 3 (Right): Timestamp (Date, Time range, Duration)
+                    Column(
+                        modifier = Modifier.weight(1.15f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = dateFormatted,
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = timeRangeStr,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "${durationMinutes} min",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            color = SlateNeutral,
+                            maxLines = 1
+                        )
                     }
                 }
             }
