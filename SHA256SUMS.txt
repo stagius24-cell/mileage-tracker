@@ -1,1 +1,1 @@
-c2495c917804d77febf85604853c9b6f89cf59521055f664515f08b1bbef1da1  BusinessMileageTracker-1.0.21-trip-details-3col.apk
+769edf4a2fce91bbd184a02f4f211f2a6b9b8f5710637f8fdebeb9b6e80648e5  BusinessMileageTracker-1.0.22-compact-dashboard.apk
