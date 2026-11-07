@@ -9,6 +9,10 @@ import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -68,7 +72,8 @@ open class GoogleSheetsSyncService @Inject constructor(
     private val tripRepository: TripRepository,
     private val secureStorageManager: SecureStorageManager,
     private val googleAuthManager: GoogleAuthManager?,
-    private val gson: Gson
+    private val gson: Gson,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO
 ) {
     // Secondary constructor for testing or when GoogleAuthManager is omitted
     constructor(
@@ -114,35 +119,38 @@ open class GoogleSheetsSyncService @Inject constructor(
      * Executes synchronization of all pending reviewed trips with Google Sheets.
      * Serialized with an in-process Mutex to eliminate local race conditions.
      */
-    open suspend fun syncPendingTrips(): SheetsSyncResult = syncMutex.withLock {
-        val spreadsheetId = preferencesManager.sheetsSpreadsheetId.first().trim()
-        val webhookUrl = preferencesManager.sheetsWebhookUrl.first().trim()
+    // Safe for both Settings' main-thread coroutine and background workers.
+    open suspend fun syncPendingTrips(): SheetsSyncResult = withContext(ioDispatcher) {
+        syncMutex.withLock {
+            val spreadsheetId = preferencesManager.sheetsSpreadsheetId.first().trim()
+            val webhookUrl = preferencesManager.sheetsWebhookUrl.first().trim()
 
-        // Safely migrate any legacy DataStore plaintext token and resolve strictly from Keystore
-        preferencesManager.migrateLegacyAuthToken(secureStorageManager)
-        val authToken = secureStorageManager.getOAuthToken()?.trim().orEmpty()
+            // Safely migrate any legacy DataStore plaintext token and resolve strictly from Keystore
+            preferencesManager.migrateLegacyAuthToken(secureStorageManager)
+            val authToken = secureStorageManager.getOAuthToken()?.trim().orEmpty()
 
-        if (spreadsheetId.isBlank() && webhookUrl.isBlank()) {
-            return@withLock SheetsSyncResult.NotConfigured
-        }
-
-        val pendingTrips = tripRepository.getPendingSyncTrips()
-        // Strict business rule: Never sync UNREVIEWED trips as confirmed mileage
-        val eligibleTrips = pendingTrips.filter { it.classification != "UNREVIEWED" }
-
-        if (eligibleTrips.isEmpty()) {
-            return@withLock SheetsSyncResult.Success(0, 0)
-        }
-
-        return@withLock if (webhookUrl.isNotBlank()) {
-            syncViaWebhook(webhookUrl, eligibleTrips)
-        } else {
-            if (authToken.isBlank()) {
-                val err = "Google Sheets authentication token missing. Please connect your account."
-                preferencesManager.setSheetsLastError(err)
-                return@withLock SheetsSyncResult.TokenExpired(err)
+            if (spreadsheetId.isBlank() && webhookUrl.isBlank()) {
+                return@withLock SheetsSyncResult.NotConfigured
             }
-            syncViaSheetsApi(spreadsheetId, authToken, eligibleTrips, isRetryAfterRefresh = false)
+
+            val pendingTrips = tripRepository.getPendingSyncTrips()
+            // Strict business rule: Never sync UNREVIEWED trips as confirmed mileage
+            val eligibleTrips = pendingTrips.filter { it.classification != "UNREVIEWED" }
+
+            if (eligibleTrips.isEmpty()) {
+                return@withLock SheetsSyncResult.Success(0, 0)
+            }
+
+            return@withLock if (webhookUrl.isNotBlank()) {
+                syncViaWebhook(webhookUrl, eligibleTrips)
+            } else {
+                if (authToken.isBlank()) {
+                    val err = "Google Sheets authentication token missing. Please connect your account."
+                    preferencesManager.setSheetsLastError(err)
+                    return@withLock SheetsSyncResult.TokenExpired(err)
+                }
+                syncViaSheetsApi(spreadsheetId, authToken, eligibleTrips, isRetryAfterRefresh = false)
+            }
         }
     }
 
@@ -181,6 +189,11 @@ open class GoogleSheetsSyncService @Inject constructor(
                         }
                         preferencesManager.setSheetsLastError(msg)
                         return SheetsSyncResult.TokenExpired(msg)
+                    }
+                    400 -> {
+                        val msg = "Google Sheets rejected the request (400). Check the spreadsheet ID and that the tab is named Sheet1."
+                        preferencesManager.setSheetsLastError(msg)
+                        return SheetsSyncResult.HttpError(400, msg)
                     }
                     403 -> {
                         val msg = "Access denied (403). Check spreadsheet sharing permissions."
@@ -390,7 +403,7 @@ open class GoogleSheetsSyncService @Inject constructor(
                             }
                         }
                     } catch (e: IOException) {
-                        val err = e.localizedMessage ?: "Network error"
+                        val err = "Could not reach Google Sheets. Check your internet connection and try again."
                         failedTrips.add(trip.id to err)
                         if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.NetworkError(err, e)
                         false
@@ -463,7 +476,7 @@ open class GoogleSheetsSyncService @Inject constructor(
                             }
                         }
                     } catch (e: IOException) {
-                        val err = e.localizedMessage ?: "Network error"
+                        val err = "Could not reach Google Sheets. Check your internet connection and try again."
                         failedTrips.add(trip.id to err)
                         if (primaryFailureResult == null) primaryFailureResult = SheetsSyncResult.NetworkError(err, e)
                         false
@@ -511,11 +524,13 @@ open class GoogleSheetsSyncService @Inject constructor(
             }
 
         } catch (e: IOException) {
-            val msg = e.localizedMessage ?: "Network error during sync"
+            val msg = "Could not reach Google Sheets. Check your internet connection and try again."
             preferencesManager.setSheetsLastError(msg)
             return SheetsSyncResult.NetworkError(msg, e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            val msg = e.localizedMessage ?: "Unexpected sync error"
+            val msg = "Google Sheets sync could not finish. Your trips remain pending; please try again."
             preferencesManager.setSheetsLastError(msg)
             return SheetsSyncResult.UnexpectedError(e)
         }
@@ -683,11 +698,13 @@ open class GoogleSheetsSyncService @Inject constructor(
                 }
             }
         } catch (e: IOException) {
-            val msg = e.localizedMessage ?: "Webhook network error"
+            val msg = "Could not reach the sync webhook. Check your internet connection and try again."
             preferencesManager.setSheetsLastError(msg)
             return SheetsSyncResult.NetworkError(msg, e)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            val msg = e.localizedMessage ?: "Unexpected error during webhook sync"
+            val msg = "Webhook sync could not finish. Your trips remain pending; please try again."
             preferencesManager.setSheetsLastError(msg)
             return SheetsSyncResult.UnexpectedError(e)
         }

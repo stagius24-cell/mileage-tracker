@@ -1,6 +1,7 @@
 package com.businesstracker.mileage
 
 import android.content.Context
+import android.os.Looper
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.data.remote.GoogleSheetsSyncService
@@ -10,6 +11,8 @@ import com.businesstracker.mileage.data.security.SecureStorageManager
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.google.gson.Gson
 import kotlinx.coroutines.async
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -21,6 +24,9 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
+import org.junit.Assert.fail
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -28,6 +34,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(RobolectricTestRunner::class)
 class GoogleSheetsSyncServiceTest {
@@ -136,6 +143,108 @@ class GoogleSheetsSyncServiceTest {
 
     private fun createService(authManager: GoogleAuthManager? = null): GoogleSheetsSyncService {
         return GoogleSheetsSyncService(preferencesManager, fakeRepo, secureStorageManager, authManager, Gson())
+    }
+
+    @Test
+    fun manualSheetsSync_fromAndroidMainThread_movesReadHeaderAndAppendOffMain() = runBlocking {
+        assertSame(Looper.getMainLooper().thread, Thread.currentThread())
+        configureSheetsApi()
+        tripsList.add(createTrip("manual-trip", "BUSINESS", 2.0))
+        val calls = AtomicInteger()
+        val service = createService()
+        service.client = OkHttpClient.Builder().addInterceptor { chain ->
+            assertNotSame("Blocking HTTP must not run on Android's main thread",
+                Looper.getMainLooper().thread, Thread.currentThread())
+            calls.incrementAndGet()
+            val body = if (chain.request().method == "GET") "{\"range\":\"Sheet1!A:A\"}" else "{}"
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK")
+                .body(body.toResponseBody("application/json".toMediaType())).build()
+        }.build()
+
+        assertTrue(service.syncPendingTrips() is SheetsSyncResult.Success)
+        assertEquals(3, calls.get())
+        assertEquals(listOf("manual-trip"), markedSyncedTripIds)
+        assertEquals("SYNCED", tripsList.single().syncStatus)
+    }
+
+    @Test
+    fun manualWebhookSync_fromAndroidMainThread_runsHttpOffMain() = runBlocking {
+        assertSame(Looper.getMainLooper().thread, Thread.currentThread())
+        configureWebhook()
+        tripsList.add(createTrip("webhook-trip", "BUSINESS", 2.0))
+        val calls = AtomicInteger()
+        val service = createService()
+        service.client = OkHttpClient.Builder().addInterceptor { chain ->
+            assertNotSame(Looper.getMainLooper().thread, Thread.currentThread())
+            assertEquals(null, chain.request().header("Authorization"))
+            calls.incrementAndGet()
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(200).message("OK")
+                .body("{\"syncedTripIds\":[\"webhook-trip\"]}".toResponseBody("application/json".toMediaType())).build()
+        }.build()
+
+        assertTrue(service.syncPendingTrips() is SheetsSyncResult.Success)
+        assertEquals(1, calls.get())
+        assertEquals(listOf("webhook-trip"), markedSyncedTripIds)
+    }
+
+    @Test
+    fun syncNetworkFailure_doesNotPersistRequestDetails_andKeepsTripPending() = runBlocking {
+        configureSheetsApi()
+        tripsList.add(createTrip("offline-trip", "BUSINESS", 2.0))
+        val service = createService()
+        service.client = OkHttpClient.Builder().addInterceptor {
+            throw IOException("https://private.example/sheet?token=synthetic-secret")
+        }.build()
+
+        assertTrue(service.syncPendingTrips() is SheetsSyncResult.NetworkError)
+        val error = preferencesManager.sheetsLastError.first().orEmpty()
+        assertTrue(error.contains("internet connection"))
+        assertFalse(error.contains("private.example"))
+        assertFalse(error.contains("synthetic-secret"))
+        assertEquals("PENDING", tripsList.single().syncStatus)
+        assertTrue(markedSyncedTripIds.isEmpty())
+    }
+
+    @Test
+    fun syncCancellation_isRethrown_withoutMarkingTripSynced() = runBlocking {
+        configureSheetsApi()
+        preferencesManager.setSheetsLastError(null)
+        tripsList.add(createTrip("cancelled-trip", "BUSINESS", 2.0))
+        val service = createService()
+        service.client = OkHttpClient.Builder().addInterceptor {
+            throw CancellationException("Test cancellation")
+        }.build()
+
+        try {
+            service.syncPendingTrips()
+            fail("Cancellation must reach the caller")
+        } catch (_: CancellationException) {
+            assertEquals(null, preferencesManager.sheetsLastError.first())
+            assertEquals("PENDING", tripsList.single().syncStatus)
+            assertTrue(markedSyncedTripIds.isEmpty())
+        }
+    }
+
+    @Test
+    fun sheetsReadBadRequest_explainsSheet1Configuration_withoutRemoteWrites() = runBlocking {
+        configureSheetsApi()
+        tripsList.add(createTrip("bad-config-trip", "BUSINESS", 2.0))
+        val service = createService()
+        service.client = OkHttpClient.Builder().addInterceptor { chain ->
+            assertEquals("GET", chain.request().method)
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(400).message("Bad Request")
+                .body("{}".toResponseBody("application/json".toMediaType())).build()
+        }.build()
+
+        val result = service.syncPendingTrips()
+        assertTrue(result is SheetsSyncResult.HttpError)
+        assertEquals(400, (result as SheetsSyncResult.HttpError).statusCode)
+        assertTrue(preferencesManager.sheetsLastError.first().orEmpty().contains("Sheet1"))
+        assertTrue(markedSyncedTripIds.isEmpty())
+        assertEquals("PENDING", tripsList.single().syncStatus)
     }
 
     @Test
