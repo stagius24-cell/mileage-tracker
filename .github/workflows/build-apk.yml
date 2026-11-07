@@ -11,6 +11,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Test & Build APK
@@ -51,6 +54,17 @@ jobs:
             echo "=== KEYSTORE BASE64 END ==="
           fi
           keytool -list -v -keystore app/keystore/debug.keystore -storetype PKCS12 -storepass android -alias androiddebugkey
+
+      - name: Save Signing Fingerprints & Lock Keystore
+        run: |
+          mkdir -p docs app/keystore
+          keytool -list -v -keystore app/keystore/debug.keystore -storetype PKCS12 -storepass android -alias androiddebugkey > docs/SIGNING_FINGERPRINTS.txt
+          base64 -w 0 app/keystore/debug.keystore > app/keystore/debug.keystore.base64
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/SIGNING_FINGERPRINTS.txt app/keystore/debug.keystore.base64
+          git commit -m "docs(keystore): publish signing fingerprints and locked debug keystore" || true
+          git push || true
 
       - name: Run Unit Tests & Assemble Debug APK
         run: ./gradlew testDebugUnitTest testReleaseUnitTest assembleDebug --stacktrace
