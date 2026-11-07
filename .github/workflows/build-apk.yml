@@ -36,21 +36,20 @@ jobs:
           gradle wrapper
           chmod +x gradlew
 
-      - name: Ensure Deterministic Debug Keystore
+      - name: Restore Verified Run 96 Debug Signing Key
+        env:
+          RUN96_KEYSTORE: ${{ secrets.RUN96_DEBUG_KEYSTORE_BASE64 }}
         run: |
-          mkdir -p app/keystore
-          if [ -f app/keystore/debug.keystore.base64 ]; then
-            base64 -d app/keystore/debug.keystore.base64 > app/keystore/debug.keystore
-          elif [ ! -s app/keystore/debug.keystore ] || ! keytool -list -keystore app/keystore/debug.keystore -storetype PKCS12 -storepass android -alias androiddebugkey >/dev/null 2>&1; then
-            echo "Generating permanent debug keystore via keytool"
-            rm -f app/keystore/debug.keystore
-            keytool -genkey -v -keystore app/keystore/debug.keystore -storetype PKCS12 -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-            echo "=== KEYSTORE BASE64 START ==="
-            base64 -w 0 app/keystore/debug.keystore
-            echo ""
-            echo "=== KEYSTORE BASE64 END ==="
+          set -euo pipefail
+          if [ -z "$RUN96_KEYSTORE" ]; then
+            echo "Run 96 signing key is required; refusing to generate an incompatible key."
+            exit 1
           fi
-          keytool -list -v -keystore app/keystore/debug.keystore -storetype PKCS12 -storepass android -alias androiddebugkey
+          umask 077
+          mkdir -p app/keystore
+          printf '%s' "$RUN96_KEYSTORE" | base64 --decode > app/keystore/debug.keystore
+          keytool -exportcert -keystore app/keystore/debug.keystore -storepass android -alias androiddebugkey -file "$RUNNER_TEMP/run96-cert.der"
+          echo "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948  $RUNNER_TEMP/run96-cert.der" | sha256sum --check
 
       - name: Run Unit Tests & Assemble Debug APK
         run: ./gradlew testDebugUnitTest testReleaseUnitTest assembleDebug --stacktrace
@@ -70,6 +69,15 @@ jobs:
           APK_PATH=$(find app/build/outputs/apk/debug -name "*.apk" | head -n 1)
           echo "Found APK at: $APK_PATH"
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+
+      - name: Verify APK Signature Matches Installed Run 96
+        env:
+          APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
+        run: |
+          set -euo pipefail
+          APK_SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -n 1)
+          "$APK_SIGNER" verify --verbose --print-certs "$APK_PATH" > "$RUNNER_TEMP/apk-signature.txt"
+          grep -F "Signer #1 certificate SHA-256 digest: 43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948" "$RUNNER_TEMP/apk-signature.txt"
 
       - name: Upload APK as Downloadable Artifact
         uses: actions/upload-artifact@v4
