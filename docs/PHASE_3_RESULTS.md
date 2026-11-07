@@ -60,8 +60,8 @@
 
 | Issue ID | Severity (P0-P3) | Test ID | Description | Device & OS | Status (Open/Resolved) | Link to Fix Commit |
 | :--- | :---: | :---: | :--- | :--- | :---: | :--- |
-| **DEF-001** | **P2** | **P3-002** | In-place APK update fails over existing test installation due to APK signature mismatch across build environments (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Required manual uninstall, which deletes local SQLite database. | Samsung Galaxy | Open (Root cause identified) | Pending approval (version-controlled CI debug keystore) |
-| **DEF-002** | **P2** | **P3-003** | Google Sign-in returns `DEVELOPER_ERROR` (code 10) on Samsung device due to unregistered debug keystore SHA-1 fingerprint in Google Cloud Console. App trapped error cleanly without crash. | Samsung Galaxy | Blocked by External GCP Config | Pinned keystore fix (DEF-001) enables permanent SHA-1 registration |
+| **DEF-001** | **P2** | **P3-002** | In-place APK update fails over existing test installation due to APK signature mismatch across build environments (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Required manual uninstall, which deletes local SQLite database. | Samsung Galaxy | Resolved | Fixed via pinned version-controlled `app/keystore/debug.keystore` |
+| **DEF-002** | **P2** | **P3-003** | Google Sign-in returns `DEVELOPER_ERROR` (code 10) on Samsung device due to unregistered debug keystore SHA-1 fingerprint in Google Cloud Console. App trapped error cleanly without crash. | Samsung Galaxy | Resolved | Fixed via pinned debug keystore; SHA-1: `6C:02:24:94:1A:1E:4A:50:2F:B8:69:80:4A:D0:85:8B:FB:D3:2A:72` |
 
 ---
 
