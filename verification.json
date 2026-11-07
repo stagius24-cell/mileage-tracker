@@ -1,0 +1,16 @@
+{
+  "versionName": "1.0.6",
+  "versionCode": 7,
+  "package": "com.businesstracker.mileage.debug",
+  "sourceBranch": "feature/app-icon-artwork",
+  "sourceCommit": "768d2389f64de6ec69cdcd3526967378e9e68794",
+  "workflowRun": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42373471718",
+  "workflowArtifactId": 13575030615,
+  "unitTests": "debug and release suites passed",
+  "apkSha256": "b389238b530677592ba4b0a2d55f95a24ad1f32e3fd83469c4dd5a3311b06f92",
+  "sourceArtworkSha256": "80efe0b13de48749a084ba3cc7e9424e3c7e9b0ff742dedb59af0f22db805a66",
+  "signingCertificateSha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "signatureSchemes": ["v2", "v3"],
+  "payloadComparison": "969 non-signature ZIP entries identical to CI artifact",
+  "physicalLauncherValidation": "NOT RUN"
+}
