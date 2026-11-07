@@ -1,0 +1,15 @@
+{
+  "versionName": "1.0.14",
+  "versionCode": 15,
+  "package": "com.businesstracker.mileage.debug",
+  "sourceBranch": "feature/bicolor-settings-switches",
+  "sourceCommit": "25d817d21344c723288dfa8ebfe60b71af749984",
+  "workflowRun": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42405847426",
+  "workflowArtifactId": 13586709576,
+  "unitTests": "debug and release suites passed",
+  "apkSha256": "209e4a9b29b8d530ee42b9937bd6068a646426ac5da79c861f2b3c1d28d4883c",
+  "signingCertificateSha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "signatureSchemes": ["v2", "v3"],
+  "payloadComparison": "969 non-signature ZIP entries identical to CI artifact",
+  "physicalSwitchValidation": "NOT RUN"
+}
