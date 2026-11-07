@@ -1,0 +1,15 @@
+{
+  "versionName": "1.0.12",
+  "versionCode": 13,
+  "package": "com.businesstracker.mileage.debug",
+  "sourceBranch": "feature/history-report-back-navigation",
+  "sourceCommit": "b6110e1c31a897265539cef5f5d7b9814eb7d8f2",
+  "workflowRun": "https://github.com/stagius24-cell/mileage-tracker/actions/runs/42401483537",
+  "workflowArtifactId": 13585687350,
+  "unitTests": "debug and release suites passed on unchanged rerun",
+  "apkSha256": "a26d512963d64e359609b7b88b44328340ee9a1d83bbfca1dd15df88616e786e",
+  "signingCertificateSha256": "43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948",
+  "signatureSchemes": ["v2", "v3"],
+  "payloadComparison": "969 non-signature ZIP entries identical to CI artifact",
+  "physicalBackNavigationValidation": "NOT RUN"
+}
