@@ -160,8 +160,7 @@ class GpsLocationQueueStressTest {
             tripIdProvider = { tripId },
             tripSequenceDao = database.tripSequenceDao(),
             batchFetchLimit = 5,
-            inMemoryCapacity = 3,
-            database = database
+            inMemoryCapacity = 3
         ) { loc ->
             // Simulate slow database processing
             delay(1)

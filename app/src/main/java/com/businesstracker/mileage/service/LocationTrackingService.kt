@@ -111,11 +111,14 @@ class LocationTrackingService : Service() {
     @Inject lateinit var bootCountProvider: BootCountProvider
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var wakeLock: PowerManager.WakeLock? = null
     private var tickerJob: Job? = null
     private var gpsLocationQueue: GpsLocationQueue? = null
     private var gpsHandlerThread: HandlerThread? = null
+
+    @VisibleForTesting
+    internal var lastRecoveryJob: Job? = null
 
     private val isStopping = AtomicBoolean(false)
     private var currentTripId: String = ""
@@ -235,7 +238,7 @@ class LocationTrackingService : Service() {
             foregroundType
         )
 
-        serviceScope.launch(ioDispatcher) {
+        lastRecoveryJob = serviceScope.launch(ioDispatcher) {
             try {
                 val activeTrip = activeTripRepository.getActiveTrip()
                 if (activeTrip == null) {
@@ -849,7 +852,8 @@ class LocationTrackingService : Service() {
         prefs: TrackingPreferencesManager? = null,
         bootProvider: BootCountProvider? = null,
         fusedClient: FusedLocationProviderClient? = null,
-        dispatcher: CoroutineDispatcher? = null
+        dispatcher: CoroutineDispatcher? = null,
+        scope: CoroutineScope? = null
     ) {
         this.activeTripRepository = activeTripRepo
         this.notificationHelper = helper
@@ -864,6 +868,7 @@ class LocationTrackingService : Service() {
         bootProvider?.let { this.bootCountProvider = it }
         fusedClient?.let { this.fusedLocationClient = it }
         dispatcher?.let { this.ioDispatcher = it }
+        scope?.let { this.serviceScope = it }
     }
 
     @VisibleForTesting

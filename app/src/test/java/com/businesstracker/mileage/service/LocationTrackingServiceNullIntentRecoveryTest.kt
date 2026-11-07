@@ -16,7 +16,10 @@ import com.businesstracker.mileage.data.repository.ActiveTripRepositoryImpl
 import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -76,7 +79,7 @@ class LocationTrackingServiceNullIntentRecoveryTest {
         database.close()
     }
 
-    private fun createService(): LocationTrackingService {
+    private fun createService(testScope: CoroutineScope): LocationTrackingService {
         val service = LocationTrackingService()
         service.attachContextForTesting(context)
         service.setTestDependencies(
@@ -88,13 +91,14 @@ class LocationTrackingServiceNullIntentRecoveryTest {
             seqDao = database.tripSequenceDao(),
             db = database,
             prefs = preferencesManager,
-            dispatcher = Dispatchers.Main
+            dispatcher = Dispatchers.Default,
+            scope = testScope
         )
         service.locationUpdatesRegistrar = { true }
         return service
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun nullIntentRecovery_restoresExistingTripWithoutDuplicating() = runBlocking {
         val tripId = "recovered-active-trip"
         database.activeTripDao().insertActiveTrip(
@@ -123,9 +127,12 @@ class LocationTrackingServiceNullIntentRecoveryTest {
         )
         preferencesManager.setActiveTripId(tripId)
 
-        val service = createService()
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val service = createService(testScope)
         val result = service.onStartCommand(null, 0, 1)
         assertEquals(Service.START_STICKY, result)
+
+        service.lastRecoveryJob?.join()
 
         val state = LocationTrackingService.serviceState.value
         assertTrue("Service must be actively tracking after recovery", state.isTracking)
@@ -138,9 +145,10 @@ class LocationTrackingServiceNullIntentRecoveryTest {
         assertEquals(3200.0, persisted.totalDistanceMeters, 0.001)
 
         service.onDestroy()
+        testScope.cancel()
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun nullIntentRecovery_processesPendingGpsInboxRecordsExactlyOnce() = runBlocking {
         val tripId = "reconcile-inbox-trip"
         database.activeTripDao().insertActiveTrip(
@@ -163,17 +171,21 @@ class LocationTrackingServiceNullIntentRecoveryTest {
             )
         )
 
-        val service = createService()
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val service = createService(testScope)
         service.onStartCommand(null, 0, 1)
+
+        service.lastRecoveryJob?.join()
 
         assertEquals("Pending inbox count must be 0 after drain during recovery", 0, database.gpsInboxDao().getPendingCount(tripId))
         val waypoints = database.activeTripDao().getWaypointsForTrip(tripId)
         assertEquals("Waypoints must be populated from drained inbox fixes", 2, waypoints.size)
 
         service.onDestroy()
+        testScope.cancel()
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun nullIntentRecovery_pausedTripRemainsPaused() = runBlocking {
         val tripId = "paused-trip"
         database.activeTripDao().insertActiveTrip(
@@ -191,8 +203,11 @@ class LocationTrackingServiceNullIntentRecoveryTest {
             )
         )
 
-        val service = createService()
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val service = createService(testScope)
         service.onStartCommand(null, 0, 1)
+
+        service.lastRecoveryJob?.join()
 
         val state = LocationTrackingService.serviceState.value
         assertTrue("Service state must reflect paused status", state.isPaused)
@@ -200,9 +215,10 @@ class LocationTrackingServiceNullIntentRecoveryTest {
         assertEquals(4500.0, state.distanceMeters, 0.001)
 
         service.onDestroy()
+        testScope.cancel()
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun nullIntentRecovery_missingPermissions_preservesActiveTripAndSetsRecoveryRequired() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<Application>()
         shadowOf(app).denyPermissions(
@@ -232,7 +248,8 @@ class LocationTrackingServiceNullIntentRecoveryTest {
         )
         preferencesManager.setActiveTripId(tripId)
 
-        val service = createService()
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val service = createService(testScope)
         service.onStartCommand(null, 0, 1)
 
         val activeTrip = database.activeTripDao().getActiveTripById(tripId)
@@ -248,9 +265,10 @@ class LocationTrackingServiceNullIntentRecoveryTest {
         assertEquals(tripId, state.tripId)
 
         service.onDestroy()
+        testScope.cancel()
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun nullIntentRecovery_failedLocationRegistration_preservesPersistedData() = runBlocking {
         val tripId = "failed-reg-trip"
         database.activeTripDao().insertActiveTrip(
@@ -283,10 +301,13 @@ class LocationTrackingServiceNullIntentRecoveryTest {
             )
         )
 
-        val service = createService()
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val service = createService(testScope)
         // Simulate registration failure
         service.locationUpdatesRegistrar = { false }
         service.onStartCommand(null, 0, 1)
+
+        service.lastRecoveryJob?.join()
 
         val activeTrip = database.activeTripDao().getActiveTripById(tripId)
         assertNotNull("Active trip must NOT be deleted when registration fails", activeTrip)
@@ -302,16 +323,21 @@ class LocationTrackingServiceNullIntentRecoveryTest {
         assertTrue(state.isRecoveryRequired)
 
         service.onDestroy()
+        testScope.cancel()
     }
 
-    @Test
+    @Test(timeout = 10000)
     fun nullIntentRecovery_withNoActiveTrip_stopsCleanly() = runBlocking {
-        val service = createService()
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val service = createService(testScope)
         service.onStartCommand(null, 0, 1)
+
+        service.lastRecoveryJob?.join()
 
         assertNull("No active trip should be generated", database.activeTripDao().getActiveTrip())
         assertFalse(LocationTrackingService.serviceState.value.isTracking)
 
         service.onDestroy()
+        testScope.cancel()
     }
 }

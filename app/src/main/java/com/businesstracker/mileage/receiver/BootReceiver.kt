@@ -13,6 +13,7 @@ import com.businesstracker.mileage.transition.ActivityTransitionManager
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -28,6 +29,9 @@ class BootReceiver : BroadcastReceiver() {
 
     private var receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    @VisibleForTesting
+    internal var lastJob: Job? = null
+
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
         if (action == Intent.ACTION_BOOT_COMPLETED ||
@@ -35,7 +39,7 @@ class BootReceiver : BroadcastReceiver() {
             action == "android.intent.action.QUICKBOOT_POWERON"
         ) {
             val pendingResult = goAsync()
-            receiverScope.launch {
+            lastJob = receiverScope.launch {
                 try {
                     // 1. Reconcile in-progress trips from previous boot without data loss
                     reconcileBootActiveTrip()

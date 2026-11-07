@@ -122,8 +122,6 @@ class GpsLocationQueue(
             } catch (e: Throwable) {
                 Log.e("GpsLocationQueue", "Critical error inserting fixes into inbox: ${e.message}", e)
                 processingError = e
-            } finally {
-                admissionBarrier.releaseSequence()
             }
         }
     }
@@ -272,9 +270,8 @@ class GpsLocationQueue(
                 }
                 spilloverJobs.add(spilloverJob)
             }
-        } catch (e: Throwable) {
+        } finally {
             admissionBarrier.releaseSequence()
-            throw e
         }
     }
 
@@ -284,7 +281,7 @@ class GpsLocationQueue(
         if (currentTripId.isEmpty()) return
 
         val sequence = admissionBarrier.acquireSequenceOrNull() ?: return
-        val batch = try {
+        try {
             val sorted = locations.sortedWith(
                 compareBy<Location> { loc ->
                     if (loc.elapsedRealtimeNanos != 0L) loc.elapsedRealtimeNanos else loc.time * 1_000_000L
@@ -311,12 +308,11 @@ class GpsLocationQueue(
                     bootCount = currentBoot
                 )
             }
-            AdmittedBatch(sequence, currentTripId, entities)
-        } catch (e: Throwable) {
+            val batch = AdmittedBatch(sequence, currentTripId, entities)
+            persistBatch(batch)
+        } finally {
             admissionBarrier.releaseSequence()
-            throw e
         }
-        persistBatch(batch)
     }
 
     /**

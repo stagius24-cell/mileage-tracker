@@ -191,7 +191,7 @@ class BootReceiverRebootRecoveryTest {
             )
         )
 
-        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         bootReceiver.setTestDependencies(
             transitionManager = ActivityTransitionManager(context),
             prefs = preferencesManager,
@@ -203,6 +203,7 @@ class BootReceiverRebootRecoveryTest {
         // Invoke broadcast receiver entry point directly
         val bootIntent = Intent(Intent.ACTION_BOOT_COMPLETED)
         bootReceiver.onReceive(context, bootIntent)
+        bootReceiver.lastJob?.join()
 
         // Verify active trip is completely preserved
         val tripInDb = database.activeTripDao().getActiveTripById(tripId)
@@ -238,7 +239,7 @@ class BootReceiverRebootRecoveryTest {
             )
         )
 
-        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val testScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
         bootReceiver.setTestDependencies(
             transitionManager = ActivityTransitionManager(context),
             prefs = preferencesManager,
@@ -248,6 +249,7 @@ class BootReceiverRebootRecoveryTest {
         )
 
         bootReceiver.onReceive(context, Intent(Intent.ACTION_BOOT_COMPLETED))
+        bootReceiver.lastJob?.join()
 
         // Verify inbox records are untouched
         assertEquals(2, database.gpsInboxDao().getPendingCount(tripId))
