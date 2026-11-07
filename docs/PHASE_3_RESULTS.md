@@ -30,7 +30,7 @@
 | :--- | :--- | :---: | :---: | :--- | :--- |
 | **P3-001** | Fresh Installation | **PASS** | 2026-11-06 | User Confirmation | Clean install succeeded after uninstalling previous build. App launches and functions. |
 | **P3-002** | Upgrade Installation | **FAIL** | 2026-11-06 | User Confirmation | In-place update failed; package installer blocked update over previous build. Manual uninstall required, causing data wipe (DEF-001). |
-| **P3-003** | Google Sign-in | NOT TESTED | - | - | Play Services OAuth consent dialog |
+| **P3-003** | Google Sign-in | **BLOCKED** | 2026-11-06 | `media_1794019252404_ac1365a6.jpg` | Google Play Services returned `CommonStatusCodes.DEVELOPER_ERROR` (Code 10). App gracefully trapped error, avoided crash, and displayed actionable diagnostic banner (DEF-002). |
 | **P3-004** | Authentication Expiration | NOT TESTED | - | - | Remote revocation 401 retry test |
 | **P3-005** | Manual Trip Review | **PASS** | 2026-11-06 | User Confirmation | Trip reviewed and classified as Business (MySucculentCorner); persisted across app process kill and restart. |
 | **P3-006** | Personal Classification | **PASS** | 2026-11-06 | User Confirmation | Trip reclassified as Personal; business deduction correctly dropped to $0.00 and dashboard business miles updated cleanly. |
@@ -61,11 +61,12 @@
 | Issue ID | Severity (P0-P3) | Test ID | Description | Device & OS | Status (Open/Resolved) | Link to Fix Commit |
 | :--- | :---: | :---: | :--- | :--- | :---: | :--- |
 | **DEF-001** | **P2** | **P3-002** | In-place APK update fails over existing test installation due to APK signature mismatch across build environments (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Required manual uninstall, which deletes local SQLite database. | Samsung Galaxy | Open (Root cause identified) | Pending approval (version-controlled CI debug keystore) |
+| **DEF-002** | **P2** | **P3-003** | Google Sign-in returns `DEVELOPER_ERROR` (code 10) on Samsung device due to unregistered debug keystore SHA-1 fingerprint in Google Cloud Console. App trapped error cleanly without crash. | Samsung Galaxy | Blocked by External GCP Config | Pinned keystore fix (DEF-001) enables permanent SHA-1 registration |
 
 ---
 
 ## 4. Release-Readiness Assessment
 
 - **Overall Status:** `TESTING IN PROGRESS`
-- **Gates Fulfilled:** 11 / 11 core functional gates verified (P3-001, P3-005, P3-013, P3-014, P3-015, P3-016, P3-017, P3-018, P3-019, P3-020, P3-021, P3-024, P3-025 PASS; P3-002 FAIL logged)
-- **Recommendation:** Proceed with Google Sheets sync / webhook integration (P3-003, P3-008) and personal trip classification check (P3-006).
+- **Gates Fulfilled:** 11 / 11 core tracking gates verified (14 PASS, 1 FAIL, 1 BLOCKED)
+- **Recommendation:** Proceed with Apps Script / Cloudflare Webhook sync test (P3-008), or pin debug keystore (DEF-001) to allow GCP SHA-1 registration for native Google OAuth.
