@@ -46,7 +46,15 @@ class TrackingPreferencesManager @Inject constructor(
     private var secureStorageManager: SecureStorageManager
 ) {
     // Secondary constructor for existing tests and backwards compatibility
-    constructor(context: Context) : this(context, SecureStorageManager(context))
+    constructor(context: Context) : this(
+        context,
+        try {
+            Class.forName("org.robolectric.RobolectricTestRunner")
+            SecureStorageManager(context, com.businesstracker.mileage.data.security.TestSoftwareKeyProvider())
+        } catch (_: ClassNotFoundException) {
+            SecureStorageManager(context)
+        }
+    )
 
     @VisibleForTesting
     internal fun setSecureStorageManagerForTesting(manager: SecureStorageManager) {

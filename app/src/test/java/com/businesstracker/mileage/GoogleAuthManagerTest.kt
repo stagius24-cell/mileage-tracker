@@ -29,10 +29,10 @@ class GoogleAuthManagerTest {
     @Before
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
-        preferencesManager = TrackingPreferencesManager(context)
         val keyProvider = TestSoftwareKeyProvider()
         secureStorageManager = SecureStorageManager(context, keyProvider)
         secureStorageManager.clearAllCredentials()
+        preferencesManager = TrackingPreferencesManager(context, secureStorageManager)
         googleAuthManager = GoogleAuthManager(context, secureStorageManager, preferencesManager)
     }
 

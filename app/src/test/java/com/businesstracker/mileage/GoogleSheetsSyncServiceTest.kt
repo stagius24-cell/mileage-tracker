@@ -116,10 +116,10 @@ class GoogleSheetsSyncServiceTest {
         tripsList.clear()
 
         context = RuntimeEnvironment.getApplication()
-        preferencesManager = TrackingPreferencesManager(context)
         val testKeyProvider = com.businesstracker.mileage.data.security.TestSoftwareKeyProvider()
         secureStorageManager = SecureStorageManager(context, testKeyProvider)
         secureStorageManager.clearAllCredentials()
+        preferencesManager = TrackingPreferencesManager(context, secureStorageManager)
     }
 
     private suspend fun configureSheetsApi(sheetId: String = "test_sheet_123", token: String = "test_valid_token") {

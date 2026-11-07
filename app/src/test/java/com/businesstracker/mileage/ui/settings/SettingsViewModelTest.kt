@@ -55,7 +55,7 @@ class SettingsViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
 
     @Before
-    fun setUp() = runTest(testDispatcher) {
+    fun setUp() {
         Dispatchers.setMain(testDispatcher)
         context = RuntimeEnvironment.getApplication()
         database = Room.inMemoryDatabaseBuilder(context, ExpenseTrackerDatabase::class.java)
@@ -79,10 +79,6 @@ class SettingsViewModelTest {
         )
 
         LocationTrackingService.resetGuardForTesting()
-
-        // Prime Room and DataStore flows
-        preferencesManager.isAutoTrackingEnabled.first()
-        database.tripDao().getAllTrips().first()
     }
 
     @After
