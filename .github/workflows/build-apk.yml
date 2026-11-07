@@ -36,8 +36,20 @@ jobs:
           gradle wrapper
           chmod +x gradlew
 
-      - name: Inspect Debug Signing Fingerprint
+      - name: Ensure Deterministic Debug Keystore
         run: |
+          mkdir -p app/keystore
+          if [ -f app/keystore/debug.keystore.base64 ]; then
+            base64 -d app/keystore/debug.keystore.base64 > app/keystore/debug.keystore
+          elif [ ! -s app/keystore/debug.keystore ] || ! keytool -list -keystore app/keystore/debug.keystore -storepass android -alias androiddebugkey >/dev/null 2>&1; then
+            echo "Generating permanent debug keystore via keytool"
+            rm -f app/keystore/debug.keystore
+            keytool -genkey -v -keystore app/keystore/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+            echo "=== KEYSTORE BASE64 START ==="
+            base64 -w 0 app/keystore/debug.keystore
+            echo ""
+            echo "=== KEYSTORE BASE64 END ==="
+          fi
           keytool -list -v -keystore app/keystore/debug.keystore -storepass android -alias androiddebugkey
 
       - name: Run Unit Tests & Assemble Debug APK
