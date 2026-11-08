@@ -28,6 +28,16 @@ data class VehicleAnchor(
     val timestamp: Long
 )
 
+data class StationaryEvidence(
+    val tripId: String,
+    val latitude: Double,
+    val longitude: Double,
+    val elapsedMillis: Long,
+    val bootCount: Int
+)
+
+data class VehicleEnterEvidence(val tripId: String, val elapsedMillis: Long, val bootCount: Int)
+
 @Singleton
 class TrackingPreferencesManager @Inject constructor(
     @ApplicationContext private val context: Context
@@ -46,6 +56,14 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_VEHICLE_BLUETOOTH_NAME = stringPreferencesKey("vehicle_bluetooth_name")
         private val KEY_BLUETOOTH_DISCONNECT_PENDING = booleanPreferencesKey("bluetooth_disconnect_pending")
         private val KEY_APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
+        private val KEY_STATIONARY_TRIP_ID = stringPreferencesKey("stationary_trip_id")
+        private val KEY_STATIONARY_LAT = doublePreferencesKey("stationary_lat")
+        private val KEY_STATIONARY_LON = doublePreferencesKey("stationary_lon")
+        private val KEY_STATIONARY_ELAPSED = longPreferencesKey("stationary_elapsed")
+        private val KEY_STATIONARY_BOOT = longPreferencesKey("stationary_boot")
+        private val KEY_VEHICLE_ENTER_TRIP = stringPreferencesKey("vehicle_enter_trip")
+        private val KEY_VEHICLE_ENTER_ELAPSED = longPreferencesKey("vehicle_enter_elapsed")
+        private val KEY_VEHICLE_ENTER_BOOT = longPreferencesKey("vehicle_enter_boot")
 
         // Cloudflare D1 & Sync Configuration
         private val KEY_CF_ENDPOINT = stringPreferencesKey("cf_endpoint")
@@ -306,6 +324,52 @@ class TrackingPreferencesManager @Inject constructor(
     suspend fun isInVehicle(): Boolean {
         val prefs = context.dataStore.data.first()
         return prefs[KEY_IN_VEHICLE_STATE] ?: false
+    }
+
+    suspend fun saveStationaryEvidence(evidence: StationaryEvidence?) {
+        context.dataStore.edit { prefs ->
+            if (evidence == null) {
+                prefs.remove(KEY_STATIONARY_TRIP_ID)
+                prefs.remove(KEY_STATIONARY_LAT)
+                prefs.remove(KEY_STATIONARY_LON)
+                prefs.remove(KEY_STATIONARY_ELAPSED)
+                prefs.remove(KEY_STATIONARY_BOOT)
+            } else {
+                prefs[KEY_STATIONARY_TRIP_ID] = evidence.tripId
+                prefs[KEY_STATIONARY_LAT] = evidence.latitude
+                prefs[KEY_STATIONARY_LON] = evidence.longitude
+                prefs[KEY_STATIONARY_ELAPSED] = evidence.elapsedMillis
+                prefs[KEY_STATIONARY_BOOT] = evidence.bootCount.toLong()
+            }
+        }
+    }
+
+    suspend fun getStationaryEvidence(): StationaryEvidence? {
+        val prefs = context.dataStore.data.first()
+        return StationaryEvidence(
+            prefs[KEY_STATIONARY_TRIP_ID] ?: return null,
+            prefs[KEY_STATIONARY_LAT] ?: return null,
+            prefs[KEY_STATIONARY_LON] ?: return null,
+            prefs[KEY_STATIONARY_ELAPSED] ?: return null,
+            (prefs[KEY_STATIONARY_BOOT] ?: return null).toInt()
+        )
+    }
+
+    suspend fun recordVehicleEnter(tripId: String, elapsedMillis: Long, bootCount: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_VEHICLE_ENTER_TRIP] = tripId
+            prefs[KEY_VEHICLE_ENTER_ELAPSED] = elapsedMillis
+            prefs[KEY_VEHICLE_ENTER_BOOT] = bootCount.toLong()
+        }
+    }
+
+    suspend fun getVehicleEnterEvidence(): VehicleEnterEvidence? {
+        val prefs = context.dataStore.data.first()
+        return VehicleEnterEvidence(
+            prefs[KEY_VEHICLE_ENTER_TRIP] ?: return null,
+            prefs[KEY_VEHICLE_ENTER_ELAPSED] ?: return null,
+            (prefs[KEY_VEHICLE_ENTER_BOOT] ?: return null).toInt()
+        )
     }
 
     suspend fun setInVehicleState(isInVehicle: Boolean) {

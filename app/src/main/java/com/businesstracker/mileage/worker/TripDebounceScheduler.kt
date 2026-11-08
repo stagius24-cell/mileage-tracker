@@ -9,8 +9,8 @@ import javax.inject.Singleton
 open class TripDebounceScheduler @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    open fun scheduleForBluetoothDisconnect() {
-        TripDebounceWorker.scheduleBluetoothDebounce(context)
+    open fun scheduleForBluetoothDisconnect(tripId: String) {
+        TripDebounceWorker.scheduleBluetoothDebounce(context, tripId)
     }
 
     open fun cancel() {

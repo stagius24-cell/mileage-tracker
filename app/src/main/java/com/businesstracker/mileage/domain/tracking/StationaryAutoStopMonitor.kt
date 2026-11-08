@@ -17,11 +17,12 @@ class StationaryAutoStopMonitor(
     private val movingSpeedMetersPerSecond: Float = DEFAULT_MOVING_SPEED_METERS_PER_SECOND,
     private val maximumAccuracyMeters: Float = DEFAULT_MAXIMUM_ACCURACY_METERS
 ) {
+    data class Snapshot(val latitude: Double, val longitude: Double, val elapsedMillis: Long)
     companion object {
         const val DEFAULT_TIMEOUT_MILLIS = 10L * 60L * 1000L
         const val DEFAULT_MOVEMENT_RADIUS_METERS = 60.0
         const val DEFAULT_MOVING_SPEED_METERS_PER_SECOND = 2.5f
-        const val DEFAULT_MAXIMUM_ACCURACY_METERS = 75f
+        const val DEFAULT_MAXIMUM_ACCURACY_METERS = 35f
         private const val EARTH_RADIUS_METERS = 6_371_000.0
     }
 
@@ -29,22 +30,51 @@ class StationaryAutoStopMonitor(
     private var anchorLongitude: Double? = null
     private var lastMovementElapsedMillis: Long? = null
     private var stopRequested = false
+    private var hasStationaryEvidence = false
 
-    fun reset() {
+    @Synchronized fun reset() {
         anchorLatitude = null
         anchorLongitude = null
         lastMovementElapsedMillis = null
         stopRequested = false
+        hasStationaryEvidence = false
     }
 
-    fun record(
+    @Synchronized fun snapshot(): Snapshot? {
+        if (!hasStationaryEvidence) return null
+        val latitude = anchorLatitude ?: return null
+        val longitude = anchorLongitude ?: return null
+        val elapsed = lastMovementElapsedMillis ?: return null
+        return Snapshot(latitude, longitude, elapsed)
+    }
+
+    @Synchronized fun restore(snapshot: Snapshot, currentElapsedMillis: Long): Boolean {
+        if (snapshot.elapsedMillis < 0 || snapshot.elapsedMillis > currentElapsedMillis ||
+            !snapshot.latitude.isFinite() || !snapshot.longitude.isFinite() ||
+            snapshot.latitude !in -90.0..90.0 || snapshot.longitude !in -180.0..180.0
+        ) return false
+        anchorLatitude = snapshot.latitude
+        anchorLongitude = snapshot.longitude
+        lastMovementElapsedMillis = snapshot.elapsedMillis
+        stopRequested = false
+        hasStationaryEvidence = true
+        return true
+    }
+
+    @Synchronized fun record(
         latitude: Double,
         longitude: Double,
         speedMetersPerSecond: Float,
         accuracyMeters: Float,
-        elapsedRealtimeMillis: Long
+        elapsedRealtimeMillis: Long,
+        allowStop: Boolean = true
     ): Boolean {
-        if (stopRequested || elapsedRealtimeMillis < 0L || accuracyMeters > maximumAccuracyMeters) {
+        if (stopRequested || elapsedRealtimeMillis < 0L ||
+            !latitude.isFinite() || !longitude.isFinite() ||
+            latitude !in -90.0..90.0 || longitude !in -180.0..180.0 ||
+            !accuracyMeters.isFinite() || accuracyMeters < 0f ||
+            !speedMetersPerSecond.isFinite() || speedMetersPerSecond < 0f ||
+            accuracyMeters > maximumAccuracyMeters) {
             return false
         }
 
@@ -63,10 +93,13 @@ class StationaryAutoStopMonitor(
         val displacementMeters = distanceMeters(anchorLat, anchorLon, latitude, longitude)
         if (speedMetersPerSecond >= movingSpeedMetersPerSecond || displacementMeters >= movementRadiusMeters) {
             setAnchor(latitude, longitude, elapsedRealtimeMillis)
+            hasStationaryEvidence = false
             return false
         }
 
-        if (elapsedRealtimeMillis - previousMovementTime >= timeoutMillis) {
+        hasStationaryEvidence = true
+
+        if (allowStop && elapsedRealtimeMillis - previousMovementTime >= timeoutMillis) {
             stopRequested = true
             return true
         }

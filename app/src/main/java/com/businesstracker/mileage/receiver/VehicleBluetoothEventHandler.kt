@@ -31,7 +31,7 @@ class VehicleBluetoothEventHandler @Inject constructor(
         if (action == BluetoothDevice.ACTION_ACL_DISCONNECTED) {
             preferencesManager.setBluetoothDisconnectPending(true)
             preferencesManager.setInVehicleState(false)
-            debounceScheduler.scheduleForBluetoothDisconnect()
+            debounceScheduler.scheduleForBluetoothDisconnect(activeTrip.id)
         } else {
             preferencesManager.setBluetoothDisconnectPending(false)
             preferencesManager.setInVehicleState(true)

@@ -2,9 +2,9 @@ name: Build & Test Business Mileage Tracker APK
 
 on:
   push:
-    branches: [ "main", "feature/**", "fix/**" ]
+    branches: [ "main", "feature/**", "fix/**", "audit/**" ]
   pull_request:
-    branches: [ "main", "feature/**", "fix/**" ]
+    branches: [ "main", "feature/**", "fix/**", "audit/**" ]
   workflow_dispatch:
 
 concurrency:
@@ -31,9 +31,9 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Generate Gradle Wrapper
+      - name: Verify Gradle Wrapper
         run: |
-          gradle wrapper
+          echo '2db75c40782f5e8ba1fc278a5574bab070adccb2d21ca5a6e5ed840888448046  gradle/wrapper/gradle-wrapper.jar' | sha256sum -c -
           chmod +x gradlew
 
       # Restore stable run 96 debug signing key from GitHub Secrets
@@ -62,6 +62,9 @@ jobs:
 
       - name: Run Unit Tests & Assemble Debug APK
         run: ./gradlew testDebugUnitTest testReleaseUnitTest assembleDebug --stacktrace
+
+      - name: Repeat final validation
+        run: ./gradlew testDebugUnitTest testReleaseUnitTest assembleDebug --rerun-tasks --stacktrace
 
       - name: Upload Build Reports On Failure
         if: failure()
