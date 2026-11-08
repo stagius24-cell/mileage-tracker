@@ -46,6 +46,18 @@ class FilterGpsPointUseCaseTest {
         }
     }
 
+    @Test
+    fun stationaryAccuracyRadiusDoesNotAccumulateFalseMileage() {
+        val anchor = Waypoint(latitude = 37.3382, longitude = -121.8863,
+            accuracy = 25f, timestamp = 1_000L)
+        val drift = createLocation(37.33845, -121.8863, 11_000L,
+            accuracy = 25f, speedMps = 0f)
+        assertTrue(filterGpsPointUseCase.filter(drift, anchor) is FilterResult.Rejected)
+        val moving = createLocation(37.3392, -121.8863, 21_000L,
+            accuracy = 5f, speedMps = 10f)
+        assertTrue(filterGpsPointUseCase.filter(moving, anchor) is FilterResult.Accepted)
+    }
+
     // REGRESSION TEST 1: Same boot identifier and increasing elapsed time: normal elapsed-time calculation
     @Test
     fun sameBootIdentifier_increasingElapsedTime_calculatesNormalElapsedTimeDelta() {

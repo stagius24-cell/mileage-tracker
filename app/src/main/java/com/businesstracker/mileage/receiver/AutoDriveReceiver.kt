@@ -133,7 +133,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
                 startTrackingService(context, newTripId, action.suggestedBusiness)
             }
             is AutoDriveAction.ScheduleDebounce -> {
-                TripDebounceWorker.scheduleDebounce(context)
+                activeTripId?.let { TripDebounceWorker.scheduleDebounce(context, it) }
             }
             is AutoDriveAction.Ignore -> {
                 // Tracking disabled, permissions missing, or battery saver outside schedule
@@ -145,7 +145,8 @@ class AutoDriveReceiver : BroadcastReceiver() {
         preferencesManager.setInVehicleState(false)
 
         val isTracking = LocationTrackingService.serviceState.value.isTracking
-        val hasActiveTrip = preferencesManager.activeTripId.first() != null
+        val activeTripId = preferencesManager.activeTripId.first()
+        val hasActiveTrip = activeTripId != null
 
         val action = decisionEngine.evaluateVehicleExit(
             isServiceTracking = isTracking,
@@ -153,7 +154,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
         )
 
         if (action == AutoDriveAction.ScheduleDebounce) {
-            TripDebounceWorker.scheduleDebounce(context)
+            activeTripId?.let { TripDebounceWorker.scheduleDebounce(context, it) }
         }
     }
 

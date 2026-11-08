@@ -108,7 +108,7 @@ class VehicleBluetoothEventHandlerTest {
         var scheduled = false
         var cancelled = false
 
-        override fun scheduleForBluetoothDisconnect() {
+        override fun scheduleForBluetoothDisconnect(tripId: String) {
             scheduled = true
         }
 

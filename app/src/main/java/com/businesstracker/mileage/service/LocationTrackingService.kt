@@ -40,6 +40,8 @@ import com.google.android.gms.location.LocationCallback
 import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import com.businesstracker.mileage.data.preferences.StationaryEvidence
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -53,6 +55,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
@@ -68,6 +74,7 @@ class LocationTrackingService : Service() {
         const val ACTION_STOP = "com.businesstracker.mileage.ACTION_STOP"
 
         const val EXTRA_TRIP_ID = "EXTRA_TRIP_ID"
+        const val EXTRA_DEBOUNCE_TRIGGER = "EXTRA_DEBOUNCE_TRIGGER"
         const val EXTRA_TRACKING_METHOD = "EXTRA_TRACKING_METHOD"
         const val EXTRA_SUGGESTED_BUSINESS = "EXTRA_SUGGESTED_BUSINESS"
 
@@ -140,6 +147,9 @@ class LocationTrackingService : Service() {
     private var waypointCount: Int = 0
     private val stationaryAutoStopMonitor = StationaryAutoStopMonitor()
     private val stationaryAutoStopRequested = AtomicBoolean(false)
+    private var lastStationaryRecheckElapsed = 0L
+    private val evidenceWriteMutex = Mutex()
+    private val evidenceRevision = AtomicLong(0L)
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -168,6 +178,20 @@ class LocationTrackingService : Service() {
                 accuracyMeters = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE,
                 elapsedRealtimeMillis = elapsedMillis
             )
+        }
+
+        val evidence = stationaryAutoStopMonitor.snapshot()?.let {
+            StationaryEvidence(currentTripId, it.latitude, it.longitude, it.elapsedMillis,
+                safeBootCountProvider.getBootCount())
+        }
+        val tripAtCall = currentTripId
+        val revision = evidenceRevision.incrementAndGet()
+        serviceScope.launch(ioDispatcher) {
+            evidenceWriteMutex.withLock {
+                if (revision == evidenceRevision.get() && currentTripId == tripAtCall) {
+                    preferencesManager.saveStationaryEvidence(evidence)
+                }
+            }
         }
 
         if (shouldStop && stationaryAutoStopRequested.compareAndSet(false, true)) {
@@ -199,7 +223,22 @@ class LocationTrackingService : Service() {
             }
             ACTION_PAUSE -> pauseTracking()
             ACTION_RESUME -> resumeTracking()
-            ACTION_STOP -> stopTracking()
+            ACTION_STOP -> {
+                val expectedTripId = intent.getStringExtra(EXTRA_TRIP_ID)
+                val trigger = intent.getStringExtra(EXTRA_DEBOUNCE_TRIGGER)
+                if (trigger == null) {
+                    if (expectedTripId == null || expectedTripId == currentTripId) stopTracking()
+                } else if (expectedTripId != null) {
+                    serviceScope.launch(ioDispatcher) {
+                        if (currentTripId == expectedTripId && trackingMethod == TrackingMethod.AUTO_DETECTED &&
+                            !preferencesManager.isInVehicle() &&
+                            (trigger != TripDebounceWorker.TRIGGER_BLUETOOTH ||
+                                (preferencesManager.isBluetoothAutoStopActive() &&
+                                    preferencesManager.isBluetoothDisconnectPending()))
+                        ) stopTracking()
+                    }
+                }
+            }
             else -> recoverActiveTripSession()
         }
         return START_STICKY // System will recreate service if killed, enabling interruption recovery
@@ -336,6 +375,8 @@ class LocationTrackingService : Service() {
                         isDisplacementConfirmed = true
                     }
                 }
+
+                restoreStationaryEvidence()
 
                 // Initialize durable Room-backed GPS location queue
                 gpsLocationQueue?.stopConsumer()
@@ -556,6 +597,9 @@ class LocationTrackingService : Service() {
                     }
                     currentSpeedMph = 0.0
 
+                    if (isRecoveredSession) restoreStationaryEvidence()
+                    else preferencesManager.saveStationaryEvidence(null)
+
                     // Register location updates with FusedLocationProviderClient asynchronously
                     val updatesRegistered = startLocationUpdates()
                     if (isStopping.get()) {
@@ -726,9 +770,11 @@ class LocationTrackingService : Service() {
     private fun pauseTracking() {
         isPaused = true
         currentSpeedMph = 0.0
+        evidenceRevision.incrementAndGet()
         stationaryAutoStopMonitor.reset()
         stationaryAutoStopRequested.set(false)
         serviceScope.launch(ioDispatcher) {
+            preferencesManager.saveStationaryEvidence(null)
             activeTripRepository.setPaused(currentTripId, true)
             updateNotificationAndState(0.0)
         }
@@ -738,8 +784,10 @@ class LocationTrackingService : Service() {
         isPaused = false
         currentSpeedMph = 0.0
         stationaryAutoStopMonitor.reset()
+        evidenceRevision.incrementAndGet()
         stationaryAutoStopRequested.set(false)
         serviceScope.launch(ioDispatcher) {
+            preferencesManager.saveStationaryEvidence(null)
             activeTripRepository.setPaused(currentTripId, false)
             updateNotificationAndState(0.0)
         }
@@ -833,6 +881,8 @@ class LocationTrackingService : Service() {
             }
 
             _serviceState.value = TrackingServiceState(isTracking = false)
+            evidenceRevision.incrementAndGet()
+            preferencesManager.saveStationaryEvidence(null)
             currentTripId = ""
             totalDistanceMeters = 0.0
             waypointCount = 0
@@ -854,8 +904,55 @@ class LocationTrackingService : Service() {
                 delay(1000L)
                 if (!isPaused) {
                     updateNotificationAndState(currentSpeedMph)
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val evidence = stationaryAutoStopMonitor.snapshot()
+                    if (trackingMethod == TrackingMethod.AUTO_DETECTED && isDisplacementConfirmed &&
+                        evidence != null && now - evidence.elapsedMillis >= StationaryAutoStopMonitor.DEFAULT_TIMEOUT_MILLIS &&
+                        now - lastStationaryRecheckElapsed >= 60_000L && !stationaryAutoStopRequested.get()
+                    ) {
+                        lastStationaryRecheckElapsed = now
+                        serviceScope.launch(ioDispatcher) { recheckStationaryLocation() }
+                    }
                 }
             }
+        }
+    }
+
+    private suspend fun restoreStationaryEvidence() {
+        if (trackingMethod != TrackingMethod.AUTO_DETECTED || !isDisplacementConfirmed || isPaused) return
+        val evidence = preferencesManager.getStationaryEvidence() ?: return
+        if (evidence.tripId != currentTripId || evidence.bootCount <= 0 ||
+            evidence.bootCount != safeBootCountProvider.getBootCount()
+        ) return
+        stationaryAutoStopMonitor.restore(
+            StationaryAutoStopMonitor.Snapshot(evidence.latitude, evidence.longitude, evidence.elapsedMillis),
+            android.os.SystemClock.elapsedRealtime()
+        )
+    }
+
+    @SuppressLint("MissingPermission")
+    private suspend fun recheckStationaryLocation() {
+        if (isStopping.get() || isPaused || currentTripId.isBlank()) return
+        val cancellation = CancellationTokenSource()
+        val location = try {
+            withTimeoutOrNull(15_000L) {
+                fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellation.token).await()
+            }
+        } catch (_: SecurityException) {
+            null
+        } catch (_: Exception) {
+            null
+        } finally {
+            cancellation.cancel()
+        } ?: return
+        val ageMillis = android.os.SystemClock.elapsedRealtime() - location.elapsedRealtimeNanos / 1_000_000L
+        if (location.elapsedRealtimeNanos <= 0L || ageMillis !in 0L..30_000L) return
+        val evidence = stationaryAutoStopMonitor.snapshot() ?: return
+        if (location.elapsedRealtimeNanos / 1_000_000L - evidence.elapsedMillis <
+            StationaryAutoStopMonitor.DEFAULT_TIMEOUT_MILLIS) return
+        if (!isStopping.get() && !isPaused) {
+            gpsLocationQueue?.enqueueBatch(listOf(location))
+            evaluateStationaryAutoStop(listOf(location))
         }
     }
 

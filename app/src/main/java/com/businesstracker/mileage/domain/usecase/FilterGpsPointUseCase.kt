@@ -36,6 +36,13 @@ class FilterGpsPointUseCase @Inject constructor(
         lastAcceptedWaypoint: Waypoint?,
         currentBootCount: Int? = null
     ): FilterResult {
+        if (!newLocation.latitude.isFinite() || !newLocation.longitude.isFinite() ||
+            newLocation.latitude !in -90.0..90.0 || newLocation.longitude !in -180.0..180.0 ||
+            !newLocation.accuracy.isFinite() || newLocation.accuracy < 0f ||
+            !newLocation.speed.isFinite() || newLocation.speed < 0f
+        ) {
+            return FilterResult.Rejected(FilterResult.RejectionReason.POOR_ACCURACY, "Invalid GPS fix")
+        }
         // 1. Reject GPS points with poor accuracy > 35 meters
         if (newLocation.accuracy > MAX_ACCURACY_THRESHOLD_METERS) {
             return FilterResult.Rejected(
@@ -79,10 +86,14 @@ class FilterGpsPointUseCase @Inject constructor(
         val deltaDistance = distanceResults[0].toDouble()
 
         // 2. Ignore movements < 15 meters to prevent stationary jitter drift
-        if (deltaDistance < MIN_DISPLACEMENT_THRESHOLD_METERS) {
+        val stationaryNoiseThreshold = if (newLocation.hasSpeed() && newLocation.speed < 2.5f) {
+            maxOf(MIN_DISPLACEMENT_THRESHOLD_METERS,
+                (newLocation.accuracy + lastAcceptedWaypoint.accuracy).toDouble())
+        } else MIN_DISPLACEMENT_THRESHOLD_METERS
+        if (deltaDistance < stationaryNoiseThreshold) {
             return FilterResult.Rejected(
                 FilterResult.RejectionReason.STATIONARY_JITTER,
-                "Displacement ${String.format("%.1f", deltaDistance)}m is below minimum stationary threshold (${MIN_DISPLACEMENT_THRESHOLD_METERS}m)"
+                "Displacement ${String.format("%.1f", deltaDistance)}m is below noise threshold (${stationaryNoiseThreshold}m)"
             )
         }
 

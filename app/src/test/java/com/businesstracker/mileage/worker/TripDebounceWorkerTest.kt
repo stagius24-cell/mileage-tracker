@@ -94,9 +94,11 @@ class TripDebounceWorkerTest {
         LocationTrackingService.resetGuardForTesting()
     }
 
-    private fun createWorker(inputData: Data = Data.EMPTY): TripDebounceWorker {
+    private fun createWorker(inputData: Data = Data.EMPTY, tripId: String? = null): TripDebounceWorker {
+        val data = if (tripId == null) inputData else Data.Builder()
+            .putAll(inputData).putString(TripDebounceWorker.INPUT_TRIP_ID, tripId).build()
         return TestListenableWorkerBuilder<TripDebounceWorker>(context)
-            .setInputData(inputData)
+            .setInputData(data)
             .setWorkerFactory(object : androidx.work.WorkerFactory() {
                 override fun createWorker(
                     appContext: Context,
@@ -138,7 +140,7 @@ class TripDebounceWorkerTest {
         val worker = createWorker(
             Data.Builder()
                 .putString(TripDebounceWorker.INPUT_TRIGGER, TripDebounceWorker.TRIGGER_BLUETOOTH)
-                .build()
+                .build(), tripId
         )
 
         assertEquals(ListenableWorker.Result.success(), worker.doWork())
@@ -157,7 +159,7 @@ class TripDebounceWorkerTest {
 
         LocationTrackingService.setDrainingForTesting(true)
 
-        val worker = createWorker()
+        val worker = createWorker(tripId = tripId)
         val result = worker.doWork()
 
         assertEquals(ListenableWorker.Result.retry(), result)
@@ -238,7 +240,7 @@ class TripDebounceWorkerTest {
         preferencesManager.setInVehicleState(false)
         LocationTrackingService.resetGuardForTesting()
 
-        val worker = createWorker()
+        val worker = createWorker(tripId = tripId)
         val result = worker.doWork()
 
         assertEquals(ListenableWorker.Result.success(), result)
@@ -359,11 +361,30 @@ class TripDebounceWorkerTest {
         preferencesManager.setActiveTripId(tripId)
         preferencesManager.setInVehicleState(true)
 
-        val worker = createWorker()
+        val worker = createWorker(tripId = tripId)
         val result = worker.doWork()
 
         assertEquals(ListenableWorker.Result.success(), result)
         assertNotNull(activeTripRepository.getActiveTrip())
         assertNull(tripRepository.getTripById(tripId))
+    }
+
+    @Test
+    fun staleWorkerForPreviousTripCannotStopCurrentTrip() = runBlocking {
+        activeTripRepository.createActiveTrip("new-trip", 37.3382, -121.8863, "AUTO_DETECTED", "MySucculentCorner")
+        preferencesManager.setActiveTripId("new-trip")
+        preferencesManager.setInVehicleState(false)
+        assertEquals(ListenableWorker.Result.success(), createWorker(tripId = "old-trip").doWork())
+        assertEquals("new-trip", activeTripRepository.getActiveTrip()?.id)
+        assertNull(tripRepository.getTripById("new-trip"))
+    }
+
+    @Test
+    fun debounceWorkerNeverStopsManualTrip() = runBlocking {
+        activeTripRepository.createActiveTrip("manual-trip", 37.3382, -121.8863, "MANUAL_GPS", "MySucculentCorner")
+        preferencesManager.setActiveTripId("manual-trip")
+        preferencesManager.setInVehicleState(false)
+        assertEquals(ListenableWorker.Result.success(), createWorker(tripId = "manual-trip").doWork())
+        assertNotNull(activeTripRepository.getActiveTrip())
     }
 }
