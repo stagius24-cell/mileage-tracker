@@ -212,7 +212,7 @@ private fun HistoryControls(
                 onValueChange = onSearchChange,
                 modifier = Modifier
                     .weight(1f)
-                    .height(48.dp),
+                    .height(42.dp),
                 placeholder = { Text("Search trips", maxLines = 1) },
                 leadingIcon = {
                     Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(19.dp))
@@ -323,7 +323,7 @@ private fun SortMenu(selected: SortOrder, onSelected: (SortOrder) -> Unit) {
     Box {
         Surface(
             modifier = Modifier
-                .height(48.dp)
+                .height(42.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .clickable { expanded = true },
             shape = RoundedCornerShape(12.dp),
@@ -521,7 +521,7 @@ private fun TripHistoryItem(
                 )
             }
 
-            if (trip.purpose.isNotBlank()) {
+            if (isBusiness && trip.purpose.isNotBlank()) {
                 Text(
                     text = trip.purpose,
                     style = MaterialTheme.typography.bodyMedium,
@@ -532,39 +532,54 @@ private fun TripHistoryItem(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    Icons.Default.LocationOn,
-                    contentDescription = null,
-                    tint = SlateNeutral,
-                    modifier = Modifier.size(15.dp)
-                )
-                Spacer(Modifier.width(5.dp))
-                Text(
-                    text = "$start  →  $end",
+                Column(
                     modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                if (isBusiness) {
-                    Text(
-                        text = formatCurrency(trip.calculatedDeduction),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = SucculentPrimary
-                    )
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    HistoryLocationLine(address = start, tint = SucculentPrimary)
+                    HistoryLocationLine(address = end, tint = SpeedRed)
                 }
-                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        Icons.Default.DeleteOutline,
-                        contentDescription = "Delete trip",
-                        tint = SpeedRed,
-                        modifier = Modifier.size(18.dp)
-                    )
+                Column(horizontalAlignment = Alignment.End) {
+                    if (isBusiness) {
+                        Text(
+                            text = formatCurrency(trip.calculatedDeduction),
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = SucculentPrimary
+                        )
+                    }
+                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                        Icon(
+                            Icons.Default.DeleteOutline,
+                            contentDescription = "Delete trip",
+                            tint = SpeedRed,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun HistoryLocationLine(address: String, tint: androidx.compose.ui.graphics.Color) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+            Icons.Default.LocationOn,
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(14.dp)
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(
+            text = address,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
