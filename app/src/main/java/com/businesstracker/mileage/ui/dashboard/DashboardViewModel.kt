@@ -165,7 +165,8 @@ class DashboardViewModel @Inject constructor(
         val customStart: String,
         val customEnd: String,
         val processingIds: Set<String>,
-        val lastClassified: TripEntity?
+        val lastClassified: TripEntity?,
+        val customPurposes: List<String> = emptyList()
     )
 
     private val tripFilterFlow = combine(

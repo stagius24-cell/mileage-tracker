@@ -196,6 +196,7 @@ class TripHistoryViewModel @Inject constructor(
         val startDate: String,
         val endDate: String,
         val sortOrder: SortOrder,
-        val selectedTrip: TripEntity?
+        val selectedTrip: TripEntity?,
+        val customPurposes: List<String> = emptyList()
     )
 }

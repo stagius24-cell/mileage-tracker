@@ -68,7 +68,8 @@ data class VehicleBluetoothDevice(
 private data class GeneralPrefs(
     val autoTrackingEnabled: Boolean,
     val defaultVehicle: String,
-    val themeMode: AppThemeMode
+    val themeMode: AppThemeMode,
+    val customPurposes: List<String> = emptyList()
 )
 
 private data class BluetoothPrefs(
