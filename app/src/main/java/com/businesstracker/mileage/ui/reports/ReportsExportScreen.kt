@@ -181,76 +181,11 @@ fun ReportsExportScreen(
         item {
             YearlyStatsChartCard(
                 year = state.selectedYear,
-                ytdLogged = state.ytdLoggedDeduction,
-                ytdPotential = state.ytdPotentialDeduction,
-                ytdMiles = state.ytdBusinessMiles,
+                ytdLogged = state.totalDeduction,
+                totalMiles = state.totalMiles,
+                drivesCount = state.totalTrips,
                 monthlySummaries = state.monthlySummaries
             )
-        }
-
-        // Comprehensive Metrics Summary Card
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    Text(
-                        text = "Filtered Summary Totals",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        Column {
-                            Text("DEDUCTION", style = MaterialTheme.typography.labelSmall, color = SlateNeutral, fontWeight = FontWeight.Bold)
-                            Text(
-                                text = "\$${String.format(Locale.US, "%,.2f", state.totalDeduction)}",
-                                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Black, color = SucculentPrimary)
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("TOTAL MILES", style = MaterialTheme.typography.labelSmall, color = SlateNeutral, fontWeight = FontWeight.Bold)
-                            Text(
-                                text = "${String.format(Locale.US, "%.1f", state.totalMiles)} mi",
-                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold)
-                            )
-                        }
-                    }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column {
-                            Text("Business Miles", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                            Text("${String.format(Locale.US, "%.1f", state.businessMiles)} mi", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        }
-                        Column {
-                            Text("Personal Miles", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                            Text("${String.format(Locale.US, "%.1f", state.personalMiles)} mi", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        }
-                        Column {
-                            Text("Avg Distance", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                            Text("${String.format(Locale.US, "%.1f", state.averageDistance)} mi", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        }
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("Drives", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                            Text("${state.totalTrips}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                }
-            }
         }
 
         // Entity Breakdown Card
@@ -347,8 +282,8 @@ private fun CompactFilterMenu(
 private fun YearlyStatsChartCard(
     year: String,
     ytdLogged: Double,
-    ytdPotential: Double,
-    ytdMiles: Double,
+    totalMiles: Double,
+    drivesCount: Int,
     monthlySummaries: List<MonthSummary>,
     modifier: Modifier = Modifier
 ) {
@@ -363,56 +298,64 @@ private fun YearlyStatsChartCard(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Card title block: mileage sits below the title to avoid narrow-screen overlap.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = SucculentPrimary.copy(alpha = 0.15f),
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.QueryStats,
-                        contentDescription = null,
-                        tint = SucculentPrimary,
-                        modifier = Modifier.padding(6.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "$year YTD Performance",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "${String.format(Locale.US, "%.0f", ytdMiles)} mi logged",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = SucculentPrimary,
-                        fontWeight = FontWeight.Black
-                    )
-                }
-            }
-
-            // Financial comparison: Logged vs Potential
+            // Header with year and drives count
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = CircleShape,
+                        color = SucculentPrimary.copy(alpha = 0.15f),
+                        modifier = Modifier.size(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QueryStats,
+                            contentDescription = null,
+                            tint = SucculentPrimary,
+                            modifier = Modifier.padding(6.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "$year Performance",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                ) {
+                    Text(
+                        text = "$drivesCount drives",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SlateNeutral,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            // Financial & Mileage Metrics
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom
+            ) {
                 Column {
                     Text(
                         text = "\$${String.format(Locale.US, "%,.2f", ytdLogged)}",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontSize = 28.sp,
+                        style = MaterialTheme.typography.headlineLarge.copy(
+                            fontSize = 32.sp,
                             fontWeight = FontWeight.Black
                         ),
                         color = SucculentPrimary
                     )
                     Text(
-                        text = "LOGGED DEDUCTION",
+                        text = "TOTAL DEDUCTION",
                         style = MaterialTheme.typography.labelSmall.copy(
                             letterSpacing = 1.sp,
                             fontWeight = FontWeight.Bold
@@ -423,15 +366,15 @@ private fun YearlyStatsChartCard(
 
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        text = "\$${String.format(Locale.US, "%,.2f", ytdPotential)}",
+                        text = "${String.format(Locale.US, "%.1f", totalMiles)} mi",
                         style = MaterialTheme.typography.headlineMedium.copy(
-                            fontSize = 28.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold
                         ),
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "TOTAL POTENTIAL",
+                        text = "TOTAL MILES",
                         style = MaterialTheme.typography.labelSmall.copy(
                             letterSpacing = 1.sp,
                             fontWeight = FontWeight.Bold
