@@ -139,7 +139,7 @@ internal fun createRouteMap(context: Context, data: RouteMapData, allowNetwork: 
             }
             false
         }
-        zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
+        zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
         minZoomLevel = 2.0
         maxZoomLevel = 19.0
         contentDescription = "Trip street map with recorded route and start and end markers"
@@ -147,7 +147,7 @@ internal fun createRouteMap(context: Context, data: RouteMapData, allowNetwork: 
         if (points.size > 1) overlays.add(Polyline(this).apply {
             setPoints(points)
             outlinePaint.color = SucculentPrimary.toArgb()
-            outlinePaint.strokeWidth = 3f * resources.displayMetrics.density
+            outlinePaint.strokeWidth = 2.5f * resources.displayMetrics.density
             infoWindow = null
         })
         data.endpoints.forEachIndexed { index, point ->
@@ -159,14 +159,14 @@ internal fun createRouteMap(context: Context, data: RouteMapData, allowNetwork: 
                     shape = GradientDrawable.OVAL
                     setColor(if (index == 0) SucculentPrimary.toArgb() else AndroidColor.RED)
                     setStroke(2, AndroidColor.WHITE)
-                    setSize((16 * resources.displayMetrics.density).toInt(), (16 * resources.displayMetrics.density).toInt())
+                    setSize((14 * resources.displayMetrics.density).toInt(), (14 * resources.displayMetrics.density).toInt())
                 }
                 infoWindow = null
             })
         }
         val boundsPoints = (data.recordedPoints + data.endpoints).map { GeoPoint(it.latitude, it.longitude) }
         if (boundsPoints.isNotEmpty()) addOnFirstLayoutListener { _, _, _, _, _ ->
-            zoomToBoundingBox(BoundingBox.fromGeoPointsSafe(boundsPoints), false, (28 * resources.displayMetrics.density).toInt(), 17.0, null)
+            zoomToBoundingBox(BoundingBox.fromGeoPointsSafe(boundsPoints), false, (24 * resources.displayMetrics.density).toInt(), 16.0, null)
         }
     }
 }

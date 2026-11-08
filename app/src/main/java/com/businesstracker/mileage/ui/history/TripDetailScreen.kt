@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,7 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Edit
@@ -40,11 +39,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -115,127 +112,46 @@ fun TripDetailScreen(
     val isBusiness = trip.classification == TripClassification.BUSINESS.value
     val classificationColor = if (isBusiness) SucculentPrimary else SlateNeutral
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Trip Details", fontWeight = FontWeight.Bold) },
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
-        },
-        modifier = modifier.fillMaxSize()
-    ) { innerPadding ->
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .verticalScroll(rememberScrollState())
+    ) {
+        // The route map leads the screen, with a close action layered above it.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(260.dp)
+        ) {
+            TripRouteMap(trip = trip, modifier = Modifier.fillMaxSize())
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(12.dp)
+                    .size(42.dp),
+                shape = CircleShape,
+                color = SucculentPrimary,
+                shadowElevation = 4.dp
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Close trip details",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
+
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background)
-                .verticalScroll(rememberScrollState())
+                .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // One-line summary inspired by the compact trip receipt layout.
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(vertical = 6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = dateFormatted.uppercase(Locale.getDefault()),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = if (trip.startTime > 0) SimpleDateFormat("yyyy", Locale.getDefault()).format(Date(trip.startTime)) else "",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = SlateNeutral,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    Surface(
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
-                                style = MaterialTheme.typography.headlineLarge,
-                                fontWeight = FontWeight.Black,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                "MILES",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = SlateNeutral,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(vertical = 6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center
-                    ) {
-                        Text(
-                            text = "\$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = SucculentPrimary,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            "POTENTIAL",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = SlateNeutral,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
-            }
-
-            // Route Map Card: Only renders actual coordinates, no fabricated curves
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(6.dp)
-                ) {
-                    TripRouteMap(trip = trip, modifier = Modifier.height(200.dp))
-                }
-            }
-
-            // Route/status tabs with edit and delete actions on the far right.
+            // Route/more-info tabs with edit and delete actions on the far right.
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -276,6 +192,8 @@ fun TripDetailScreen(
             ) {
                 if (selectedDetailTab == 0) {
                     RouteDetailsTab(
+                        trip = trip,
+                        date = dateFormatted,
                         startAddress = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
                             ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
                             else "Approximate start location unavailable",
@@ -293,7 +211,6 @@ fun TripDetailScreen(
                     )
                 }
             }
-
         }
     }
 
@@ -493,6 +410,8 @@ private fun TripDetailTabButton(
 
 @Composable
 private fun RouteDetailsTab(
+    trip: TripEntity,
+    date: String,
     startAddress: String,
     endAddress: String,
     startTime: String,
@@ -504,6 +423,52 @@ private fun RouteDetailsTab(
             .padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    date.uppercase(Locale.getDefault()),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    if (trip.startTime > 0) SimpleDateFormat("yyyy", Locale.getDefault()).format(Date(trip.startTime)) else "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SlateNeutral,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Black
+                )
+                Text("MILES", style = MaterialTheme.typography.labelSmall, color = SlateNeutral, fontWeight = FontWeight.Bold)
+            }
+            Column(
+                modifier = Modifier.weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    "\$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = SucculentPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+                Text("POTENTIAL", style = MaterialTheme.typography.labelSmall, color = SlateNeutral, fontWeight = FontWeight.Bold)
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         DestinationRow(
             label = "Start",
             address = startAddress,
