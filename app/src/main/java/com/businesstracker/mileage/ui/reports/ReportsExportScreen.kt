@@ -22,8 +22,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.BusinessCenter
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.foundation.lazy.LazyRow
@@ -186,47 +184,6 @@ fun ReportsExportScreen(
                 drivesCount = state.totalTrips,
                 monthlySummaries = state.monthlySummaries
             )
-        }
-
-        // Entity Breakdown Card
-        if (state.entityBreakdown.isNotEmpty()) {
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Text("Business Breakdown", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        state.entityBreakdown.forEach { item ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = if (item.entityName == "MySucculentCorner") Icons.Default.BusinessCenter else Icons.Default.Person,
-                                        contentDescription = null,
-                                        tint = if (item.entityName == "MySucculentCorner") SucculentPrimary else SlateNeutral,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(if (item.entityName == "MySucculentCorner") "Business" else item.entityName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                                }
-                                Text(
-                                    text = "${String.format(Locale.US, "%.1f", item.totalMiles)} mi  (\$${String.format(Locale.US, "%.2f", item.totalDeduction)})",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         item {
