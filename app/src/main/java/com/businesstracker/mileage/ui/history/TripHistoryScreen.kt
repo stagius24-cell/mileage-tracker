@@ -532,7 +532,8 @@ private fun TripHistoryItem(
         "${timeFormatter.format(Date(trip.startTime))} – ${timeFormatter.format(Date(trip.endTime))}"
     }
     val isBusiness = trip.classification == "BUSINESS"
-    val classificationColor = if (isBusiness) SucculentPrimary else SlateNeutral
+    val badgeIcon = if (isBusiness) Icons.Default.BusinessCenter else Icons.Default.Person
+    val badgeColor = if (isBusiness) SucculentPrimary else Color(0xFF2563EB)
     val start = trip.startAddress ?: "Recorded start location"
     val end = trip.endAddress ?: "Recorded destination"
 
@@ -555,15 +556,19 @@ private fun TripHistoryItem(
             ) {
                 Surface(
                     shape = RoundedCornerShape(7.dp),
-                    color = classificationColor.copy(alpha = 0.15f)
+                    color = badgeColor.copy(alpha = 0.15f)
                 ) {
-                    Text(
-                        text = if (isBusiness) trip.businessEntity else trip.classification.lowercase().replaceFirstChar { it.titlecase() },
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = classificationColor
-                    )
+                    Box(
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = badgeIcon,
+                            contentDescription = if (isBusiness) "Business" else "Personal",
+                            tint = badgeColor,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
                 Spacer(Modifier.width(6.dp))
                 Icon(
