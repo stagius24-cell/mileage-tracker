@@ -151,6 +151,7 @@ class LocationTrackingService : Service() {
     private var lastStationaryRecheckElapsed = 0L
     private val evidenceWriteMutex = Mutex()
     private val evidenceRevision = AtomicLong(0L)
+    @Volatile private var lastPersistedStationaryEvidence: StationaryEvidence? = null
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -192,8 +193,10 @@ class LocationTrackingService : Service() {
         val revision = evidenceRevision.incrementAndGet()
         serviceScope.launch(ioDispatcher) {
             evidenceWriteMutex.withLock {
-                if (revision == evidenceRevision.get() && currentTripId == tripAtCall) {
+                if (revision == evidenceRevision.get() && currentTripId == tripAtCall &&
+                    evidence != lastPersistedStationaryEvidence) {
                     preferencesManager.saveStationaryEvidence(evidence)
+                    lastPersistedStationaryEvidence = evidence
                 }
             }
         }
@@ -205,6 +208,7 @@ class LocationTrackingService : Service() {
                     evidenceRevision.incrementAndGet()
                     stationaryAutoStopMonitor.reset()
                     preferencesManager.saveStationaryEvidence(null)
+                    lastPersistedStationaryEvidence = null
                     stationaryAutoStopRequested.set(false)
                     return@launch
                 }
@@ -610,7 +614,10 @@ class LocationTrackingService : Service() {
                     currentSpeedMph = 0.0
 
                     if (isRecoveredSession) restoreStationaryEvidence()
-                    else preferencesManager.saveStationaryEvidence(null)
+                    else {
+                        preferencesManager.saveStationaryEvidence(null)
+                        lastPersistedStationaryEvidence = null
+                    }
 
                     // Register location updates with FusedLocationProviderClient asynchronously
                     val updatesRegistered = startLocationUpdates()
@@ -787,6 +794,7 @@ class LocationTrackingService : Service() {
         stationaryAutoStopRequested.set(false)
         serviceScope.launch(ioDispatcher) {
             preferencesManager.saveStationaryEvidence(null)
+            lastPersistedStationaryEvidence = null
             activeTripRepository.setPaused(currentTripId, true)
             updateNotificationAndState(0.0)
         }
@@ -800,6 +808,7 @@ class LocationTrackingService : Service() {
         stationaryAutoStopRequested.set(false)
         serviceScope.launch(ioDispatcher) {
             preferencesManager.saveStationaryEvidence(null)
+            lastPersistedStationaryEvidence = null
             activeTripRepository.setPaused(currentTripId, false)
             updateNotificationAndState(0.0)
         }
@@ -895,6 +904,7 @@ class LocationTrackingService : Service() {
             _serviceState.value = TrackingServiceState(isTracking = false)
             evidenceRevision.incrementAndGet()
             preferencesManager.saveStationaryEvidence(null)
+            lastPersistedStationaryEvidence = null
             currentTripId = ""
             totalDistanceMeters = 0.0
             waypointCount = 0
@@ -940,10 +950,10 @@ class LocationTrackingService : Service() {
                 evidence.elapsedMillis, now)) return
         if (hasLaterVehicleEnter(StationaryAutoStopMonitor.Snapshot(
                 evidence.latitude, evidence.longitude, evidence.elapsedMillis))) return
-        stationaryAutoStopMonitor.restore(
+        if (stationaryAutoStopMonitor.restore(
             StationaryAutoStopMonitor.Snapshot(evidence.latitude, evidence.longitude, evidence.elapsedMillis),
             now
-        )
+        )) lastPersistedStationaryEvidence = evidence
     }
 
     private suspend fun hasLaterVehicleEnter(snapshot: StationaryAutoStopMonitor.Snapshot): Boolean {
