@@ -1,18 +1,26 @@
 package com.businesstracker.mileage.ui.history
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -54,7 +62,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -129,9 +139,11 @@ fun TripDetailScreen(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(12.dp)
-                    .size(42.dp),
+                    .size(50.dp)
+                    .graphicsLayer { alpha = 0.7f }
+                    .blur(1.dp),
                 shape = CircleShape,
-                color = SucculentPrimary,
+                color = SucculentPrimary.copy(alpha = 0.7f),
                 shadowElevation = 4.dp
             ) {
                 IconButton(onClick = onBack) {
@@ -151,7 +163,7 @@ fun TripDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Route/more-info tabs with edit and delete actions on the far right.
+            // Route and more-info tabs animate like the bottom navigation.
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -166,22 +178,19 @@ fun TripDetailScreen(
                         icon = Icons.Default.LocationOn,
                         selected = selectedDetailTab == 0,
                         onClick = { selectedDetailTab = 0 },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        showActions = false
                     )
                     TripDetailTabButton(
                         label = "More info",
                         icon = Icons.Default.Info,
                         selected = selectedDetailTab == 1,
                         onClick = { selectedDetailTab = 1 },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
+                        showActions = true,
+                        onEdit = { showEditSheet = true },
+                        onDelete = { showDeleteConfirmation = true }
                     )
-                    Box(modifier = Modifier.width(1.dp).height(36.dp).background(MaterialTheme.colorScheme.outlineVariant))
-                    IconButton(onClick = { showEditSheet = true }) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit trip")
-                    }
-                    IconButton(onClick = { showDeleteConfirmation = true }) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = "Delete trip", tint = SpeedRed)
-                    }
                 }
             }
 
@@ -380,31 +389,69 @@ private fun TripDetailTabButton(
     icon: ImageVector,
     selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    showActions: Boolean = false,
+    onEdit: () -> Unit = {},
+    onDelete: () -> Unit = {}
 ) {
-    Column(
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .background(
-                color = if (selected) SucculentPrimary.copy(alpha = 0.12f) else Color.Transparent,
-                shape = RoundedCornerShape(10.dp)
-            )
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(20.dp),
-            tint = if (selected) SucculentPrimary else SlateNeutral
+    val selectedColor by animateColorAsState(
+        targetValue = if (selected) SucculentPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+        animationSpec = tween(650, easing = FastOutSlowInEasing),
+        label = "trip_detail_color_$label"
+    )
+    val iconScale by animateFloatAsState(
+        targetValue = if (selected) 1.12f else 1f,
+        animationSpec = tween(650, easing = FastOutSlowInEasing),
+        label = "trip_detail_scale_$label"
+    )
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val indicatorOffset by animateDpAsState(
+            targetValue = if (selected) 0.dp else maxWidth,
+            animationSpec = tween(650, easing = FastOutSlowInEasing),
+            label = "trip_detail_indicator_$label"
         )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = if (selected) SucculentPrimary else SlateNeutral
+        Box(
+            modifier = Modifier
+                .offset(x = indicatorOffset)
+                .fillMaxWidth()
+                .height(64.dp)
+                .padding(horizontal = 5.dp, vertical = 5.dp)
+                .background(
+                    color = SucculentPrimary.copy(alpha = if (selected) 0.16f else 0f),
+                    shape = RoundedCornerShape(percent = 50)
+                )
         )
+        Row(
+            modifier = Modifier.fillMaxWidth().height(64.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(if (showActions) 0.72f else 1f)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(percent = 50))
+                    .clickable(onClick = onClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp).graphicsLayer(scaleX = iconScale, scaleY = iconScale),
+                        tint = selectedColor
+                    )
+                    Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = selectedColor)
+                }
+            }
+            if (showActions) {
+                IconButton(onClick = onEdit, modifier = Modifier.size(38.dp)) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit trip", tint = selectedColor, modifier = Modifier.size(20.dp))
+                }
+                IconButton(onClick = onDelete, modifier = Modifier.size(38.dp)) {
+                    Icon(Icons.Default.DeleteOutline, contentDescription = "Delete trip", tint = SpeedRed, modifier = Modifier.size(20.dp))
+                }
+            }
+        }
     }
 }
 
