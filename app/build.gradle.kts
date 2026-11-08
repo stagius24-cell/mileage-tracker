@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 54
-        versionName = "1.0.53"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix Google Sheets sync feedback with instant confirmation banner, update timestamp on zero pending trips, and fix spreadsheet ID editing with quick-clear button.\"")
+        versionCode = 55
+        versionName = "1.0.54"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Redesigned Dashboard review card to 3-column layout (Date, Miles, Potential), removed car icon, moved start/destination timestamps to bottom far-right, and improved Google Sheets sync feedback with quick-clear ID.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

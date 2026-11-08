@@ -35,6 +35,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -373,13 +374,28 @@ fun TripCardContent(
     modifier: Modifier = Modifier
 ) {
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
-    val dateFormatter = remember { SimpleDateFormat("MMM d, yyyy", Locale.getDefault()) }
+    val monthDayFormatter = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
+    val yearFormatter = remember { SimpleDateFormat("yyyy", Locale.getDefault()) }
 
-    val formattedDate = remember(trip.startTime) {
-        if (trip.startTime > 0) dateFormatter.format(Date(trip.startTime)) else trip.date
+    val formattedMonthDay = remember(trip.startTime) {
+        if (trip.startTime > 0) monthDayFormatter.format(Date(trip.startTime)).uppercase(Locale.getDefault()) else trip.date.uppercase(Locale.getDefault())
     }
-    val timeRangeStr = remember(trip.startTime, trip.endTime) {
-        "${timeFormatter.format(Date(trip.startTime))} – ${timeFormatter.format(Date(trip.endTime))}"
+    val formattedYear = remember(trip.startTime) {
+        if (trip.startTime > 0) yearFormatter.format(Date(trip.startTime)) else ""
+    }
+    val startTimeStr = remember(trip.startTime) {
+        if (trip.startTime > 0) timeFormatter.format(Date(trip.startTime)) else ""
+    }
+    val endTimeStr = remember(trip.endTime) {
+        if (trip.endTime > 0) timeFormatter.format(Date(trip.endTime)) else ""
+    }
+    val startAddressStr = remember(trip) {
+        trip.startAddress?.takeIf { it.isNotBlank() }
+            ?: "Recorded GPS (${String.format(Locale.US, "%.4f", trip.startLatitude)}, ${String.format(Locale.US, "%.4f", trip.startLongitude)})"
+    }
+    val endAddressStr = remember(trip) {
+        trip.endAddress?.takeIf { it.isNotBlank() }
+            ?: "Recorded GPS (${String.format(Locale.US, "%.4f", trip.endLatitude)}, ${String.format(Locale.US, "%.4f", trip.endLongitude)})"
     }
 
     Card(
@@ -394,79 +410,71 @@ fun TripCardContent(
                 .padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // Row 1: Left (Icon + Date & Time) | Right (Miles & Potential Deduction)
+            // Row 1: 3-Column Header (Date | Miles | Potential) matching TripDetail
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
+                // Column 1: Month & Day + Year
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Surface(
-                        shape = CircleShape,
-                        color = SucculentPrimary.copy(alpha = 0.15f),
-                        modifier = Modifier.size(42.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DirectionsCar,
-                            contentDescription = null,
-                            tint = SucculentPrimary,
-                            modifier = Modifier.padding(10.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column {
+                    Text(
+                        text = formattedMonthDay,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    if (formattedYear.isNotEmpty()) {
                         Text(
-                            text = formattedDate,
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = timeRangeStr,
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                fontWeight = FontWeight.Medium
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                        )
-                        Text(
-                            text = "Auto-detected Drive",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                            color = SucculentPrimary,
+                            text = formattedYear,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SlateNeutral,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
 
+                // Column 2: Miles + MILES label
                 Column(
-                    horizontalAlignment = Alignment.End,
-                    modifier = Modifier.padding(start = 12.dp)
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
-                            style = MaterialTheme.typography.headlineMedium.copy(
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Black
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "mi",
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            modifier = Modifier.padding(bottom = 3.dp)
-                        )
+                    Text(
+                        text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        text = "MILES",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SlateNeutral,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // Column 3: Potential Deduction + POTENTIAL label
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    val deduction = if (trip.calculatedDeduction > 0) {
+                        trip.calculatedDeduction
+                    } else {
+                        trip.totalDistanceMiles * trip.applicableRate
                     }
                     Text(
-                        text = "≈ \$${String.format(Locale.US, "%.2f", trip.totalDistanceMiles * trip.applicableRate)}",
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                        color = SucculentPrimary
+                        text = "\$${String.format(Locale.US, "%.2f", deduction)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = SucculentPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "POTENTIAL",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SlateNeutral,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -479,84 +487,98 @@ fun TripCardContent(
                     .height(140.dp)
             )
 
-            // Start & End Locations
+            // Start & Destination Locations with Timestamps on Far Right
             Column(
                 modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Starting Location Line
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                // Start Location Row
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(20.dp)
-                            .background(SucculentPrimary.copy(alpha = 0.2f), CircleShape),
+                            .size(22.dp)
+                            .background(SucculentPrimary.copy(alpha = 0.16f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(8.dp)
+                                .size(9.dp)
                                 .background(SucculentPrimary, CircleShape)
                         )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "START LOCATION",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 10.sp,
-                                letterSpacing = 0.8.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
+                            text = "Start",
+                            style = MaterialTheme.typography.labelSmall,
                             color = SlateNeutral
                         )
                         Text(
-                            text = trip.startAddress ?: "Recorded GPS (${String.format(Locale.US, "%.4f", trip.startLatitude)}, ${String.format(Locale.US, "%.4f", trip.startLongitude)})",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
+                            text = startAddressStr,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (startTimeStr.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = startTimeStr,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                // Ending Location Line
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
+                // Destination Location Row
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(20.dp)
-                            .background(SpeedRed.copy(alpha = 0.2f), CircleShape),
+                            .size(22.dp)
+                            .background(SpeedRed.copy(alpha = 0.16f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.LocationOn,
                             contentDescription = null,
                             tint = SpeedRed,
-                            modifier = Modifier.size(14.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "ENDING LOCATION",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                fontSize = 10.sp,
-                                letterSpacing = 0.8.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
+                            text = "Destination",
+                            style = MaterialTheme.typography.labelSmall,
                             color = SlateNeutral
                         )
                         Text(
-                            text = trip.endAddress ?: "Recorded GPS (${String.format(Locale.US, "%.4f", trip.endLatitude)}, ${String.format(Locale.US, "%.4f", trip.endLongitude)})",
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
+                            text = endAddressStr,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (endTimeStr.isNotEmpty()) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = endTimeStr,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
