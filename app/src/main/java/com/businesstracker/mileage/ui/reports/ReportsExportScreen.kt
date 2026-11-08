@@ -22,6 +22,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.BusinessCenter
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.foundation.lazy.LazyRow
