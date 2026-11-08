@@ -1,1 +1,1 @@
-769edf4a2fce91bbd184a02f4f211f2a6b9b8f5710637f8fdebeb9b6e80648e5  BusinessMileageTracker-1.0.22-compact-dashboard.apk
+6581b2a0ed7694d8ad8ba8028bc87ceacc5bcd135525e02655a11b70425a3f2e  BusinessMileageTracker-1.0.26-compact-dashboard.apk
