@@ -1,0 +1,12 @@
+{
+  "source_branch": "main",
+  "source_commit": "bd4cfd2ec02a94033b790cd9efbeeee06f199147",
+  "ci_run_id": 42429014922,
+  "ci_artifact_id": 13596951075,
+  "package": "com.businesstracker.mileage.debug",
+  "version_code": 24,
+  "version_name": "1.0.23",
+  "sha256": "d4780cfc08abfaded78be3d9c75e1c997ef454b0c20bb45c665f71cbca7390f9",
+  "signature_schemes": ["v2", "v3"],
+  "non_signature_entries_verified": 969
+}
