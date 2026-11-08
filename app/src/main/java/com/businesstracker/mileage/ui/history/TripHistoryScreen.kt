@@ -72,6 +72,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -126,6 +129,7 @@ fun TripHistoryScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .then(if (tripPendingDeletion != null) Modifier.blur(8.dp) else Modifier)
             .background(MaterialTheme.colorScheme.background)
     ) {
         HistoryControls(
@@ -180,28 +184,76 @@ fun TripHistoryScreen(
 
     if (tripPendingDeletion != null) {
         val targetTrip = tripPendingDeletion!!
-        AlertDialog(
+        Dialog(
             onDismissRequest = { tripPendingDeletion = null },
-            title = { Text("Delete this trip?") },
-            text = { Text("Are you sure you want to delete this trip (${formatMiles(targetTrip.totalDistanceMiles)} mi)? This action cannot be undone.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        val idToDelete = targetTrip.id
-                        tripPendingDeletion = null
-                        viewModel.deleteTrip(idToDelete)
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
+            properties = DialogProperties(
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true,
+                usePlatformDefaultWidth = false
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = null
+                    ) { tripPendingDeletion = null },
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth(0.85f)
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null
+                        ) {},
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.89f),
+                    tonalElevation = 6.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                 ) {
-                    Text("Delete", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { tripPendingDeletion = null }) {
-                    Text("Cancel")
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(
+                            text = "Delete Trip?",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Delete this ${formatMiles(targetTrip.totalDistanceMiles)} mi trip?",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(onClick = { tripPendingDeletion = null }) {
+                                Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    val idToDelete = targetTrip.id
+                                    tripPendingDeletion = null
+                                    viewModel.deleteTrip(idToDelete)
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
+                            ) {
+                                Text("Delete", color = Color.White, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
                 }
             }
-        )
+        }
     }
 }
 
