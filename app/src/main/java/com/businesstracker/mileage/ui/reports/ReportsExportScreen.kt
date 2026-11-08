@@ -361,39 +361,37 @@ private fun YearlyStatsChartCard(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Card Title Row
+            // Card title block: mileage sits below the title to avoid narrow-screen overlap.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = SucculentPrimary.copy(alpha = 0.15f),
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.QueryStats,
-                            contentDescription = null,
-                            tint = SucculentPrimary,
-                            modifier = Modifier.padding(6.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
+                Surface(
+                    shape = CircleShape,
+                    color = SucculentPrimary.copy(alpha = 0.15f),
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.QueryStats,
+                        contentDescription = null,
+                        tint = SucculentPrimary,
+                        modifier = Modifier.padding(6.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = "$year YTD Performance",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
+                    Text(
+                        text = "${String.format(Locale.US, "%.0f", ytdMiles)} mi logged",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = SucculentPrimary,
+                        fontWeight = FontWeight.Black
+                    )
                 }
-
-                Text(
-                    text = "${String.format(Locale.US, "%.0f", ytdMiles)} mi logged",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = SlateNeutral,
-                    fontWeight = FontWeight.Bold
-                )
             }
 
             // Financial comparison: Logged vs Potential
