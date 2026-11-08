@@ -58,6 +58,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.ui.draw.clip
 import com.businesstracker.mileage.domain.model.TripPurpose
@@ -303,13 +307,128 @@ fun SettingsScreen(
                 item {
             var newPurposeText by remember { mutableStateOf("") }
             var purposeError by remember { mutableStateOf<String?>(null) }
+            var editingPurpose by remember { mutableStateOf<String?>(null) }
+            var editPurposeText by remember { mutableStateOf("") }
+            var editPurposeError by remember { mutableStateOf<String?>(null) }
+            var deleteConfirmationPurpose by remember { mutableStateOf<String?>(null) }
+
+            // Edit Purpose Dialog
+            if (editingPurpose != null) {
+                AlertDialog(
+                    onDismissRequest = {
+                        editingPurpose = null
+                        editPurposeError = null
+                    },
+                    title = {
+                        Text(
+                            text = "Edit Purpose",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Column {
+                            Text(
+                                text = "Rename this business purpose. Existing trips will be updated if assigned to this name.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedTextField(
+                                value = editPurposeText,
+                                onValueChange = {
+                                    editPurposeText = it
+                                    if (editPurposeError != null) editPurposeError = null
+                                },
+                                label = { Text("Purpose Name") },
+                                singleLine = true,
+                                isError = editPurposeError != null,
+                                supportingText = editPurposeError?.let { err -> { Text(err, color = MaterialTheme.colorScheme.error) } },
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        }
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                val trimmed = editPurposeText.trim()
+                                val old = editingPurpose ?: ""
+                                if (trimmed.isBlank()) {
+                                    editPurposeError = "Purpose cannot be empty"
+                                } else if (!trimmed.equals(old, ignoreCase = true) &&
+                                    (TripPurpose.DEFAULT_SUCCULENT_PURPOSES.any { it.equals(trimmed, ignoreCase = true) } ||
+                                            state.customPurposes.any { it.equals(trimmed, ignoreCase = true) })
+                                ) {
+                                    editPurposeError = "Purpose already exists"
+                                } else {
+                                    if (!trimmed.equals(old, ignoreCase = false)) {
+                                        viewModel.updateCustomPurpose(old, trimmed)
+                                    }
+                                    editingPurpose = null
+                                    editPurposeError = null
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                        ) {
+                            Text("Save")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                editingPurpose = null
+                                editPurposeError = null
+                            }
+                        ) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            // Delete Confirmation Dialog
+            if (deleteConfirmationPurpose != null) {
+                AlertDialog(
+                    onDismissRequest = { deleteConfirmationPurpose = null },
+                    title = {
+                        Text(
+                            text = "Delete Purpose",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Are you sure you want to delete \"${deleteConfirmationPurpose}\"? Existing trips will retain their recorded purpose.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                deleteConfirmationPurpose?.let { viewModel.removeCustomPurpose(it) }
+                                deleteConfirmationPurpose = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
+                        ) {
+                            Text("Delete", color = Color.White)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { deleteConfirmationPurpose = null }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
 
             SettingsSection(
                 title = "Business Trip Purposes",
                 icon = Icons.Default.BusinessCenter
             ) {
                 Text(
-                    text = "Add or remove custom purposes for categorizing your business drives.",
+                    text = "Add, edit, or remove custom purposes for categorizing your business drives.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -391,17 +510,38 @@ fun SettingsScreen(
                                         fontWeight = FontWeight.Medium
                                     )
                                     Spacer(Modifier.width(6.dp))
+                                    // Edit button
                                     Box(
                                         modifier = Modifier
-                                            .size(20.dp)
+                                            .size(24.dp)
                                             .clip(CircleShape)
-                                            .clickable { viewModel.removeCustomPurpose(purpose) },
+                                            .clickable {
+                                                editingPurpose = purpose
+                                                editPurposeText = purpose
+                                                editPurposeError = null
+                                            },
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = "Remove $purpose",
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = "Edit $purpose",
                                             modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                    Spacer(Modifier.width(2.dp))
+                                    // Delete button
+                                    Box(
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .clip(CircleShape)
+                                            .clickable { deleteConfirmationPurpose = purpose },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.DeleteOutline,
+                                            contentDescription = "Delete $purpose",
+                                            tint = SpeedRed,
+                                            modifier = Modifier.size(15.dp)
                                         )
                                     }
                                 }

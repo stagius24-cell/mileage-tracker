@@ -295,6 +295,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun updateCustomPurpose(oldPurpose: String, newPurpose: String) {
+        viewModelScope.launch {
+            preferencesManager.updateCustomPurpose(oldPurpose, newPurpose)
+        }
+    }
+
 
     fun setWorkDays(days: Set<String>) {
         viewModelScope.launch {

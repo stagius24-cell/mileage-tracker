@@ -498,6 +498,22 @@ class TrackingPreferencesManager @Inject constructor(
         }
     }
 
+    suspend fun updateCustomPurpose(oldPurpose: String, newPurpose: String) {
+        val oldTrimmed = oldPurpose.trim()
+        val newTrimmed = newPurpose.trim()
+        if (newTrimmed.isEmpty()) return
+        context.dataStore.edit { prefs ->
+            val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES] ?: ""
+            val current = parseCustomPurposes(raw).toMutableList()
+            val index = current.indexOfFirst { it.equals(oldTrimmed, ignoreCase = true) }
+            if (index != -1) {
+                current[index] = newTrimmed
+                val json = JSONArray().apply { current.forEach { put(it) } }.toString()
+                prefs[KEY_CUSTOM_PURPOSES] = json
+            }
+        }
+    }
+
     // Google Sheets Sync Flow & Functions
     val isSheetsConnected: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_SHEETS_CONNECTED] ?: false
