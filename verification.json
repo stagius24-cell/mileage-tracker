@@ -1,0 +1,12 @@
+{
+  "source_branch": "feature/reports-ytd-mileage-layout",
+  "source_commit": "c6829f5d2a279b2e3536a24f71d4df6337364bdc",
+  "ci_run_id": 42435368369,
+  "ci_artifact_id": 13599592265,
+  "package": "com.businesstracker.mileage.debug",
+  "version_code": 25,
+  "version_name": "1.0.24",
+  "sha256": "37144e60530b745a5585d370362c3ec74b8b5b3aa166beab9afff24e4ffdfe3b",
+  "signature_schemes": ["v2", "v3"],
+  "non_signature_entries_verified": 969
+}
