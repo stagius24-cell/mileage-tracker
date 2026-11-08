@@ -6,6 +6,9 @@ import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.SortOrder
 import com.businesstracker.mileage.domain.model.TripClassification
+import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import com.businesstracker.mileage.domain.repository.TripRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,12 +30,14 @@ data class TripHistoryUiState(
     val startDateFilter: String = "",
     val endDateFilter: String = "",
     val sortOrder: SortOrder = SortOrder.NEWEST_FIRST,
-    val selectedTripForDetails: TripEntity? = null
+    val selectedTripForDetails: TripEntity? = null,
+    val customPurposes: List<String> = emptyList()
 )
 
 @HiltViewModel
 class TripHistoryViewModel @Inject constructor(
-    private val tripRepository: TripRepository
+    private val tripRepository: TripRepository,
+    private val preferencesManager: TrackingPreferencesManager? = null
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -53,8 +58,8 @@ class TripHistoryViewModel @Inject constructor(
     ) { allTrips, query, classification, entity, syncStatus ->
         FilterStatePart1(allTrips, query, classification, entity, syncStatus)
     }.combine(
-        combine(_startDateFilter, _endDateFilter, _sortOrder, _selectedTripForDetails) { start, end, sort, selectedTrip ->
-            FilterStatePart2(start, end, sort, selectedTrip)
+        combine(_startDateFilter, _endDateFilter, _sortOrder, _selectedTripForDetails, preferencesManager?.customPurposes ?: flowOf(emptyList())) { start, end, sort, selectedTrip, customPurposes ->
+            FilterStatePart2(start, end, sort, selectedTrip, customPurposes)
         }
     ) { part1, part2 ->
         val filtered = part1.allTrips.filter { trip ->
@@ -109,7 +114,8 @@ class TripHistoryViewModel @Inject constructor(
             startDateFilter = part2.startDate,
             endDateFilter = part2.endDate,
             sortOrder = part2.sortOrder,
-            selectedTripForDetails = part2.selectedTrip
+            selectedTripForDetails = part2.selectedTrip,
+            customPurposes = part2.customPurposes
         )
     }.stateIn(
         scope = viewModelScope,

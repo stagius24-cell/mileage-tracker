@@ -85,7 +85,9 @@ fun SwipeableTripCard(
     onClassifyBusiness: (tripId: String, businessEntity: String, purpose: String) -> Unit,
     onClassifyPersonal: (tripId: String) -> Unit,
     modifier: Modifier = Modifier,
-    isProcessing: Boolean = false
+    isProcessing: Boolean = false,
+    customPurposes: List<String> = emptyList(),
+    onAddCustomPurpose: ((String) -> Unit)? = null
 ) {
     val coroutineScope = rememberCoroutineScope()
     var showBusinessBottomSheet by remember { mutableStateOf(false) }
@@ -196,7 +198,15 @@ fun SwipeableTripCard(
     // Business Classification Bottom Sheet
     if (showBusinessBottomSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        val purposes = remember { TripPurpose.DEFAULT_SUCCULENT_PURPOSES }
+        val purposes = remember(customPurposes) {
+            val combined = TripPurpose.DEFAULT_SUCCULENT_PURPOSES.toMutableList()
+            customPurposes.forEach { p ->
+                if (!combined.any { it.equals(p, ignoreCase = true) }) {
+                    combined.add(p)
+                }
+            }
+            combined
+        }
         var selectedEntity by remember { mutableStateOf(BusinessEntity.MY_SUCCULENT_CORNER.displayName) }
         var selectedPurpose by remember { mutableStateOf(purposes.first()) }
         var customPurposeText by remember { mutableStateOf("") }
@@ -314,7 +324,9 @@ fun SwipeableTripCard(
                     Button(
                         onClick = {
                             val finalPurpose = if (isCustomPurpose && customPurposeText.isNotBlank()) {
-                                customPurposeText.trim()
+                                val trimmed = customPurposeText.trim()
+                                onAddCustomPurpose?.invoke(trimmed)
+                                trimmed
                             } else {
                                 selectedPurpose
                             }

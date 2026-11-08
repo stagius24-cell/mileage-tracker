@@ -52,6 +52,15 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BusinessCenter
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.Surface
+import androidx.compose.ui.draw.clip
+import com.businesstracker.mileage.domain.model.TripPurpose
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -75,6 +84,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
@@ -284,6 +294,145 @@ fun SettingsScreen(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+            }
+        }
+
+                item {
+            var newPurposeText by remember { mutableStateOf("") }
+            var purposeError by remember { mutableStateOf<String?>(null) }
+
+            SettingsSection(
+                title = "Business Trip Purposes",
+                icon = Icons.Default.BusinessCenter
+            ) {
+                Text(
+                    text = "Add or remove custom purposes for categorizing your business drives.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Input row to add new custom purpose
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = newPurposeText,
+                        onValueChange = {
+                            newPurposeText = it
+                            if (purposeError != null) purposeError = null
+                        },
+                        label = { Text("New purpose") },
+                        placeholder = { Text("e.g. Pop-up Market") },
+                        singleLine = true,
+                        isError = purposeError != null,
+                        supportingText = purposeError?.let { err -> { Text(err, color = MaterialTheme.colorScheme.error) } },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Button(
+                        onClick = {
+                            val trimmed = newPurposeText.trim()
+                            if (trimmed.isBlank()) {
+                                purposeError = "Purpose cannot be empty"
+                            } else if (TripPurpose.DEFAULT_SUCCULENT_PURPOSES.any { it.equals(trimmed, ignoreCase = true) } ||
+                                state.customPurposes.any { it.equals(trimmed, ignoreCase = true) }
+                            ) {
+                                purposeError = "Purpose already exists"
+                            } else {
+                                viewModel.addCustomPurpose(trimmed)
+                                newPurposeText = ""
+                                purposeError = null
+                            }
+                        },
+                        modifier = Modifier.height(56.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                        contentPadding = PaddingValues(horizontal = 16.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add purpose")
+                        Spacer(Modifier.width(4.dp))
+                        Text("Add")
+                    }
+                }
+
+                // Custom purposes chips
+                if (state.customPurposes.isNotEmpty()) {
+                    Text(
+                        text = "Custom Purposes (${state.customPurposes.size})",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        state.customPurposes.forEach { purpose ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = SucculentPrimary.copy(alpha = 0.12f),
+                                contentColor = SucculentPrimary
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(start = 10.dp, end = 6.dp, top = 4.dp, bottom = 4.dp)
+                                ) {
+                                    Text(
+                                        text = purpose,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(20.dp)
+                                            .clip(CircleShape)
+                                            .clickable { viewModel.removeCustomPurpose(purpose) },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Remove $purpose",
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                SectionDivider()
+                Text(
+                    text = "Default Purposes",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    TripPurpose.DEFAULT_SUCCULENT_PURPOSES.forEach { purpose ->
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ) {
+                            Text(
+                                text = purpose,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
                         }
                     }
                 }

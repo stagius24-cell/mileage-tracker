@@ -12,6 +12,8 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.businesstracker.mileage.domain.model.AppThemeMode
+import com.businesstracker.mileage.domain.model.TripPurpose
+import org.json.JSONArray
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -52,6 +54,7 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_CF_BEARER_TOKEN = stringPreferencesKey("cf_bearer_token")
         private val KEY_DEFAULT_VEHICLE = stringPreferencesKey("default_vehicle")
         private val KEY_CUSTOM_CATEGORIES = stringPreferencesKey("custom_categories")
+        private val KEY_CUSTOM_PURPOSES = stringPreferencesKey("custom_trip_purposes")
 
         // Google Sheets Sync Configuration
         private val KEY_SHEETS_CONNECTED = booleanPreferencesKey("sheets_connected")
@@ -369,6 +372,65 @@ class TrackingPreferencesManager @Inject constructor(
     suspend fun setCustomCategories(categories: String) {
         context.dataStore.edit { prefs ->
             prefs[KEY_CUSTOM_CATEGORIES] = categories
+        }
+    }
+
+    private fun parseCustomPurposes(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return try {
+            val jsonArray = JSONArray(raw)
+            val list = mutableListOf<String>()
+            for (i in 0 until jsonArray.length()) {
+                val item = jsonArray.optString(i)?.trim().orEmpty()
+                if (item.isNotEmpty() && !list.contains(item)) {
+                    list.add(item)
+                }
+            }
+            list
+        } catch (_: Exception) {
+            raw.split(",")
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .distinct()
+        }
+    }
+
+    val customPurposes: Flow<List<String>> = context.dataStore.data.map { prefs ->
+        val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES] ?: ""
+        parseCustomPurposes(raw)
+    }
+
+    val allBusinessPurposes: Flow<List<String>> = customPurposes.map { custom ->
+        val combined = TripPurpose.DEFAULT_SUCCULENT_PURPOSES.toMutableList()
+        custom.forEach { c ->
+            if (!combined.any { it.equals(c, ignoreCase = true) }) {
+                combined.add(c)
+            }
+        }
+        combined
+    }
+
+    suspend fun addCustomPurpose(purpose: String) {
+        val trimmed = purpose.trim()
+        if (trimmed.isEmpty()) return
+        context.dataStore.edit { prefs ->
+            val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES] ?: ""
+            val current = parseCustomPurposes(raw).toMutableList()
+            if (!current.any { it.equals(trimmed, ignoreCase = true) }) {
+                current.add(trimmed)
+                val json = JSONArray().apply { current.forEach { put(it) } }.toString()
+                prefs[KEY_CUSTOM_PURPOSES] = json
+            }
+        }
+    }
+
+    suspend fun removeCustomPurpose(purpose: String) {
+        val trimmed = purpose.trim()
+        context.dataStore.edit { prefs ->
+            val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES] ?: ""
+            val current = parseCustomPurposes(raw).filterNot { it.equals(trimmed, ignoreCase = true) }
+            val json = JSONArray().apply { current.forEach { put(it) } }.toString()
+            prefs[KEY_CUSTOM_PURPOSES] = json
         }
     }
 

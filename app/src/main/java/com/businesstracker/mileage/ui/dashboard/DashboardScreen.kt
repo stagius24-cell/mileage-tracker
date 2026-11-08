@@ -362,7 +362,9 @@ fun DashboardScreen(
                         onClassifyPersonal = { id ->
                             viewModel.classifyTripAsPersonal(id)
                         },
-                        isProcessing = state.processingTripIds.contains(trip.id)
+                        isProcessing = state.processingTripIds.contains(trip.id),
+                        customPurposes = state.customPurposes,
+                        onAddCustomPurpose = { purpose -> viewModel.addCustomPurpose(purpose) }
                     )
                 }
             }

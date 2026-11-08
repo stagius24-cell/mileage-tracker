@@ -93,7 +93,8 @@ fun TripHistoryScreen(
             onSaveTrip = { id, classification, entity, purpose, notes ->
                 viewModel.updateTripDetails(id, classification, entity, purpose, notes)
             },
-            onDeleteTrip = { id -> viewModel.deleteTrip(id) }
+            onDeleteTrip = { id -> viewModel.deleteTrip(id) },
+            customPurposes = state.customPurposes
         )
         return
     }

@@ -46,6 +46,7 @@ data class SettingsUiState(
     val vehicleBluetoothAddress: String = "",
     val vehicleBluetoothName: String = "",
     val pairedBluetoothDevices: List<VehicleBluetoothDevice> = emptyList(),
+    val customPurposes: List<String> = emptyList(),
     // Google Sheets Sync State - No raw tokens exposed in UI state
     val isSheetsConnected: Boolean = false,
     val hasOAuthCredential: Boolean = false,
@@ -116,9 +117,10 @@ class SettingsViewModel @Inject constructor(
     private val generalFlow = combine(
         preferencesManager.isAutoTrackingEnabled,
         preferencesManager.defaultVehicle,
-        preferencesManager.appThemeMode
-    ) { autoTrack, vehicle, themeMode ->
-        GeneralPrefs(autoTrack, vehicle, themeMode)
+        preferencesManager.appThemeMode,
+        preferencesManager.customPurposes
+    ) { autoTrack, vehicle, themeMode, customPurposes ->
+        GeneralPrefs(autoTrack, vehicle, themeMode, customPurposes)
     }
 
     private val scheduleFlow = combine(
@@ -233,6 +235,7 @@ class SettingsViewModel @Inject constructor(
             vehicleBluetoothAddress = config.bluetooth.address,
             vehicleBluetoothName = config.bluetooth.name,
             pairedBluetoothDevices = pairedDevices,
+            customPurposes = config.general.customPurposes,
             cfEndpoint = config.cloudflare.endpoint,
             cfClientId = config.cloudflare.clientId,
             cfClientSecret = config.cloudflare.clientSecret,
@@ -278,6 +281,19 @@ class SettingsViewModel @Inject constructor(
             preferencesManager.setScheduleFilteringEnabled(enabled)
         }
     }
+
+    fun addCustomPurpose(purpose: String) {
+        viewModelScope.launch {
+            preferencesManager.addCustomPurpose(purpose)
+        }
+    }
+
+    fun removeCustomPurpose(purpose: String) {
+        viewModelScope.launch {
+            preferencesManager.removeCustomPurpose(purpose)
+        }
+    }
+
 
     fun setWorkDays(days: Set<String>) {
         viewModelScope.launch {

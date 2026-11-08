@@ -5,6 +5,9 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import com.businesstracker.mileage.data.local.TripLifecycleDao
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.data.local.entity.TripLifecycleState
@@ -46,7 +49,8 @@ data class DashboardUiState(
     val currentRate: Double = 0.760,
     val lastClassifiedTrip: TripEntity? = null,
     val isUndoAvailable: Boolean = false,
-    val processingTripIds: Set<String> = emptySet()
+    val processingTripIds: Set<String> = emptySet(),
+    val customPurposes: List<String> = emptyList()
 )
 
 @HiltViewModel
@@ -56,7 +60,8 @@ class DashboardViewModel @Inject constructor(
     private val summaryUseCase: GetDashboardSummaryUseCase,
     @ApplicationContext private val appContext: Context,
     private val activeTripRepository: ActiveTripRepository? = null,
-    private val tripLifecycleDao: TripLifecycleDao? = null
+    private val tripLifecycleDao: TripLifecycleDao? = null,
+    private val preferencesManager: TrackingPreferencesManager? = null
 ) : ViewModel() {
 
     private val now = LocalDate.now()
@@ -172,13 +177,16 @@ class DashboardViewModel @Inject constructor(
         TripFilterState(unreviewed, allTrips, filter, monthPrefix)
     }
 
+    private val customPurposesFlow: Flow<List<String>> = preferencesManager?.customPurposes ?: flowOf(emptyList())
+
     private val actionFlow = combine(
         _customStartDate,
         _customEndDate,
         _processingTripIds,
-        _lastClassifiedTrip
-    ) { customStart, customEnd, processingIds, lastClassified ->
-        CustomRangeAndActionState(customStart, customEnd, processingIds, lastClassified)
+        _lastClassifiedTrip,
+        customPurposesFlow
+    ) { customStart, customEnd, processingIds, lastClassified, customPurposes ->
+        CustomRangeAndActionState(customStart, customEnd, processingIds, lastClassified, customPurposes)
     }
 
     val uiState: StateFlow<DashboardUiState> = combine(
@@ -222,7 +230,8 @@ class DashboardViewModel @Inject constructor(
             currentRate = currentRate,
             lastClassifiedTrip = actionState.lastClassified,
             isUndoAvailable = actionState.lastClassified != null,
-            processingTripIds = actionState.processingIds
+            processingTripIds = actionState.processingIds,
+            customPurposes = actionState.customPurposes
         )
     }.stateIn(
         scope = viewModelScope,
@@ -352,6 +361,12 @@ class DashboardViewModel @Inject constructor(
                 notes = previousTrip.notes
             )
             MileageSyncWorker.enqueueOneTimeSync(appContext)
+        }
+    }
+
+    fun addCustomPurpose(purpose: String) {
+        viewModelScope.launch {
+            preferencesManager?.addCustomPurpose(purpose)
         }
     }
 }

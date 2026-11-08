@@ -86,7 +86,8 @@ fun TripDetailScreen(
     onSaveTrip: (tripId: String, classification: String, businessEntity: String, purpose: String, notes: String?) -> Unit,
     onDeleteTrip: (tripId: String) -> Unit,
     modifier: Modifier = Modifier,
-    addressViewModel: TripAddressViewModel = hiltViewModel()
+    addressViewModel: TripAddressViewModel = hiltViewModel(),
+    customPurposes: List<String> = emptyList()
 ) {
     var showEditSheet by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -312,7 +313,13 @@ fun TripDetailScreen(
         var selectedEntity by remember { mutableStateOf(trip.businessEntity) }
         var selectedPurpose by remember { mutableStateOf(trip.purpose) }
         var notesText by remember { mutableStateOf(trip.notes.orEmpty()) }
-        val purposes = remember { TripPurpose.DEFAULT_SUCCULENT_PURPOSES }
+        val purposes = remember(customPurposes, trip.purpose) {
+            val list = (TripPurpose.DEFAULT_SUCCULENT_PURPOSES + customPurposes).toMutableList()
+            if (trip.purpose.isNotBlank() && trip.purpose != "Personal" && !list.contains(trip.purpose)) {
+                list.add(trip.purpose)
+            }
+            list.distinct()
+        }
 
         ModalBottomSheet(
             onDismissRequest = { showEditSheet = false },
