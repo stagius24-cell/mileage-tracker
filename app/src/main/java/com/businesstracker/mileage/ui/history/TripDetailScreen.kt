@@ -1,6 +1,5 @@
 package com.businesstracker.mileage.ui.history
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,13 +22,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -53,6 +50,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -60,10 +58,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.domain.usecase.ResolveTripAddressesUseCase
@@ -91,7 +89,8 @@ fun TripDetailScreen(
     addressViewModel: TripAddressViewModel = hiltViewModel()
 ) {
     var showEditSheet by remember { mutableStateOf(false) }
-    var showTaxDetails by remember(trip.id) { mutableStateOf(false) }
+    var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var selectedDetailTab by remember(trip.id) { mutableIntStateOf(0) }
     val addressState by addressViewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(trip.id, trip.startAddress, trip.endAddress) { addressViewModel.resolve(trip) }
     DisposableEffect(trip.id) { onDispose { addressViewModel.cancelLookup() } }
@@ -99,7 +98,7 @@ fun TripDetailScreen(
     val endAddress = addressState.takeIf { it.tripId == trip.id }?.end ?: trip.endAddress
 
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
-    val dateFormatter = remember { SimpleDateFormat("EEE, MMM d, yyyy", Locale.getDefault()) }
+    val dateFormatter = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
 
     val dateFormatted = remember(trip.startTime) {
         if (trip.startTime > 0) dateFormatter.format(Date(trip.startTime)) else trip.date
@@ -107,6 +106,8 @@ fun TripDetailScreen(
     val timeRangeStr = remember(trip.startTime, trip.endTime) {
         "${timeFormatter.format(Date(trip.startTime))} – ${timeFormatter.format(Date(trip.endTime))}"
     }
+    val startTimeStr = remember(trip.startTime) { timeFormatter.format(Date(trip.startTime)) }
+    val endTimeStr = remember(trip.endTime) { timeFormatter.format(Date(trip.endTime)) }
 
     val durationMinutes = remember(trip.startTime, trip.endTime) {
         val diff = trip.endTime - trip.startTime
@@ -126,14 +127,6 @@ fun TripDetailScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                actions = {
-                    IconButton(onClick = { showEditSheet = true }) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit Trip")
-                    }
-                    IconButton(onClick = { onDeleteTrip(trip.id); onBack() }) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = "Delete Trip", tint = SpeedRed)
-                    }
-                }
             )
         },
         modifier = modifier.fillMaxSize()
@@ -147,7 +140,7 @@ fun TripDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Compact two-column summary: distance on the left, trip facts on the right.
+            // One-line summary inspired by the compact trip receipt layout.
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -156,80 +149,55 @@ fun TripDetailScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(
-                        modifier = Modifier.weight(0.43f),
-                        verticalArrangement = Arrangement.Center
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.Start
                     ) {
                         Text(
-                            text = "TOTAL DISTANCE",
-                            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 1.sp),
-                            color = SlateNeutral,
-                            fontWeight = FontWeight.Bold
+                            text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
+                            style = MaterialTheme.typography.headlineLarge,
+                            fontWeight = FontWeight.Black
                         )
-                        Row(verticalAlignment = Alignment.Bottom) {
+                        Text("MILES", style = MaterialTheme.typography.labelSmall, color = SlateNeutral, fontWeight = FontWeight.Bold)
+                    }
+
+                    Surface(
+                        modifier = Modifier.weight(0.8f),
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             Text(
-                                text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
-                                style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Black)
+                                text = dateFormatted.uppercase(Locale.getDefault()),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Black
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "miles",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = SlateNeutral,
-                                modifier = Modifier.padding(bottom = 5.dp)
+                                text = if (trip.startTime > 0) SimpleDateFormat("yyyy", Locale.getDefault()).format(Date(trip.startTime)) else "",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SlateNeutral
                             )
                         }
                     }
 
                     Column(
-                        modifier = Modifier.weight(0.57f),
-                        verticalArrangement = Arrangement.spacedBy(5.dp)
+                        modifier = Modifier.weight(1.2f),
+                        horizontalAlignment = Alignment.End
                     ) {
-                        Surface(
-                            shape = RoundedCornerShape(7.dp),
-                            color = classificationColor.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = trip.classification,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = classificationColor,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
                         Text(
-                            text = dateFormatted,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold
+                            text = "\$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}",
+                            style = MaterialTheme.typography.headlineMedium,
+                            color = SucculentPrimary,
+                            fontWeight = FontWeight.Black
                         )
-                        Text(
-                            text = timeRangeStr,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = if (trip.syncStatus == "SYNCED") Icons.Default.CloudDone else Icons.Default.CloudQueue,
-                                contentDescription = null,
-                                tint = if (trip.syncStatus == "SYNCED") SucculentPrimary else SlateNeutral,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "${trip.syncStatus} · ${durationMinutes} min",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (trip.syncStatus == "SYNCED") SucculentPrimary else SlateNeutral,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
+                        Text("POTENTIAL", style = MaterialTheme.typography.labelSmall, color = SlateNeutral, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -245,155 +213,96 @@ fun TripDetailScreen(
                         .fillMaxWidth()
                         .padding(6.dp)
                 ) {
-                    TripRouteMap(trip = trip, modifier = Modifier.height(160.dp))
+                    TripRouteMap(trip = trip, modifier = Modifier.height(200.dp))
                 }
             }
 
-            // Compact endpoint card; time and status are displayed in the summary above.
+            // Route/status tabs with edit and delete actions on the far right.
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Start Address
-                    Row(verticalAlignment = Alignment.Top) {
-                        Box(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .background(SucculentPrimary.copy(alpha = 0.2f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Box(modifier = Modifier.size(8.dp).background(SucculentPrimary, CircleShape))
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(text = "Start Location", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                            Text(
-                                text = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
-                                    ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
-                                    else "Approximate start location unavailable",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                    TripDetailTabButton(
+                        label = "Route",
+                        icon = Icons.Default.LocationOn,
+                        selected = selectedDetailTab == 0,
+                        onClick = { selectedDetailTab = 0 },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TripDetailTabButton(
+                        label = "Status",
+                        icon = Icons.Default.DirectionsCar,
+                        selected = selectedDetailTab == 1,
+                        onClick = { selectedDetailTab = 1 },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(modifier = Modifier.width(1.dp).height(36.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                    IconButton(onClick = { showEditSheet = true }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit trip")
                     }
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-                    // End Address
-                    Row(verticalAlignment = Alignment.Top) {
-                        Box(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .background(SpeedRed.copy(alpha = 0.2f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null, tint = SpeedRed, modifier = Modifier.size(14.dp))
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(text = "Ending Destination", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                            Text(
-                                text = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
-                                    ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
-                                    else "Approximate destination unavailable",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+                    IconButton(onClick = { showDeleteConfirmation = true }) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = "Delete trip", tint = SpeedRed)
                     }
                 }
             }
 
-            // Tax details stay hidden until requested.
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { showTaxDetails = !showTaxDetails }
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Tax & Classification", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Icon(
-                            imageVector = if (showTaxDetails) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                            contentDescription = if (showTaxDetails) "Hide tax details" else "Show tax details",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    AnimatedVisibility(visible = showTaxDetails) {
-                        Column(
-                            modifier = Modifier.padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                            Row(modifier = Modifier.fillMaxWidth()) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("Business Entity", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                                    Text(trip.businessEntity, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                }
-                                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                                    Text("Purpose", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                                    Text(trip.purpose, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                            Row(modifier = Modifier.fillMaxWidth()) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("IRS Rate Applied", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                                    Text("\$${trip.applicableRate} / mi", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                }
-                                Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                                    Text(if (isBusiness) "Estimated Deduction" else "Tracking Method", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                                    Text(
-                                        if (isBusiness) "\$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}" else trip.trackingMethod,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            }
-
-                            if (isBusiness) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                                Column {
-                                    Text("Tracking Method", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                                    Text(trip.trackingMethod, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                }
-                            }
-
-                            if (!trip.notes.isNullOrBlank()) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                                Column {
-                                    Text("Notes", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                                    Text(trip.notes, style = MaterialTheme.typography.bodyMedium)
-                                }
-                            }
-                        }
-                    }
+                if (selectedDetailTab == 0) {
+                    RouteDetailsTab(
+                        startAddress = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                            ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
+                            else "Approximate start location unavailable",
+                        endAddress = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                            ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
+                            else "Approximate destination unavailable",
+                        startTime = startTimeStr,
+                        endTime = endTimeStr
+                    )
+                } else {
+                    TripStatusTab(
+                        trip = trip,
+                        durationMinutes = durationMinutes,
+                        timeRange = timeRangeStr,
+                        classificationColor = classificationColor
+                    )
                 }
             }
 
         }
+    }
+
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmation = false },
+            title = { Text("Delete this trip?") },
+            text = { Text("This removes the trip from local history. It does not silently delete a Google Sheets row.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteConfirmation = false
+                        onDeleteTrip(trip.id)
+                        onBack()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
+                ) {
+                    Text("Delete", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmation = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     // Modal Edit Sheet
@@ -522,5 +431,169 @@ fun TripDetailScreen(
                 Spacer(modifier = Modifier.height(20.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun TripDetailTabButton(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clickable(onClick = onClick)
+            .background(
+                color = if (selected) SucculentPrimary.copy(alpha = 0.12f) else Color.Transparent,
+                shape = RoundedCornerShape(10.dp)
+            )
+            .padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = if (selected) SucculentPrimary else SlateNeutral
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = if (selected) SucculentPrimary else SlateNeutral
+        )
+    }
+}
+
+@Composable
+private fun RouteDetailsTab(
+    startAddress: String,
+    endAddress: String,
+    startTime: String,
+    endTime: String
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        DestinationRow(
+            label = "Start",
+            address = startAddress,
+            time = startTime,
+            color = SucculentPrimary,
+            isStart = true
+        )
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+        DestinationRow(
+            label = "Destination",
+            address = endAddress,
+            time = endTime,
+            color = SpeedRed,
+            isStart = false
+        )
+    }
+}
+
+@Composable
+private fun DestinationRow(
+    label: String,
+    address: String,
+    time: String,
+    color: Color,
+    isStart: Boolean
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(22.dp)
+                .background(color.copy(alpha = 0.16f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            if (isStart) {
+                Box(modifier = Modifier.size(9.dp).background(color, CircleShape))
+            } else {
+                Icon(Icons.Default.LocationOn, contentDescription = null, tint = color, modifier = Modifier.size(15.dp))
+            }
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
+            Text(
+                address,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            time,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun TripStatusTab(
+    trip: TripEntity,
+    durationMinutes: Long,
+    timeRange: String,
+    classificationColor: Color
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            StatusValue("Trip type", trip.classification, Modifier.weight(1f), classificationColor)
+            StatusValue("Sync status", trip.syncStatus, Modifier.weight(1f), if (trip.syncStatus == "SYNCED") SucculentPrimary else SlateNeutral)
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            StatusValue("Time", timeRange, Modifier.weight(1f))
+            StatusValue("Duration", "$durationMinutes min", Modifier.weight(1f))
+        }
+        Row(modifier = Modifier.fillMaxWidth()) {
+            StatusValue("Tracking", trip.trackingMethod, Modifier.weight(1f))
+            StatusValue("Entity", trip.businessEntity, Modifier.weight(1f))
+        }
+        Row(modifier = Modifier.fillMaxWidth()) {
+            StatusValue("Purpose", trip.purpose, Modifier.weight(1f))
+            StatusValue("IRS rate", "\$${trip.applicableRate} / mi", Modifier.weight(1f))
+        }
+        if (!trip.notes.isNullOrBlank()) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+            StatusValue("Notes", trip.notes, Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun StatusValue(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface
+) {
+    Column(modifier = modifier.padding(end = 8.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
+        Text(
+            value,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
+            color = valueColor,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
