@@ -162,14 +162,16 @@ fun TripDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Route and more-info tabs animate like the bottom navigation.
+            // Route and more-info tabs matching container roundness.
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TripDetailTabButton(
@@ -408,18 +410,17 @@ private fun TripDetailTabButton(
             modifier = Modifier
                 .offset(x = indicatorOffset)
                 .fillMaxWidth()
-                .height(64.dp)
-                .padding(horizontal = 5.dp, vertical = 5.dp)
+                .height(56.dp)
                 .background(
                     color = SucculentPrimary.copy(alpha = if (selected) 0.16f else 0f),
-                    shape = RoundedCornerShape(percent = 50)
+                    shape = RoundedCornerShape(12.dp)
                 )
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp)
-                .clip(RoundedCornerShape(percent = 50))
+                .height(56.dp)
+                .clip(RoundedCornerShape(12.dp))
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
