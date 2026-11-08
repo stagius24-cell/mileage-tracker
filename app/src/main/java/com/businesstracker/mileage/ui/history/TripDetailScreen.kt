@@ -307,15 +307,23 @@ fun TripDetailScreen(
                 }
 
                 if (selectedClassification == "BUSINESS") {
-                    Text("Business Entity", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text("Business", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
                             selected = selectedEntity == BusinessEntity.MY_SUCCULENT_CORNER.displayName,
                             onClick = { selectedEntity = BusinessEntity.MY_SUCCULENT_CORNER.displayName },
-                            label = { Text(BusinessEntity.MY_SUCCULENT_CORNER.displayName) },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.BusinessCenter,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            label = { Text("Business") },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = SucculentPrimary,
-                                selectedLabelColor = Color.White
+                                selectedLabelColor = Color.White,
+                                selectedLeadingIconColor = Color.White
                             )
                         )
                     }

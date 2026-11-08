@@ -240,7 +240,7 @@ fun SwipeableTripCard(
                 )
 
                 Text(
-                    text = "Business Entity",
+                    text = "Business",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -249,10 +249,18 @@ fun SwipeableTripCard(
                     FilterChip(
                         selected = selectedEntity == BusinessEntity.MY_SUCCULENT_CORNER.displayName,
                         onClick = { selectedEntity = BusinessEntity.MY_SUCCULENT_CORNER.displayName },
-                        label = { Text(BusinessEntity.MY_SUCCULENT_CORNER.displayName) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.BusinessCenter,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        label = { Text("Business") },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = SucculentPrimary,
-                            selectedLabelColor = Color.White
+                            selectedLabelColor = Color.White,
+                            selectedLeadingIconColor = Color.White
                         )
                     )
                 }

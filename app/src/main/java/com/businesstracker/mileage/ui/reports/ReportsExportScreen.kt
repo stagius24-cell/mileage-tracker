@@ -149,7 +149,7 @@ fun ReportsExportScreen(
                             },
                             options = listOf(
                                 "ALL" to "All entities",
-                                "MySucculentCorner" to "MySucculentCorner",
+                                "MySucculentCorner" to "Business",
                                 "Personal" to "Personal"
                             ),
                             onSelect = viewModel::selectBusinessEntity
@@ -263,7 +263,7 @@ fun ReportsExportScreen(
                         modifier = Modifier.fillMaxWidth().padding(20.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Text("Business Entity Breakdown", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("Business Breakdown", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                         state.entityBreakdown.forEach { item ->
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -272,13 +272,13 @@ fun ReportsExportScreen(
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(
-                                        imageVector = if (item.entityName == "MySucculentCorner") Icons.Default.LocalFlorist else Icons.Default.DirectionsCar,
+                                        imageVector = if (item.entityName == "MySucculentCorner") Icons.Default.BusinessCenter else Icons.Default.Person,
                                         contentDescription = null,
                                         tint = if (item.entityName == "MySucculentCorner") SucculentPrimary else SlateNeutral,
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text(item.entityName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                                    Text(if (item.entityName == "MySucculentCorner") "Business" else item.entityName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                                 }
                                 Text(
                                     text = "${String.format(Locale.US, "%.1f", item.totalMiles)} mi  (\$${String.format(Locale.US, "%.2f", item.totalDeduction)})",
