@@ -200,13 +200,7 @@ fun SwipeableTripCard(
     if (showBusinessBottomSheet) {
         val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val purposes = remember(customPurposes) {
-            val combined = TripPurpose.DEFAULT_SUCCULENT_PURPOSES.toMutableList()
-            customPurposes.forEach { p ->
-                if (!combined.any { it.equals(p, ignoreCase = true) }) {
-                    combined.add(p)
-                }
-            }
-            combined
+            if (customPurposes.isNotEmpty()) customPurposes else TripPurpose.DEFAULT_SUCCULENT_PURPOSES
         }
         var selectedEntity by remember { mutableStateOf(BusinessEntity.MY_SUCCULENT_CORNER.displayName) }
         var selectedPurpose by remember { mutableStateOf(purposes.first()) }

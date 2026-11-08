@@ -256,7 +256,8 @@ fun TripDetailScreen(
         var selectedPurpose by remember { mutableStateOf(trip.purpose) }
         var notesText by remember { mutableStateOf(trip.notes.orEmpty()) }
         val purposes = remember(customPurposes, trip.purpose) {
-            val list = (TripPurpose.DEFAULT_SUCCULENT_PURPOSES + customPurposes).toMutableList()
+            val base = if (customPurposes.isNotEmpty()) customPurposes else TripPurpose.DEFAULT_SUCCULENT_PURPOSES
+            val list = base.toMutableList()
             if (trip.purpose.isNotBlank() && trip.purpose != "Personal" && !list.contains(trip.purpose)) {
                 list.add(trip.purpose)
             }

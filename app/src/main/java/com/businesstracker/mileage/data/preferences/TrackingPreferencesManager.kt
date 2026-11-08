@@ -460,26 +460,22 @@ class TrackingPreferencesManager @Inject constructor(
     }
 
     val customPurposes: Flow<List<String>> = context.dataStore.data.map { prefs ->
-        val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES] ?: ""
-        parseCustomPurposes(raw)
+        val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES]
+        if (raw == null) {
+            TripPurpose.DEFAULT_SUCCULENT_PURPOSES
+        } else {
+            parseCustomPurposes(raw)
+        }
     }
 
-    val allBusinessPurposes: Flow<List<String>> = customPurposes.map { custom ->
-        val combined = TripPurpose.DEFAULT_SUCCULENT_PURPOSES.toMutableList()
-        custom.forEach { c ->
-            if (!combined.any { it.equals(c, ignoreCase = true) }) {
-                combined.add(c)
-            }
-        }
-        combined
-    }
+    val allBusinessPurposes: Flow<List<String>> = customPurposes
 
     suspend fun addCustomPurpose(purpose: String) {
         val trimmed = purpose.trim()
         if (trimmed.isEmpty()) return
         context.dataStore.edit { prefs ->
-            val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES] ?: ""
-            val current = parseCustomPurposes(raw).toMutableList()
+            val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES]
+            val current = (if (raw == null) TripPurpose.DEFAULT_SUCCULENT_PURPOSES else parseCustomPurposes(raw)).toMutableList()
             if (!current.any { it.equals(trimmed, ignoreCase = true) }) {
                 current.add(trimmed)
                 val json = JSONArray().apply { current.forEach { put(it) } }.toString()
@@ -491,9 +487,10 @@ class TrackingPreferencesManager @Inject constructor(
     suspend fun removeCustomPurpose(purpose: String) {
         val trimmed = purpose.trim()
         context.dataStore.edit { prefs ->
-            val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES] ?: ""
-            val current = parseCustomPurposes(raw).filterNot { it.equals(trimmed, ignoreCase = true) }
-            val json = JSONArray().apply { current.forEach { put(it) } }.toString()
+            val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES]
+            val current = if (raw == null) TripPurpose.DEFAULT_SUCCULENT_PURPOSES else parseCustomPurposes(raw)
+            val updated = current.filterNot { it.equals(trimmed, ignoreCase = true) }
+            val json = JSONArray().apply { updated.forEach { put(it) } }.toString()
             prefs[KEY_CUSTOM_PURPOSES] = json
         }
     }
@@ -503,8 +500,8 @@ class TrackingPreferencesManager @Inject constructor(
         val newTrimmed = newPurpose.trim()
         if (newTrimmed.isEmpty()) return
         context.dataStore.edit { prefs ->
-            val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES] ?: ""
-            val current = parseCustomPurposes(raw).toMutableList()
+            val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES]
+            val current = (if (raw == null) TripPurpose.DEFAULT_SUCCULENT_PURPOSES else parseCustomPurposes(raw)).toMutableList()
             val index = current.indexOfFirst { it.equals(oldTrimmed, ignoreCase = true) }
             if (index != -1) {
                 current[index] = newTrimmed

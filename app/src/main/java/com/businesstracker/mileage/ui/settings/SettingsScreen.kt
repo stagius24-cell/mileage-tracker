@@ -58,8 +58,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
@@ -117,8 +123,8 @@ fun SettingsScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
             Text(
@@ -130,37 +136,36 @@ fun SettingsScreen(
 
         item {
             SettingsSection(title = "Appearance", icon = Icons.Default.Palette) {
-                Text(
-                    text = "Theme",
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium
-                )
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 44.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    listOf(
-                        AppThemeMode.AUTO to "Auto",
-                        AppThemeMode.LIGHT to "Light",
-                        AppThemeMode.DARK to "Dark"
-                    ).forEach { (mode, label) ->
-                        FilterChip(
-                            selected = state.themeMode == mode,
-                            onClick = { viewModel.setThemeMode(mode) },
-                            label = { Text(label) },
-                            modifier = Modifier.weight(1f)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Dark Mode",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Text(
+                            text = if (state.themeMode == AppThemeMode.DARK) "Dark theme enabled" else "Light theme enabled",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                    Switch(
+                        checked = state.themeMode == AppThemeMode.DARK,
+                        onCheckedChange = { isDark ->
+                            viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
+                        },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = SucculentPrimary
+                        )
+                    )
                 }
-                Text(
-                    text = if (state.themeMode == AppThemeMode.AUTO) {
-                        "Follows your phone's appearance"
-                    } else {
-                        "Uses ${state.themeMode.storedValue.lowercase()} appearance"
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
 
@@ -358,8 +363,7 @@ fun SettingsScreen(
                                 if (trimmed.isBlank()) {
                                     editPurposeError = "Purpose cannot be empty"
                                 } else if (!trimmed.equals(old, ignoreCase = true) &&
-                                    (TripPurpose.DEFAULT_SUCCULENT_PURPOSES.any { it.equals(trimmed, ignoreCase = true) } ||
-                                            state.customPurposes.any { it.equals(trimmed, ignoreCase = true) })
+                                    state.customPurposes.any { it.equals(trimmed, ignoreCase = true) }
                                 ) {
                                     editPurposeError = "Purpose already exists"
                                 } else {
@@ -460,9 +464,7 @@ fun SettingsScreen(
                             val trimmed = newPurposeText.trim()
                             if (trimmed.isBlank()) {
                                 purposeError = "Purpose cannot be empty"
-                            } else if (TripPurpose.DEFAULT_SUCCULENT_PURPOSES.any { it.equals(trimmed, ignoreCase = true) } ||
-                                state.customPurposes.any { it.equals(trimmed, ignoreCase = true) }
-                            ) {
+                            } else if (state.customPurposes.any { it.equals(trimmed, ignoreCase = true) }) {
                                 purposeError = "Purpose already exists"
                             } else {
                                 viewModel.addCustomPurpose(trimmed)
@@ -483,13 +485,6 @@ fun SettingsScreen(
 
                 // Custom purposes chips
                 if (state.customPurposes.isNotEmpty()) {
-                    Text(
-                        text = "Custom Purposes (${state.customPurposes.size})",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -550,33 +545,6 @@ fun SettingsScreen(
                         }
                     }
                 }
-
-                SectionDivider()
-                Text(
-                    text = "Default Purposes",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    TripPurpose.DEFAULT_SUCCULENT_PURPOSES.forEach { purpose ->
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ) {
-                            Text(
-                                text = purpose,
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                }
             }
         }
 
@@ -587,16 +555,13 @@ fun SettingsScreen(
             } else {
                 "Never"
             }
+            var isSpreadsheetIdExpanded by remember { mutableStateOf(false) }
 
             SettingsSection(
                 title = "Google Sheets",
-                icon = Icons.Default.TableChart,
-                trailing = {
-                    StatusText(
-                        text = if (state.isSheetsConnected) "Connected" else "Not connected",
-                        positive = state.isSheetsConnected
-                    )
-                }
+                subtitle = if (state.isSheetsConnected) "Connected" else "Not connected",
+                subtitlePositive = state.isSheetsConnected,
+                icon = Icons.Default.TableChart
             ) {
                 if (!state.sheetsLastError.isNullOrBlank()) {
                     CompactError(state.sheetsLastError.orEmpty())
@@ -611,14 +576,43 @@ fun SettingsScreen(
                     onDisconnect = viewModel::disconnectSheets
                 )
 
-                OutlinedTextField(
-                    value = state.sheetsSpreadsheetId,
-                    onValueChange = viewModel::setSheetsSpreadsheetId,
-                    label = { Text("Spreadsheet ID") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
-                )
+                // Collapsible Spreadsheet ID configuration
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { isSpreadsheetIdExpanded = !isSpreadsheetIdExpanded }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Spreadsheet ID configuration",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Icon(
+                            imageVector = if (isSpreadsheetIdExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isSpreadsheetIdExpanded) "Collapse" else "Expand",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    if (isSpreadsheetIdExpanded) {
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = state.sheetsSpreadsheetId,
+                            onValueChange = viewModel::setSheetsSpreadsheetId,
+                            label = { Text("Spreadsheet ID") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -633,7 +627,7 @@ fun SettingsScreen(
                     enabled = !state.isSyncing,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(48.dp),
+                        .height(44.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
                 ) {
@@ -673,6 +667,8 @@ fun SettingsScreen(
 private fun SettingsSection(
     title: String,
     icon: ImageVector,
+    subtitle: String? = null,
+    subtitlePositive: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -684,8 +680,8 @@ private fun SettingsSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -698,12 +694,21 @@ private fun SettingsSection(
                     modifier = Modifier.size(22.dp)
                 )
                 Spacer(Modifier.width(10.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    if (!subtitle.isNullOrBlank()) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            color = if (subtitlePositive) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
                 trailing?.invoke()
             }
             content()
@@ -877,8 +882,12 @@ private fun AccountRow(
     onConnect: () -> Unit,
     onDisconnect: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Column {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = if (connected) "Google account" else "Connect Google account",
                 style = MaterialTheme.typography.bodyLarge,
@@ -892,19 +901,50 @@ private fun AccountRow(
                 )
             }
         }
+        Spacer(Modifier.width(8.dp))
         if (connected) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onConnect, modifier = Modifier.weight(1f)) {
-                    Text("Switch")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Switch account button
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                        .clickable(onClick = onConnect),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SwapHoriz,
+                        contentDescription = "Switch account",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
-                OutlinedButton(onClick = onDisconnect, modifier = Modifier.weight(1f)) {
-                    Text("Disconnect", color = SpeedRed)
+                // Disconnect account button
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(SpeedRed.copy(alpha = 0.12f))
+                        .clickable(onClick = onDisconnect),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LinkOff,
+                        contentDescription = "Disconnect account",
+                        tint = SpeedRed,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
         } else {
             Button(
                 onClick = onConnect,
-                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
             ) {
                 Text("Connect")
