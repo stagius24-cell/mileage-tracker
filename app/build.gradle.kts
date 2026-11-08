@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 50
-        versionName = "1.0.49"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Removes the Business Breakdown card from Reports.\"")
+        versionCode = 51
+        versionName = "1.0.50"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Adds confirmation dialog before deleting trips from history.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

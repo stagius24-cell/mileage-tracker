@@ -61,6 +61,9 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -98,6 +101,7 @@ fun TripHistoryScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var tripPendingDeletion by remember { mutableStateOf<TripEntity?>(null) }
 
     LaunchedEffect(initialMonthIso) {
         if (initialMonthIso.matches(Regex("\\d{4}-\\d{2}"))) {
@@ -156,7 +160,7 @@ fun TripHistoryScreen(
                                 trip = trip,
                                 showDate = false,
                                 onClick = { viewModel.selectTripForDetails(trip) },
-                                onDelete = { viewModel.deleteTrip(trip.id) }
+                                onDelete = { tripPendingDeletion = trip }
                             )
                         }
                     }
@@ -166,12 +170,38 @@ fun TripHistoryScreen(
                             trip = trip,
                             showDate = true,
                             onClick = { viewModel.selectTripForDetails(trip) },
-                            onDelete = { viewModel.deleteTrip(trip.id) }
+                            onDelete = { tripPendingDeletion = trip }
                         )
                     }
                 }
             }
         }
+    }
+
+    if (tripPendingDeletion != null) {
+        val targetTrip = tripPendingDeletion!!
+        AlertDialog(
+            onDismissRequest = { tripPendingDeletion = null },
+            title = { Text("Delete this trip?") },
+            text = { Text("Are you sure you want to delete this trip (${formatMiles(targetTrip.totalDistanceMiles)} mi)? This action cannot be undone.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val idToDelete = targetTrip.id
+                        tripPendingDeletion = null
+                        viewModel.deleteTrip(idToDelete)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
+                ) {
+                    Text("Delete", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { tripPendingDeletion = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
