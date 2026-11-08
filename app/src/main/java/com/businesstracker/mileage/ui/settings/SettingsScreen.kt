@@ -136,36 +136,14 @@ fun SettingsScreen(
 
         item {
             SettingsSection(title = "Appearance", icon = Icons.Default.Palette) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 44.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Dark Mode",
-                            style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium
-                        )
-                        Text(
-                            text = if (state.themeMode == AppThemeMode.DARK) "Dark theme enabled" else "Light theme enabled",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                SettingsSwitchRow(
+                    title = "Dark Mode",
+                    description = if (state.themeMode == AppThemeMode.DARK) "Dark theme enabled" else "Light theme enabled",
+                    checked = state.themeMode == AppThemeMode.DARK,
+                    onCheckedChange = { isDark ->
+                        viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
                     }
-                    Switch(
-                        checked = state.themeMode == AppThemeMode.DARK,
-                        onCheckedChange = { isDark ->
-                            viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
-                        },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = SucculentPrimary
-                        )
-                    )
-                }
+                )
             }
         }
 

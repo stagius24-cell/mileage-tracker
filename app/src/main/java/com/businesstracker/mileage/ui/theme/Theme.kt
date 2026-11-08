@@ -29,6 +29,7 @@ private val LightColorScheme = lightColorScheme(
     surface = NeutralSurfaceLight,
     onSurface = Color(0xFF1E293B),
     surfaceVariant = Color(0xFFF1F5F9),
+    onSurfaceVariant = SlateNeutral,
     outline = NeutralBorderLight
 )
 
@@ -48,6 +49,7 @@ private val DarkColorScheme = darkColorScheme(
     surface = NeutralSurfaceDark,
     onSurface = Color(0xFFF1F5F9),
     surfaceVariant = Color(0xFF1E293B),
+    onSurfaceVariant = SlateLight,
     outline = NeutralBorderDark
 )
 
