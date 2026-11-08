@@ -16,6 +16,7 @@ android {
         targetSdk = 35
         versionCode = 49
         versionName = "1.0.48"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"This update adds a short version note in Settings.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

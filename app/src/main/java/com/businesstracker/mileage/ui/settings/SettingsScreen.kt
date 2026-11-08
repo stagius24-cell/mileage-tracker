@@ -656,7 +656,7 @@ fun SettingsScreen(
                 }
                 AnimatedVisibility(visible = isVersionExpanded) {
                     Text(
-                        text = "This update adds a short version note in Settings.",
+                        text = BuildConfig.VERSION_UPDATE_NOTE,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
