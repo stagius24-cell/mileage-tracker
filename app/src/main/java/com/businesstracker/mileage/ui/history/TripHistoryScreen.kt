@@ -210,7 +210,7 @@ fun TripHistoryScreen(
                             indication = null
                         ) {},
                     shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.89f),
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.80f),
                     tonalElevation = 6.dp,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                 ) {
@@ -219,13 +219,13 @@ fun TripHistoryScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Text(
-                            text = "Delete Trip?",
+                            text = "Delete Trip",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Delete this ${formatMiles(targetTrip.totalDistanceMiles)} mi trip?",
+                            text = "Delete this ${formatMiles(targetTrip.totalDistanceMiles)} mi trip? This action cannot be undone.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 52
-        versionName = "1.0.51"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Refined trip deletion dialog: shorter text, 89% opacity, dimmed and blurred background.\"")
+        versionCode = 53
+        versionName = "1.0.52"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Refined trip deletion dialog: title 'Delete Trip', 80% opacity, and note that action cannot be undone.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
