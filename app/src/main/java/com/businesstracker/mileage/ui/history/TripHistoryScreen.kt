@@ -1,4 +1,24 @@
 package com.businesstracker.mileage.ui.history
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.BusinessCenter
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.AnimatedVisibility
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -166,6 +186,8 @@ private fun HistoryControls(
     onClearDateFilter: () -> Unit,
     onBackToReports: (() -> Unit)?
 ) {
+    var isSortExpanded by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -203,106 +225,219 @@ private fun HistoryControls(
             }
         }
 
+        // Search Bar & Sort Toggle Button
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
-                value = state.searchQuery,
-                onValueChange = onSearchChange,
+            Surface(
                 modifier = Modifier
                     .weight(1f)
-                    .height(42.dp),
-                placeholder = { Text("Search trips", maxLines = 1) },
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(19.dp))
-                },
-                trailingIcon = if (state.searchQuery.isNotEmpty()) {
-                    {
-                        IconButton(onClick = { onSearchChange("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear search", modifier = Modifier.size(18.dp))
-                        }
-                    }
-                } else null,
-                singleLine = true,
+                    .height(44.dp),
                 shape = RoundedCornerShape(12.dp),
-                textStyle = MaterialTheme.typography.bodyMedium,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-            SortMenu(selected = state.sortOrder, onSelected = onSortChange)
-        }
-
-        LazyRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(end = 8.dp)
-        ) {
-            if (state.startDateFilter.isNotBlank()) {
-                item {
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable(onClick = onClearDateFilter),
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(start = 10.dp, end = 6.dp, top = 7.dp, bottom = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                        if (state.searchQuery.isEmpty()) {
                             Text(
-                                text = "Month: ${formatMonthFilter(state.startDateFilter)}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Medium
+                                text = "Search trips",
+                                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                maxLines = 1
                             )
-                            Spacer(Modifier.width(4.dp))
+                        }
+                        BasicTextField(
+                            value = state.searchQuery,
+                            onValueChange = onSearchChange,
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            ),
+                            cursorBrush = SolidColor(SucculentPrimary),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    if (state.searchQuery.isNotEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .clickable { onSearchChange("") },
+                            contentAlignment = Alignment.Center
+                        ) {
                             Icon(
                                 Icons.Default.Close,
-                                contentDescription = "Clear month filter",
-                                modifier = Modifier.size(16.dp)
+                                contentDescription = "Clear search",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                 }
             }
-            item {
-                CompactFilterMenu(
-                    label = "Type",
-                    selectedValue = state.selectedClassificationFilter,
-                    options = listOf(
-                        HistoryFilterOption("ALL", "All drives"),
-                        HistoryFilterOption("BUSINESS", "Business"),
-                        HistoryFilterOption("PERSONAL", "Personal"),
-                        HistoryFilterOption("UNREVIEWED", "Unreviewed")
-                    ),
-                    onSelected = onClassificationChange
-                )
+
+            // Collapsible sort toggle button
+            Surface(
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { isSortExpanded = !isSortExpanded },
+                shape = RoundedCornerShape(12.dp),
+                color = if (isSortExpanded) SucculentPrimary else MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, if (isSortExpanded) SucculentPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.Sort,
+                        contentDescription = "Sort and filter options",
+                        tint = if (isSortExpanded) Color.White else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
-            item {
-                CompactFilterMenu(
-                    label = "Entity",
-                    selectedValue = state.selectedBusinessEntityFilter,
-                    options = listOf(HistoryFilterOption("ALL", "All entities")) +
-                        BusinessEntity.entries.map { HistoryFilterOption(it.displayName, it.displayName) },
-                    onSelected = onEntityChange
-                )
+        }
+
+        // Active Month Filter Badge (if present)
+        if (state.startDateFilter.isNotBlank()) {
+            Surface(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable(onClick = onClearDateFilter),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Row(
+                    modifier = Modifier.padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Month: ${formatMonthFilter(state.startDateFilter)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = "Clear month filter",
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
-            item {
-                CompactFilterMenu(
-                    label = "Sync",
-                    selectedValue = state.selectedSyncStatusFilter,
-                    options = listOf(
-                        HistoryFilterOption("ALL", "All status"),
-                        HistoryFilterOption("SYNCED", "Synced"),
-                        HistoryFilterOption("PENDING", "Pending"),
-                        HistoryFilterOption("FAILED", "Failed")
-                    ),
-                    onSelected = onSyncChange
-                )
+        }
+
+        // Collapsible 2-Row Sort & Filter Section
+        AnimatedVisibility(
+            visible = isSortExpanded,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Row 1: Classification filters (All, Business, Personal, Unreviewed)
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = 2.dp)
+                ) {
+                    item {
+                        SortFilterPill(
+                            label = "All",
+                            icon = Icons.Default.DirectionsCar,
+                            isSelected = state.selectedClassificationFilter == "ALL",
+                            onClick = { onClassificationChange("ALL") }
+                        )
+                    }
+                    item {
+                        SortFilterPill(
+                            label = "Business",
+                            icon = Icons.Default.BusinessCenter,
+                            isSelected = state.selectedClassificationFilter == "BUSINESS",
+                            onClick = {
+                                onClassificationChange(if (state.selectedClassificationFilter == "BUSINESS") "ALL" else "BUSINESS")
+                            }
+                        )
+                    }
+                    item {
+                        SortFilterPill(
+                            label = "Personal",
+                            icon = Icons.Default.Person,
+                            isSelected = state.selectedClassificationFilter == "PERSONAL",
+                            onClick = {
+                                onClassificationChange(if (state.selectedClassificationFilter == "PERSONAL") "ALL" else "PERSONAL")
+                            }
+                        )
+                    }
+                    item {
+                        SortFilterPill(
+                            label = "Unreviewed",
+                            icon = Icons.Default.Info,
+                            isSelected = state.selectedClassificationFilter == "UNREVIEWED",
+                            onClick = {
+                                onClassificationChange(if (state.selectedClassificationFilter == "UNREVIEWED") "ALL" else "UNREVIEWED")
+                            }
+                        )
+                    }
+                }
+
+                // Row 2: Sort options (Newest, Oldest, Highest, Lowest)
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(horizontal = 2.dp)
+                ) {
+                    item {
+                        SortFilterPill(
+                            label = "Newest",
+                            icon = Icons.Default.DateRange,
+                            isSelected = state.sortOrder == SortOrder.NEWEST_FIRST,
+                            onClick = { onSortChange(SortOrder.NEWEST_FIRST) }
+                        )
+                    }
+                    item {
+                        SortFilterPill(
+                            label = "Oldest",
+                            icon = Icons.Default.History,
+                            isSelected = state.sortOrder == SortOrder.OLDEST_FIRST,
+                            onClick = { onSortChange(SortOrder.OLDEST_FIRST) }
+                        )
+                    }
+                    item {
+                        SortFilterPill(
+                            label = "Highest",
+                            icon = Icons.Default.KeyboardArrowUp,
+                            isSelected = state.sortOrder == SortOrder.HIGHEST_MILEAGE,
+                            onClick = { onSortChange(SortOrder.HIGHEST_MILEAGE) }
+                        )
+                    }
+                    item {
+                        SortFilterPill(
+                            label = "Lowest",
+                            icon = Icons.Default.KeyboardArrowDown,
+                            isSelected = state.sortOrder == SortOrder.LOWEST_MILEAGE,
+                            onClick = { onSortChange(SortOrder.LOWEST_MILEAGE) }
+                        )
+                    }
+                }
             }
         }
 
@@ -319,95 +454,36 @@ private fun HistoryControls(
 }
 
 @Composable
-private fun SortMenu(selected: SortOrder, onSelected: (SortOrder) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        Surface(
-            modifier = Modifier
-                .height(42.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { expanded = true },
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 1.dp
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Default.Sort, contentDescription = "Sort trips", modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(4.dp))
-                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(18.dp))
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            SortOrder.entries.forEach { order ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = order.displayName,
-                            fontWeight = if (order == selected) FontWeight.Bold else FontWeight.Normal
-                        )
-                    },
-                    onClick = {
-                        onSelected(order)
-                        expanded = false
-                    }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CompactFilterMenu(
+private fun SortFilterPill(
     label: String,
-    selectedValue: String,
-    options: List<HistoryFilterOption>,
-    onSelected: (String) -> Unit
+    icon: ImageVector,
+    isSelected: Boolean,
+    onClick: () -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    val selected = options.firstOrNull { it.value == selectedValue } ?: options.first()
-    Box {
-        Surface(
-            modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .clickable { expanded = true },
-            shape = RoundedCornerShape(10.dp),
-            color = if (selectedValue == "ALL") {
-                MaterialTheme.colorScheme.surfaceVariant
-            } else {
-                MaterialTheme.colorScheme.primaryContainer
-            }
+    Surface(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(10.dp),
+        color = if (isSelected) SucculentPrimary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+        contentColor = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "$label: ${selected.label}",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(Modifier.width(2.dp))
-                Icon(Icons.Default.ArrowDropDown, contentDescription = null, modifier = Modifier.size(17.dp))
-            }
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            options.forEach { option ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            option.label,
-                            fontWeight = if (option.value == selectedValue) FontWeight.Bold else FontWeight.Normal
-                        )
-                    },
-                    onClick = {
-                        onSelected(option.value)
-                        expanded = false
-                    }
-                )
-            }
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+            )
         }
     }
 }
