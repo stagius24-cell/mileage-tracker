@@ -440,16 +440,6 @@ private fun HistoryControls(
                 }
             }
         }
-
-        if (state.totalFilteredDeduction > 0) {
-            Text(
-                text = "Business deduction  ${formatCurrency(state.totalFilteredDeduction)}",
-                modifier = Modifier.align(Alignment.End),
-                style = MaterialTheme.typography.labelMedium,
-                color = SucculentPrimary,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
     }
 }
 
