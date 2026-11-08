@@ -40,4 +40,15 @@ class StationaryWatchdogPolicyTest {
         assertFalse(StationaryWatchdogPolicy.canRestore("trip-a", "trip-a", 0, 0, 1_000L, 601_000L))
         assertFalse(StationaryWatchdogPolicy.canRestore("trip-a", "trip-a", 5, 5, 700_000L, 601_000L))
     }
+
+    @Test fun vehicleReentryAfterStationaryEvidenceVetoesStop() {
+        assertTrue(StationaryWatchdogPolicy.hasLaterVehicleEnter("trip-a", 1_000L,
+            "trip-a", 500_000L, 5, 5))
+        assertFalse(StationaryWatchdogPolicy.hasLaterVehicleEnter("trip-a", 1_000L,
+            "trip-b", 500_000L, 5, 5))
+        assertFalse(StationaryWatchdogPolicy.hasLaterVehicleEnter("trip-a", 1_000L,
+            "trip-a", 500_000L, 4, 5))
+        assertFalse(StationaryWatchdogPolicy.hasLaterVehicleEnter("trip-a", 1_000L,
+            "trip-a", 500L, 5, 5))
+    }
 }

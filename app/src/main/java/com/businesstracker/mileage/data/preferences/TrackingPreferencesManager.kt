@@ -36,6 +36,8 @@ data class StationaryEvidence(
     val bootCount: Int
 )
 
+data class VehicleEnterEvidence(val tripId: String, val elapsedMillis: Long, val bootCount: Int)
+
 @Singleton
 class TrackingPreferencesManager @Inject constructor(
     @ApplicationContext private val context: Context
@@ -59,6 +61,9 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_STATIONARY_LON = doublePreferencesKey("stationary_lon")
         private val KEY_STATIONARY_ELAPSED = longPreferencesKey("stationary_elapsed")
         private val KEY_STATIONARY_BOOT = longPreferencesKey("stationary_boot")
+        private val KEY_VEHICLE_ENTER_TRIP = stringPreferencesKey("vehicle_enter_trip")
+        private val KEY_VEHICLE_ENTER_ELAPSED = longPreferencesKey("vehicle_enter_elapsed")
+        private val KEY_VEHICLE_ENTER_BOOT = longPreferencesKey("vehicle_enter_boot")
 
         // Cloudflare D1 & Sync Configuration
         private val KEY_CF_ENDPOINT = stringPreferencesKey("cf_endpoint")
@@ -347,6 +352,23 @@ class TrackingPreferencesManager @Inject constructor(
             prefs[KEY_STATIONARY_LON] ?: return null,
             prefs[KEY_STATIONARY_ELAPSED] ?: return null,
             (prefs[KEY_STATIONARY_BOOT] ?: return null).toInt()
+        )
+    }
+
+    suspend fun recordVehicleEnter(tripId: String, elapsedMillis: Long, bootCount: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_VEHICLE_ENTER_TRIP] = tripId
+            prefs[KEY_VEHICLE_ENTER_ELAPSED] = elapsedMillis
+            prefs[KEY_VEHICLE_ENTER_BOOT] = bootCount.toLong()
+        }
+    }
+
+    suspend fun getVehicleEnterEvidence(): VehicleEnterEvidence? {
+        val prefs = context.dataStore.data.first()
+        return VehicleEnterEvidence(
+            prefs[KEY_VEHICLE_ENTER_TRIP] ?: return null,
+            prefs[KEY_VEHICLE_ENTER_ELAPSED] ?: return null,
+            (prefs[KEY_VEHICLE_ENTER_BOOT] ?: return null).toInt()
         )
     }
 

@@ -16,6 +16,16 @@ object StationaryWatchdogPolicy {
         evidenceBootCount == currentBootCount && evidenceElapsedMillis >= 0L &&
         evidenceElapsedMillis <= nowElapsedMillis
 
+    fun hasLaterVehicleEnter(
+        activeTripId: String,
+        evidenceElapsedMillis: Long,
+        enterTripId: String,
+        enterElapsedMillis: Long,
+        enterBootCount: Int,
+        currentBootCount: Int
+    ): Boolean = activeTripId == enterTripId && currentBootCount > 0 &&
+        enterBootCount == currentBootCount && enterElapsedMillis > evidenceElapsedMillis
+
     fun shouldRecheck(
         evidence: StationaryAutoStopMonitor.Snapshot?,
         nowElapsedMillis: Long,

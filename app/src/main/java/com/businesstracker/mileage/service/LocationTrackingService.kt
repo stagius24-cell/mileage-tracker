@@ -200,6 +200,14 @@ class LocationTrackingService : Service() {
 
         if (shouldStop && stationaryAutoStopRequested.compareAndSet(false, true)) {
             serviceScope.launch(ioDispatcher) {
+                val snapshot = stationaryAutoStopMonitor.snapshot()
+                if (snapshot != null && hasLaterVehicleEnter(snapshot)) {
+                    evidenceRevision.incrementAndGet()
+                    stationaryAutoStopMonitor.reset()
+                    preferencesManager.saveStationaryEvidence(null)
+                    stationaryAutoStopRequested.set(false)
+                    return@launch
+                }
                 preferencesManager.setInVehicleState(false)
                 preferencesManager.setBluetoothDisconnectPending(false)
                 TripDebounceWorker.cancelDebounce(applicationContext)
@@ -930,10 +938,18 @@ class LocationTrackingService : Service() {
         if (!StationaryWatchdogPolicy.canRestore(evidence.tripId, currentTripId,
                 evidence.bootCount, safeBootCountProvider.getBootCount(),
                 evidence.elapsedMillis, now)) return
+        if (hasLaterVehicleEnter(StationaryAutoStopMonitor.Snapshot(
+                evidence.latitude, evidence.longitude, evidence.elapsedMillis))) return
         stationaryAutoStopMonitor.restore(
             StationaryAutoStopMonitor.Snapshot(evidence.latitude, evidence.longitude, evidence.elapsedMillis),
             now
         )
+    }
+
+    private suspend fun hasLaterVehicleEnter(snapshot: StationaryAutoStopMonitor.Snapshot): Boolean {
+        val enter = preferencesManager.getVehicleEnterEvidence() ?: return false
+        return StationaryWatchdogPolicy.hasLaterVehicleEnter(currentTripId, snapshot.elapsedMillis,
+            enter.tripId, enter.elapsedMillis, enter.bootCount, safeBootCountProvider.getBootCount())
     }
 
     @SuppressLint("MissingPermission")
