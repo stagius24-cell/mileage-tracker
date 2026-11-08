@@ -48,4 +48,14 @@ class StationaryAutoStopMonitorTest {
         assertFalse(monitor.record(originLatitude, originLongitude, 0f, 5f, 3_000L))
         assertTrue(monitor.record(originLatitude, originLongitude, 0f, 5f, 4_000L))
     }
+    @Test
+    fun invalidFixesCannotCreateStationaryEvidence() {
+        val monitor = StationaryAutoStopMonitor()
+        assertFalse(monitor.record(Double.NaN, originLongitude, 0f, 5f, 0L))
+        assertFalse(monitor.record(originLatitude, originLongitude, 0f, Float.NaN, 600_000L))
+        assertFalse(monitor.record(originLatitude, originLongitude, Float.NaN, 5f, 600_000L))
+        assertFalse(monitor.record(originLatitude, originLongitude, 0f, 5f, 600_001L))
+        assertTrue(monitor.record(originLatitude, originLongitude, 0f, 5f, 1_200_001L))
+    }
+
 }

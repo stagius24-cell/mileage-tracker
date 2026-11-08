@@ -2,9 +2,9 @@ name: Build & Test Business Mileage Tracker APK
 
 on:
   push:
-    branches: [ "main", "feature/**" ]
+    branches: [ "main", "feature/**", "audit/**" ]
   pull_request:
-    branches: [ "main", "feature/**" ]
+    branches: [ "main", "feature/**", "audit/**" ]
   workflow_dispatch:
 
 concurrency:
@@ -47,6 +47,9 @@ jobs:
 
       - name: Run Unit Tests & Assemble Debug APK
         run: ./gradlew testDebugUnitTest testReleaseUnitTest assembleDebug --stacktrace
+
+      - name: Repeat final validation
+        run: ./gradlew testDebugUnitTest testReleaseUnitTest assembleDebug --rerun-tasks --stacktrace
 
       - name: Upload Build Reports On Failure
         if: failure()

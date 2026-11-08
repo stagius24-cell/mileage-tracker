@@ -44,7 +44,12 @@ class StationaryAutoStopMonitor(
         accuracyMeters: Float,
         elapsedRealtimeMillis: Long
     ): Boolean {
-        if (stopRequested || elapsedRealtimeMillis < 0L || accuracyMeters > maximumAccuracyMeters) {
+        if (stopRequested || elapsedRealtimeMillis < 0L ||
+            !latitude.isFinite() || !longitude.isFinite() ||
+            latitude !in -90.0..90.0 || longitude !in -180.0..180.0 ||
+            !accuracyMeters.isFinite() || accuracyMeters < 0f ||
+            !speedMetersPerSecond.isFinite() || speedMetersPerSecond < 0f ||
+            accuracyMeters > maximumAccuracyMeters) {
             return false
         }
 
