@@ -178,18 +178,14 @@ fun TripDetailScreen(
                         icon = Icons.Default.LocationOn,
                         selected = selectedDetailTab == 0,
                         onClick = { selectedDetailTab = 0 },
-                        modifier = Modifier.weight(1f),
-                        showActions = false
+                        modifier = Modifier.weight(1f)
                     )
                     TripDetailTabButton(
                         label = "More info",
                         icon = Icons.Default.Info,
                         selected = selectedDetailTab == 1,
                         onClick = { selectedDetailTab = 1 },
-                        modifier = Modifier.weight(1f),
-                        showActions = true,
-                        onEdit = { showEditSheet = true },
-                        onDelete = { showDeleteConfirmation = true }
+                        modifier = Modifier.weight(1f)
                     )
                 }
             }
@@ -216,7 +212,9 @@ fun TripDetailScreen(
                     TripStatusTab(
                         trip = trip,
                         durationMinutes = durationMinutes,
-                        classificationColor = classificationColor
+                        classificationColor = classificationColor,
+                        onEdit = { showEditSheet = true },
+                        onDelete = { showDeleteConfirmation = true }
                     )
                 }
             }
@@ -389,10 +387,7 @@ private fun TripDetailTabButton(
     icon: ImageVector,
     selected: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    showActions: Boolean = false,
-    onEdit: () -> Unit = {},
-    onDelete: () -> Unit = {}
+    modifier: Modifier = Modifier
 ) {
     val selectedColor by animateColorAsState(
         targetValue = if (selected) SucculentPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
@@ -421,35 +416,22 @@ private fun TripDetailTabButton(
                     shape = RoundedCornerShape(percent = 50)
                 )
         )
-        Row(
-            modifier = Modifier.fillMaxWidth().height(64.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(if (showActions) 0.72f else 1f)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(percent = 50))
-                    .clickable(onClick = onClick),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp).graphicsLayer(scaleX = iconScale, scaleY = iconScale),
-                        tint = selectedColor
-                    )
-                    Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = selectedColor)
-                }
-            }
-            if (showActions) {
-                IconButton(onClick = onEdit, modifier = Modifier.size(38.dp)) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit trip", tint = selectedColor, modifier = Modifier.size(20.dp))
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(38.dp)) {
-                    Icon(Icons.Default.DeleteOutline, contentDescription = "Delete trip", tint = SpeedRed, modifier = Modifier.size(20.dp))
-                }
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp).graphicsLayer(scaleX = iconScale, scaleY = iconScale),
+                    tint = selectedColor
+                )
+                Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = selectedColor)
             }
         }
     }
@@ -580,7 +562,9 @@ private fun DestinationRow(
 private fun TripStatusTab(
     trip: TripEntity,
     durationMinutes: Long,
-    classificationColor: Color
+    classificationColor: Color,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -605,6 +589,20 @@ private fun TripStatusTab(
         if (!trip.notes.isNullOrBlank()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
             StatusValue("Notes", trip.notes, Modifier.fillMaxWidth())
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onEdit, modifier = Modifier.size(38.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = "Edit trip", tint = SucculentPrimary, modifier = Modifier.size(20.dp))
+            }
+            Spacer(modifier = Modifier.width(4.dp))
+            IconButton(onClick = onDelete, modifier = Modifier.size(38.dp)) {
+                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete trip", tint = SpeedRed, modifier = Modifier.size(20.dp))
+            }
         }
     }
 }
