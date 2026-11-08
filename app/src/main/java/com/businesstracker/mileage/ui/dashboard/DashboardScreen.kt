@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.BrightnessLow
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.filled.BusinessCenter
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsNotFixed
@@ -68,6 +70,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -77,6 +80,7 @@ import com.businesstracker.mileage.ui.components.SwipeableTripCard
 import com.businesstracker.mileage.ui.theme.AmoledBlack
 import com.businesstracker.mileage.ui.theme.HighAccuracyGreen
 import com.businesstracker.mileage.ui.theme.SlateNeutral
+import com.businesstracker.mileage.ui.theme.PersonalBlue
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import com.businesstracker.mileage.ui.theme.WeakGpsAmber
@@ -410,9 +414,11 @@ fun DashboardScreen(
             item {
                 val bMiles = state.summary.businessMiles
                 val pMiles = state.summary.personalMiles
-                val totalLogged = (bMiles + pMiles).coerceAtLeast(0.1)
-                val businessFraction = (bMiles / totalLogged).toFloat()
-                val personalFraction = 1f - businessFraction
+                val totalLogged = bMiles + pMiles
+                val businessFraction = if (totalLogged > 0) (bMiles / totalLogged).toFloat() else 0f
+                val personalFraction = if (totalLogged > 0) (pMiles / totalLogged).toFloat() else 0f
+                val businessPercent = businessFraction * 100f
+                val personalPercent = personalFraction * 100f
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -422,50 +428,33 @@ fun DashboardScreen(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        // Proportional Mileage Bar
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(10.dp)
-                                .clip(RoundedCornerShape(5.dp))
-                        ) {
-                            if (businessFraction > 0f) {
-                                Box(
-                                    modifier = Modifier
-                                        .weight(businessFraction.coerceAtLeast(0.01f))
-                                        .fillMaxSize()
-                                        .background(SucculentPrimary)
-                                )
-                            }
-                            if (personalFraction > 0.01f) {
-                                Box(
-                                    modifier = Modifier
-                                        .weight(personalFraction.coerceAtLeast(0.01f))
-                                        .fillMaxSize()
-                                        .background(SlateNeutral.copy(alpha = 0.4f))
-                                )
-                            }
-                        }
-
-                        // MySucculentCorner Business Row
+                        // Business Row
                         BreakdownRow(
-                            title = "MySucculentCorner (Deductible)",
+                            title = "Business",
                             miles = bMiles,
+                            fraction = businessFraction,
+                            percent = businessPercent,
                             deduction = state.summary.estimatedDeduction,
                             color = SucculentPrimary,
-                            icon = Icons.Default.LocalFlorist
+                            icon = Icons.Default.BusinessCenter
                         )
 
-                        // Personal Excluded Row
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+
+                        // Personal Row
                         BreakdownRow(
-                            title = "Personal (Non-Deductible)",
+                            title = "Personal",
                             miles = pMiles,
+                            fraction = personalFraction,
+                            percent = personalPercent,
                             deduction = 0.0,
-                            color = SlateNeutral,
-                            icon = Icons.Default.DirectionsCar
+                            color = PersonalBlue,
+                            icon = Icons.Default.Person
                         )
                     }
                 }
@@ -863,48 +852,101 @@ private fun OdometerMilesDisplay(
 private fun BreakdownRow(
     title: String,
     miles: Double,
+    fraction: Float,
+    percent: Float,
     deduction: Double,
     color: Color,
     icon: ImageVector
 ) {
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                shape = CircleShape,
-                color = color.copy(alpha = 0.15f),
-                modifier = Modifier.size(32.dp)
+        // Top line: Icon, Title, Miles, inline Deduction & Percentage
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f, fill = false)
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = color,
-                    modifier = Modifier.padding(6.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(10.dp))
-            Column {
+                Surface(
+                    shape = CircleShape,
+                    color = color.copy(alpha = 0.15f),
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = color,
+                        modifier = Modifier.padding(6.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(10.dp))
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    softWrap = false
                 )
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "${String.format(Locale.US, "%.1f", miles)} miles",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    text = "• ${String.format(Locale.US, "%.1f", miles)} miles",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.End,
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
+                if (deduction > 0) {
+                    Text(
+                        text = "\$${String.format(Locale.US, "%,.2f", deduction)}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = color,
+                        maxLines = 1,
+                        softWrap = false
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    text = "${String.format(Locale.US, "%.0f%%", percent)}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = color,
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
 
-        Text(
-            text = if (deduction > 0) "\$${String.format(Locale.US, "%,.2f", deduction)}" else "–",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = if (deduction > 0) color else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-        )
+        // Percentage bar underneath category
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(6.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(color.copy(alpha = 0.15f))
+        ) {
+            if (fraction > 0f) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction.coerceIn(0f, 1f))
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(color)
+                )
+            }
+        }
     }
 }
