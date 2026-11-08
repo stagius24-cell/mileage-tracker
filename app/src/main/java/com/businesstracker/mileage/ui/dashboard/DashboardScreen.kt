@@ -438,7 +438,7 @@ fun DashboardScreen(
                             miles = bMiles,
                             fraction = businessFraction,
                             percent = businessPercent,
-                            deduction = state.summary.estimatedDeduction,
+                            deduction = 0.0,
                             color = SucculentPrimary,
                             icon = Icons.Default.BusinessCenter
                         )
