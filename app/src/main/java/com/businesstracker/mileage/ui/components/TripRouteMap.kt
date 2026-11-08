@@ -30,6 +30,18 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.businesstracker.mileage.BuildConfig
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.MarkerState
+import com.google.maps.android.compose.Polyline
+import com.google.maps.android.compose.rememberCameraPositionState
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import kotlinx.coroutines.delay
@@ -52,61 +64,80 @@ private enum class TileStatus { LOADING, AVAILABLE, UNAVAILABLE }
 
 @Composable
 fun TripRouteMap(trip: TripEntity, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val owner = LocalLifecycleOwner.current
     val data = remember(trip.waypointsJson, trip.startLatitude, trip.startLongitude, trip.endLatitude, trip.endLongitude) {
         routeMapData(trip)
     }
-    var status by remember(trip.id) { mutableStateOf(TileStatus.LOADING) }
-    val background = MaterialTheme.colorScheme.surfaceVariant.toArgb()
-    val map = remember(context, trip.id, data) {
-        if (data.endpoints.isEmpty()) null else createRouteMap(context, data).apply {
-            overlayManager.tilesOverlay.loadingBackgroundColor = background
-            tileProvider.tileRequestCompleteHandlers.add(Handler(Looper.getMainLooper()) { message ->
-                status = if (message.what == MapTileProviderBase.MAPTILE_SUCCESS_ID) TileStatus.AVAILABLE else TileStatus.UNAVAILABLE
-                false
-            })
-        }
-    }
-    DisposableEffect(map, owner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) map?.onResume()
-            if (event == Lifecycle.Event.ON_PAUSE) map?.onPause()
-        }
-        owner.lifecycle.addObserver(observer)
-        if (owner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) map?.onResume()
-        onDispose {
-            owner.lifecycle.removeObserver(observer)
-            map?.onPause()
-            map?.onDetach()
-        }
-    }
-    LaunchedEffect(map) {
-        status = TileStatus.LOADING
-        delay(20_000)
-        if (status == TileStatus.LOADING) status = TileStatus.UNAVAILABLE
-    }
-    Box(modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)) {
-        if (map == null) {
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        if (data.endpoints.isEmpty() && data.recordedPoints.isEmpty()) {
             Text("Map unavailable: no recorded locations", Modifier.align(Alignment.Center).padding(16.dp))
         } else {
-            AndroidView(factory = { map }, modifier = Modifier.fillMaxSize())
-            if (status != TileStatus.AVAILABLE) {
-                Surface(Modifier.align(Alignment.TopCenter).padding(8.dp), shape = RoundedCornerShape(6.dp)) {
-                    Text(
-                        if (status == TileStatus.LOADING) "Loading street map…" else "Map tiles unavailable. Check your internet connection.",
-                        Modifier.padding(6.dp), style = MaterialTheme.typography.labelSmall
-                    )
+            val allPoints = remember(data) {
+                (data.recordedPoints + data.endpoints).map { LatLng(it.latitude, it.longitude) }
+            }
+            val polylinePoints = remember(data) {
+                data.recordedPoints.map { LatLng(it.latitude, it.longitude) }
+            }
+            val initialPosition = remember(allPoints) {
+                allPoints.firstOrNull() ?: LatLng(0.0, 0.0)
+            }
+            val cameraPositionState = rememberCameraPositionState {
+                position = CameraPosition.fromLatLngZoom(initialPosition, 14f)
+            }
+
+            LaunchedEffect(allPoints) {
+                if (allPoints.isNotEmpty()) {
+                    if (allPoints.size == 1) {
+                        cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(allPoints.first(), 15f))
+                    } else {
+                        val builder = LatLngBounds.builder()
+                        allPoints.forEach { builder.include(it) }
+                        cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(builder.build(), 60))
+                    }
                 }
             }
-            Surface(Modifier.align(Alignment.BottomEnd), color = androidx.compose.ui.graphics.Color.White) {
-                Text(
-                    "© OpenStreetMap contributors",
-                    Modifier.clickable {
-                        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.openstreetmap.org/copyright"))) }
-                    }.padding(4.dp), color = androidx.compose.ui.graphics.Color.DarkGray,
-                    style = MaterialTheme.typography.labelSmall
-                )
+
+            GoogleMap(
+                modifier = Modifier.fillMaxSize(),
+                cameraPositionState = cameraPositionState,
+                uiSettings = remember {
+                    MapUiSettings(
+                        zoomControlsEnabled = false,
+                        myLocationButtonEnabled = false,
+                        mapToolbarEnabled = true,
+                        compassEnabled = true
+                    )
+                },
+                properties = remember {
+                    MapProperties(
+                        isBuildingEnabled = true,
+                        isTrafficEnabled = false
+                    )
+                }
+            ) {
+                if (polylinePoints.size > 1) {
+                    Polyline(
+                        points = polylinePoints,
+                        color = SucculentPrimary,
+                        width = 12f
+                    )
+                }
+
+                data.endpoints.forEachIndexed { index, point ->
+                    val isStart = index == 0
+                    Marker(
+                        state = MarkerState(position = LatLng(point.latitude, point.longitude)),
+                        title = if (isStart) "Start" else "End",
+                        icon = BitmapDescriptorFactory.defaultMarker(
+                            if (isStart) BitmapDescriptorFactory.HUE_GREEN else BitmapDescriptorFactory.HUE_RED
+                        )
+                    )
+                }
             }
         }
     }

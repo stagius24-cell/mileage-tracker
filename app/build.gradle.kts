@@ -14,8 +14,8 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 36
-        versionName = "1.0.35"
+        versionCode = 37
+        versionName = "1.0.36"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -24,6 +24,11 @@ android {
             arg("room.incremental", "true")
             arg("room.expandProjection", "true")
         }
+
+        val mapsApiKey: String = System.getenv("GOOGLE_MAPS_API_KEY") 
+            ?: project.findProperty("GOOGLE_MAPS_API_KEY") as? String 
+            ?: "AIzaSyAi1MlYUOU6WACwMFDkVXtAIcq29X-GK1c"
+        manifestPlaceholders["GOOGLE_MAPS_API_KEY"] = mapsApiKey
     }
 
     signingConfigs {
@@ -148,8 +153,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.gson)
 
-    // Street maps for saved routes; no API key or native map binaries required.
+    // Street maps for saved routes (OSM fallback & Google Maps SDK)
     implementation("org.osmdroid:osmdroid-android:6.1.20")
+    implementation("com.google.android.gms:play-services-maps:19.0.0")
+    implementation("com.google.maps.android:maps-compose:6.4.1")
 
     // Unit Testing
     testImplementation(libs.junit)

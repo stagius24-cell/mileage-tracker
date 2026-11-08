@@ -40,6 +40,11 @@
         android:theme="@style/Theme.BusinessMileageTracker"
         tools:targetApi="35">
 
+        <!-- Google Maps API Key -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="${GOOGLE_MAPS_API_KEY}" />
+
         <!-- WorkManager must use MileageTrackerApp's HiltWorkerFactory. The default
              initializer bypasses Configuration.Provider and cannot construct our
              injected workers, including the four-minute vehicle-exit worker. -->
