@@ -23,7 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.AlertDialog
@@ -104,9 +104,6 @@ fun TripDetailScreen(
     val dateFormatted = remember(trip.startTime) {
         if (trip.startTime > 0) dateFormatter.format(Date(trip.startTime)) else trip.date
     }
-    val timeRangeStr = remember(trip.startTime, trip.endTime) {
-        "${timeFormatter.format(Date(trip.startTime))} – ${timeFormatter.format(Date(trip.endTime))}"
-    }
     val startTimeStr = remember(trip.startTime) { timeFormatter.format(Date(trip.startTime)) }
     val endTimeStr = remember(trip.endTime) { timeFormatter.format(Date(trip.endTime)) }
 
@@ -150,55 +147,75 @@ fun TripDetailScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.Start
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(vertical = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
-                            style = MaterialTheme.typography.headlineLarge,
-                            fontWeight = FontWeight.Black
+                            text = dateFormatted.uppercase(Locale.getDefault()),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        Text("MILES", style = MaterialTheme.typography.labelSmall, color = SlateNeutral, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = if (trip.startTime > 0) SimpleDateFormat("yyyy", Locale.getDefault()).format(Date(trip.startTime)) else "",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SlateNeutral,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
                     Surface(
-                        modifier = Modifier.weight(0.8f),
-                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(12.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
                     ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = dateFormatted.uppercase(Locale.getDefault()),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Black
+                                text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = if (trip.startTime > 0) SimpleDateFormat("yyyy", Locale.getDefault()).format(Date(trip.startTime)) else "",
+                                "MILES",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = SlateNeutral
+                                color = SlateNeutral,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
 
                     Column(
-                        modifier = Modifier.weight(1.2f),
-                        horizontalAlignment = Alignment.End
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(vertical = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text(
                             text = "\$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}",
-                            style = MaterialTheme.typography.headlineMedium,
+                            style = MaterialTheme.typography.titleMedium,
                             color = SucculentPrimary,
-                            fontWeight = FontWeight.Black
+                            fontWeight = FontWeight.Bold
                         )
-                        Text("POTENTIAL", style = MaterialTheme.typography.labelSmall, color = SlateNeutral, fontWeight = FontWeight.Bold)
+                        Text(
+                            "POTENTIAL",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SlateNeutral,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -236,8 +253,8 @@ fun TripDetailScreen(
                         modifier = Modifier.weight(1f)
                     )
                     TripDetailTabButton(
-                        label = "Status",
-                        icon = Icons.Default.DirectionsCar,
+                        label = "More info",
+                        icon = Icons.Default.Info,
                         selected = selectedDetailTab == 1,
                         onClick = { selectedDetailTab = 1 },
                         modifier = Modifier.weight(1f)
@@ -272,7 +289,6 @@ fun TripDetailScreen(
                     TripStatusTab(
                         trip = trip,
                         durationMinutes = durationMinutes,
-                        timeRange = timeRangeStr,
                         classificationColor = classificationColor
                     )
                 }
@@ -552,7 +568,6 @@ private fun DestinationRow(
 private fun TripStatusTab(
     trip: TripEntity,
     durationMinutes: Long,
-    timeRange: String,
     classificationColor: Color
 ) {
     Column(
@@ -567,13 +582,10 @@ private fun TripStatusTab(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         Row(modifier = Modifier.fillMaxWidth()) {
-            StatusValue("Time", timeRange, Modifier.weight(1f))
             StatusValue("Duration", "$durationMinutes min", Modifier.weight(1f))
-        }
-        Row(modifier = Modifier.fillMaxWidth()) {
             StatusValue("Tracking", trip.trackingMethod, Modifier.weight(1f))
-            StatusValue("Entity", trip.businessEntity, Modifier.weight(1f))
         }
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         Row(modifier = Modifier.fillMaxWidth()) {
             StatusValue("Purpose", trip.purpose, Modifier.weight(1f))
             StatusValue("IRS rate", "\$${trip.applicableRate} / mi", Modifier.weight(1f))
