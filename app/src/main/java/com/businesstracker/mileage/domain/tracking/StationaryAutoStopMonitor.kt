@@ -66,7 +66,8 @@ class StationaryAutoStopMonitor(
         longitude: Double,
         speedMetersPerSecond: Float,
         accuracyMeters: Float,
-        elapsedRealtimeMillis: Long
+        elapsedRealtimeMillis: Long,
+        allowStop: Boolean = true
     ): Boolean {
         if (stopRequested || elapsedRealtimeMillis < 0L ||
             !latitude.isFinite() || !longitude.isFinite() ||
@@ -98,7 +99,7 @@ class StationaryAutoStopMonitor(
 
         hasStationaryEvidence = true
 
-        if (elapsedRealtimeMillis - previousMovementTime >= timeoutMillis) {
+        if (allowStop && elapsedRealtimeMillis - previousMovementTime >= timeoutMillis) {
             stopRequested = true
             return true
         }

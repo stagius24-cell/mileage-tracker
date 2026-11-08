@@ -13,6 +13,7 @@ Source audit and automated regression plan. Physical-device validation remains s
 | P2 delayed debounce targets current trip | Low / high | `TripDebounceWorker` input held a trigger but no trip ID. | Fixed: request carries trip ID, checks active ID before drain/finalization, and service validates ID before stop. Stale-worker regression added. |
 | P2 manual trip activity debounce | Moderate / medium | Activity debounce worker had no method guard. | Fixed: worker only acts on `AUTO_DETECTED`; manual regression added. |
 | P2 timeout/reentry race | Low / high | Worker checked vehicle state once; service stop had no session fence. | Fixed: service rechecks trip ID, auto method, vehicle state, and Bluetooth pending state before debounce stop. Physical-device boundary test still needed. |
+| P2 movement later in same GPS batch | Low / high | `locations.any` stopped evaluation on the first due stationary fix, potentially ignoring a later movement fix in that batch. | Fixed: monitor consumes the ordered batch and can request stop only on its final fix; regression sequence added. |
 | P3 long traffic stop | Expected / medium | Ten minutes without meaningful speed/displacement ends a confirmed automatic trip even during congestion. STILL_ENTER itself is ignored. | Preserve ten-minute requirement; documented tradeoff. |
 | P3 reboot and force-stop | Platform dependent / high | BootReceiver marks RECOVERY_REQUIRED and retains trip/inbox. Force-stop blocks automatic execution until Android permits restart. | BootReceiverRebootRecoveryTest; physical-device checks required. |
 | P3 simultaneous stop / GPS drain | Low / high | Atomic isStopping, GpsAdmissionBarrier, Room inbox drain, coordinator mutex, lifecycle and insert-ignore protect normal service finalization. | Queue stress/transaction and concurrent-finalization tests exist; exhaustive signal matrix not yet run. |
@@ -35,7 +36,7 @@ GPS silence is not proof of stationary activity. The service persists evidence o
 | 2 | Missing callbacks then fresh accurate recheck | `missingCallbacksCanBeResolvedByFreshRecheck`; Android location request integration requires device validation |
 | 3 | GPS drift and inaccurate fixes | `inaccurateDriftCannotResetStationaryCountdown`, `stationaryAccuracyRadiusDoesNotAccumulateFalseMileage` |
 | 4 | Movement before deadline | `meaningfulMovement_resetsTenMinuteTimer` |
-| 5 | Stop and resume at boundary | `doWork_whenVehicleMotionResumed_returnsSuccessWithoutFinalizing`; exact service race requires device validation |
+| 5 | Stop and resume at boundary | `movementAtExactTimeoutWinsOverStationaryStop`, `laterMovementInSameBatchPreventsStop`, `doWork_whenVehicleMotionResumed_returnsSuccessWithoutFinalizing`; exact service race requires device validation |
 | 6 | Bluetooth disconnect and reconnect | `VehicleBluetoothEventHandlerTest.selectedCarDisconnect_startsSafeStopSignal`, `selectedCarReconnect_cancelsPendingStop` |
 | 7 | Simultaneous stop triggers | `StationaryAutoStopMonitorTest.stopIsRequestedOnlyOnceUntilReset`; coordinator and admission gate tests cover idempotence, signal interleaving requires device validation |
 | 8 | Process death during countdown | `persistedEvidenceSurvivesProcessDeathWithinSameBoot`, `LocationTrackingServiceNullIntentRecoveryTest` |

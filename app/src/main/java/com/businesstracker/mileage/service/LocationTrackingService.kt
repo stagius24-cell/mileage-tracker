@@ -30,6 +30,7 @@ import com.businesstracker.mileage.domain.model.Waypoint
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
 import com.businesstracker.mileage.domain.service.BootCountProvider
 import com.businesstracker.mileage.domain.tracking.StationaryAutoStopMonitor
+import com.businesstracker.mileage.domain.tracking.StationaryWatchdogPolicy
 import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.FinalizeTripUseCase
@@ -165,18 +166,21 @@ class LocationTrackingService : Service() {
             stationaryAutoStopRequested.get()
         ) return
 
-        val shouldStop = locations.any { location ->
+        val orderedLocations = locations.sortedBy { it.elapsedRealtimeNanos }
+        var shouldStop = false
+        orderedLocations.forEachIndexed { index, location ->
             val elapsedMillis = if (location.elapsedRealtimeNanos > 0L) {
                 location.elapsedRealtimeNanos / 1_000_000L
             } else {
                 android.os.SystemClock.elapsedRealtime()
             }
-            stationaryAutoStopMonitor.record(
+            shouldStop = stationaryAutoStopMonitor.record(
                 latitude = location.latitude,
                 longitude = location.longitude,
                 speedMetersPerSecond = if (location.hasSpeed()) location.speed else 0f,
                 accuracyMeters = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE,
-                elapsedRealtimeMillis = elapsedMillis
+                elapsedRealtimeMillis = elapsedMillis,
+                allowStop = index == orderedLocations.lastIndex
             )
         }
 
@@ -906,10 +910,11 @@ class LocationTrackingService : Service() {
                     updateNotificationAndState(currentSpeedMph)
                     val now = android.os.SystemClock.elapsedRealtime()
                     val evidence = stationaryAutoStopMonitor.snapshot()
-                    if (trackingMethod == TrackingMethod.AUTO_DETECTED && isDisplacementConfirmed &&
-                        evidence != null && now - evidence.elapsedMillis >= StationaryAutoStopMonitor.DEFAULT_TIMEOUT_MILLIS &&
-                        now - lastStationaryRecheckElapsed >= 60_000L && !stationaryAutoStopRequested.get()
-                    ) {
+                    if (StationaryWatchdogPolicy.shouldRecheck(
+                        evidence, now, lastStationaryRecheckElapsed,
+                        trackingMethod == TrackingMethod.AUTO_DETECTED && isDisplacementConfirmed,
+                        isPaused || isStopping.get() || stationaryAutoStopRequested.get()
+                    )) {
                         lastStationaryRecheckElapsed = now
                         serviceScope.launch(ioDispatcher) { recheckStationaryLocation() }
                     }
@@ -921,12 +926,13 @@ class LocationTrackingService : Service() {
     private suspend fun restoreStationaryEvidence() {
         if (trackingMethod != TrackingMethod.AUTO_DETECTED || !isDisplacementConfirmed || isPaused) return
         val evidence = preferencesManager.getStationaryEvidence() ?: return
-        if (evidence.tripId != currentTripId || evidence.bootCount <= 0 ||
-            evidence.bootCount != safeBootCountProvider.getBootCount()
-        ) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!StationaryWatchdogPolicy.canRestore(evidence.tripId, currentTripId,
+                evidence.bootCount, safeBootCountProvider.getBootCount(),
+                evidence.elapsedMillis, now)) return
         stationaryAutoStopMonitor.restore(
             StationaryAutoStopMonitor.Snapshot(evidence.latitude, evidence.longitude, evidence.elapsedMillis),
-            android.os.SystemClock.elapsedRealtime()
+            now
         )
     }
 
@@ -945,11 +951,10 @@ class LocationTrackingService : Service() {
         } finally {
             cancellation.cancel()
         } ?: return
-        val ageMillis = android.os.SystemClock.elapsedRealtime() - location.elapsedRealtimeNanos / 1_000_000L
-        if (location.elapsedRealtimeNanos <= 0L || ageMillis !in 0L..30_000L) return
         val evidence = stationaryAutoStopMonitor.snapshot() ?: return
-        if (location.elapsedRealtimeNanos / 1_000_000L - evidence.elapsedMillis <
-            StationaryAutoStopMonitor.DEFAULT_TIMEOUT_MILLIS) return
+        if (!StationaryWatchdogPolicy.isFreshDeadlineFix(evidence,
+                location.elapsedRealtimeNanos / 1_000_000L,
+                android.os.SystemClock.elapsedRealtime())) return
         if (!isStopping.get() && !isPaused) {
             gpsLocationQueue?.enqueueBatch(listOf(location))
             evaluateStationaryAutoStop(listOf(location))

@@ -105,4 +105,26 @@ class StationaryAutoStopMonitorTest {
         assertNull(monitor.snapshot())
     }
 
+    @Test
+    fun movementAtExactTimeoutWinsOverStationaryStop() {
+        val monitor = StationaryAutoStopMonitor()
+        monitor.record(originLatitude, originLongitude, 0f, 5f, 0L)
+        monitor.record(originLatitude, originLongitude, 0f, 5f, 1_000L)
+        assertFalse(monitor.record(originLatitude + 0.001, originLongitude, 10f, 5f, 600_000L))
+        assertFalse(monitor.record(originLatitude + 0.001, originLongitude, 0f, 5f, 600_001L))
+        assertTrue(monitor.record(originLatitude + 0.001, originLongitude, 0f, 5f, 1_200_000L))
+    }
+
+    @Test
+    fun laterMovementInSameBatchPreventsStop() {
+        val monitor = StationaryAutoStopMonitor()
+        monitor.record(originLatitude, originLongitude, 0f, 5f, 0L)
+        monitor.record(originLatitude, originLongitude, 0f, 5f, 1_000L)
+        assertFalse(monitor.record(originLatitude, originLongitude, 0f, 5f,
+            600_000L, allowStop = false))
+        assertFalse(monitor.record(originLatitude + 0.001, originLongitude, 10f, 5f,
+            600_001L, allowStop = true))
+        assertFalse(monitor.record(originLatitude + 0.001, originLongitude, 0f, 5f, 600_002L))
+    }
+
 }
