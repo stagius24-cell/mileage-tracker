@@ -422,14 +422,14 @@ private fun TripDetailTabButton(
                 .height(56.dp)
                 .background(
                     color = SucculentPrimary.copy(alpha = if (selected) 0.16f else 0f),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(8.dp)
                 )
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
