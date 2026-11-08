@@ -1,22 +1,24 @@
-# Business Mileage Tracker 1.0.27
+# Business Mileage Tracker 1.0.29
 
-### Custom Business Trip Purposes Management:
-- **Settings Screen Custom Purposes:** Added a dedicated "Business Trip Purposes" section in Settings to easily add and remove custom purposes for business drives.
-- **Custom Purpose Chips with Quick Delete:** User-defined purposes appear as interactive chips with an inline removal button (`x`), allowing full control over custom business categories.
-- **Full App Integration:** Custom purposes seamlessly flow into both the quick-triage swipe bottom sheet (`SwipeableTripCard`) on the dashboard and the trip details editor (`TripDetailScreen`) in history.
-- **Persistent Storage:** Saved reliably in DataStore preferences across app launches.
+### Search Box & Collapsible Sort/Filter Redesign:
+- **Search Box Text Clipping Fix:** Replaced rigid OutlinedTextField with a centered custom Search surface using BasicTextField, fixing vertical clipping and font padding so placeholder and query text render cleanly without cut-off.
+- **Collapsible Sort Header Button:** Placed a clean 44dp sort button with `Icons.Default.Sort` next to the search bar to toggle the filter and sorting drawer.
+- **2-Row Collapsible Menu:**
+  - **Row 1 (Classification):** Swipeable horizontal row with boxes for **All**, **Business**, **Personal**, and **Unreviewed**.
+  - **Row 2 (Sort Order):** Swipeable horizontal row with boxes for **Newest**, **Oldest**, **Highest**, and **Lowest**.
+- **Interactive Box Styling:** Each option is enclosed in a rounded box with an icon next to the text, highlighting in vibrant green when selected and clean neutral grey when unselected.
 - **Signed with Persistent Key:** Signed with the persistent Run #96 / Run #99 debug certificate (`43efd34a...`) to allow seamless in-place updates over existing installations without Room database / trip record loss.
 
 Install this APK over the existing app. Do not uninstall the app or clear its data if you want to preserve local trip history.
 
 - **Source branch:** `main`
-- **Source commit:** `f9d44de52003aac6786d3e1f51cdf5f05dc8e3be`
-- **CI run:** https://github.com/stagius24-cell/mileage-tracker/actions/runs/42443959002
+- **Source commit:** `b79670c6b323538e600118f391796a6ec905dead`
+- **CI run:** https://github.com/stagius24-cell/mileage-tracker/actions/runs/42445431973
 - **Package:** `com.businesstracker.mileage.debug`
-- **Version:** `1.0.27` (Code `28`)
-- **APK SHA-256:** `3ff209373a1f726a35d89ab8728005a81682e94906872bedfe39de4709e3518a`
+- **Version:** `1.0.29` (Code `30`)
+- **APK SHA-256:** `e49ac58e193e8da79f12f8f6db8e853bc87aeca19a9b0c0a177e6f0ba48295a6`
 - **Signer Certificate SHA-256:** `43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948`
 - **Signer Certificate SHA-1:** `32d6afa108beed313e181a08176ded0fd960af43`
 
 Direct download:
-[BusinessMileageTracker-1.0.27-custom-purposes.apk](https://github.com/stagius24-cell/mileage-tracker/raw/refs/heads/downloads/custom-purposes-v1.0.27/BusinessMileageTracker-1.0.27-custom-purposes.apk)
+[BusinessMileageTracker-1.0.29-history-sort.apk](https://github.com/stagius24-cell/mileage-tracker/raw/refs/heads/downloads/history-sort-v1.0.29/BusinessMileageTracker-1.0.29-history-sort.apk)
