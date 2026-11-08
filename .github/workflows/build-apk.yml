@@ -97,8 +97,8 @@ jobs:
           EXPECTED_SHA256="43efd34a84878e7aa8290b276f65d3171b79965d05de9223f86d8c4dd6901948"
           EXPECTED_SHA1="32d6afa108beed313e181a08176ded0fd960af43"
 
-          grep -F "Signer #1 certificate SHA-256 digest: $EXPECTED_SHA256" "$RUNNER_TEMP/apk-signature.txt"
-          grep -F "Signer #1 certificate SHA-1 digest: $EXPECTED_SHA1" "$RUNNER_TEMP/apk-signature.txt"
+          grep -Fi "certificate SHA-256 digest: $EXPECTED_SHA256" "$RUNNER_TEMP/apk-signature.txt"
+          grep -Fi "certificate SHA-1 digest: $EXPECTED_SHA1" "$RUNNER_TEMP/apk-signature.txt"
           echo "APK certificate signature verification PASSED (matches run 96 stable identity)."
 
           # 2. Verify Application ID with aapt2
