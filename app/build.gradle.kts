@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 53
-        versionName = "1.0.52"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Refined trip deletion dialog: title 'Delete Trip', 80% opacity, and note that action cannot be undone.\"")
+        versionCode = 54
+        versionName = "1.0.53"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix Google Sheets sync feedback with instant confirmation banner, update timestamp on zero pending trips, and fix spreadsheet ID editing with quick-clear button.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

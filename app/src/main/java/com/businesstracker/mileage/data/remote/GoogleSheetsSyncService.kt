@@ -138,6 +138,9 @@ open class GoogleSheetsSyncService @Inject constructor(
             val eligibleTrips = pendingTrips.filter { it.classification != "UNREVIEWED" }
 
             if (eligibleTrips.isEmpty()) {
+                val now = System.currentTimeMillis()
+                preferencesManager.setSheetsLastSyncTime(now)
+                preferencesManager.setSheetsLastError(null)
                 return@withLock SheetsSyncResult.Success(0, 0)
             }
 

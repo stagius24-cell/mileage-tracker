@@ -46,6 +46,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -58,6 +59,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BusinessCenter
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -546,6 +548,9 @@ fun SettingsScreen(
                 if (!state.sheetsLastError.isNullOrBlank()) {
                     CompactError(state.sheetsLastError.orEmpty())
                 }
+                if (!state.sheetsSyncMessage.isNullOrBlank()) {
+                    CompactSuccess(state.sheetsSyncMessage.orEmpty())
+                }
 
                 AccountRow(
                     connected = state.hasOAuthCredential,
@@ -587,6 +592,17 @@ fun SettingsScreen(
                             value = state.sheetsSpreadsheetId,
                             onValueChange = viewModel::setSheetsSpreadsheetId,
                             label = { Text("Spreadsheet ID") },
+                            trailingIcon = {
+                                if (state.sheetsSpreadsheetId.isNotEmpty()) {
+                                    IconButton(onClick = { viewModel.setSheetsSpreadsheetId("") }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Clear Spreadsheet ID",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            },
                             modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp)
@@ -954,6 +970,26 @@ private fun AccountRow(
                 Text("Connect")
             }
         }
+    }
+}
+
+@Composable
+private fun CompactSuccess(message: String) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(SucculentPrimary.copy(alpha = 0.12f), RoundedCornerShape(12.dp))
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Check,
+            contentDescription = null,
+            tint = SucculentPrimary,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(message, style = MaterialTheme.typography.bodySmall, color = SucculentPrimary)
     }
 }
 

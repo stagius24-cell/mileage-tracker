@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.data.remote.GoogleSheetsSyncService
+import com.businesstracker.mileage.data.remote.SheetsSyncResult
 import com.businesstracker.mileage.data.security.SecureStorageManager
 import com.businesstracker.mileage.domain.model.AppThemeMode
 import com.businesstracker.mileage.domain.repository.TripRepository
@@ -56,6 +57,7 @@ data class SettingsUiState(
     val sheetsWebhookUrl: String = "",
     val sheetsLastSyncTime: Long = 0L,
     val sheetsLastError: String? = null,
+    val sheetsSyncMessage: String? = null,
     val pendingTripsCount: Int = 0,
     val isSyncing: Boolean = false
 )
@@ -113,6 +115,7 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _isSyncing = MutableStateFlow(false)
+    private val _sheetsSyncMessage = MutableStateFlow<String?>(null)
     private val _pairedBluetoothDevices = MutableStateFlow<List<VehicleBluetoothDevice>>(emptyList())
 
     private val generalFlow = combine(
@@ -212,8 +215,9 @@ class SettingsViewModel @Inject constructor(
         sheetsFlow,
         pendingCountFlow,
         _isSyncing,
+        _sheetsSyncMessage,
         _pairedBluetoothDevices
-    ) { config, sheets, pendingCount, isSyncing, pairedDevices ->
+    ) { config, sheets, pendingCount, isSyncing, syncMsg, pairedDevices ->
         val hasBg = hasBackgroundLocationPermission()
         val isReady = config.general.autoTrackingEnabled && hasRequiredPermissions()
 
@@ -249,6 +253,7 @@ class SettingsViewModel @Inject constructor(
             sheetsWebhookUrl = sheets.webhookUrl,
             sheetsLastSyncTime = sheets.lastSyncTime,
             sheetsLastError = sheets.lastError,
+            sheetsSyncMessage = syncMsg,
             pendingTripsCount = pendingCount,
             isSyncing = isSyncing
         )
@@ -389,9 +394,9 @@ class SettingsViewModel @Inject constructor(
     // Google Sheets Actions
     fun setSheetsSpreadsheetId(id: String) {
         viewModelScope.launch {
-            preferencesManager.setSheetsSpreadsheetId(id.trim())
+            preferencesManager.setSheetsSpreadsheetId(id)
             val hasOAuth = secureStorageManager.hasOAuthToken()
-            val isConn = (hasOAuth && id.isNotBlank()) || uiState.value.sheetsWebhookUrl.isNotBlank()
+            val isConn = (hasOAuth && id.trim().isNotBlank()) || uiState.value.sheetsWebhookUrl.isNotBlank()
             preferencesManager.setSheetsConnected(isConn)
         }
     }
@@ -458,9 +463,52 @@ class SettingsViewModel @Inject constructor(
     fun syncSheetsNow() {
         if (_isSyncing.value) return
         _isSyncing.value = true
+        _sheetsSyncMessage.value = null
         viewModelScope.launch {
             try {
-                sheetsSyncService.syncPendingTrips()
+                when (val result = sheetsSyncService.syncPendingTrips()) {
+                    is SheetsSyncResult.Success -> {
+                        val count = result.insertedCount + result.updatedCount
+                        _sheetsSyncMessage.value = if (count > 0) {
+                            "Synced $count trip${if (count > 1) "s" else ""} successfully!"
+                        } else {
+                            "All trips are up to date."
+                        }
+                    }
+                    is SheetsSyncResult.PartialSuccess -> {
+                        _sheetsSyncMessage.value = "Partially synced: ${result.successCount} succeeded, ${result.failedCount} failed."
+                    }
+                    is SheetsSyncResult.NotConfigured -> {
+                        _sheetsSyncMessage.value = "Google Sheets not configured. Connect your Google account."
+                    }
+                    is SheetsSyncResult.TokenExpired -> {
+                        _sheetsSyncMessage.value = result.message
+                    }
+                    is SheetsSyncResult.AccessDenied -> {
+                        _sheetsSyncMessage.value = result.message
+                    }
+                    is SheetsSyncResult.NotFound -> {
+                        _sheetsSyncMessage.value = result.message
+                    }
+                    is SheetsSyncResult.RateLimited -> {
+                        _sheetsSyncMessage.value = result.message
+                    }
+                    is SheetsSyncResult.ServerError -> {
+                        _sheetsSyncMessage.value = result.message
+                    }
+                    is SheetsSyncResult.HttpError -> {
+                        _sheetsSyncMessage.value = result.message
+                    }
+                    is SheetsSyncResult.NetworkError -> {
+                        _sheetsSyncMessage.value = result.message
+                    }
+                    is SheetsSyncResult.InvalidConfiguration -> {
+                        _sheetsSyncMessage.value = result.message
+                    }
+                    is SheetsSyncResult.UnexpectedError -> {
+                        _sheetsSyncMessage.value = result.exception.localizedMessage ?: "Unexpected error during sync."
+                    }
+                }
             } finally {
                 _isSyncing.value = false
             }
