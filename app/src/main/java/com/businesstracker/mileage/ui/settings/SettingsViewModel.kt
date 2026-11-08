@@ -210,14 +210,22 @@ class SettingsViewModel @Inject constructor(
         allTrips.count { it.syncStatus == "PENDING" && it.classification != "UNREVIEWED" }
     }
 
+    private data class SyncStatusState(
+        val isSyncing: Boolean,
+        val syncMessage: String?
+    )
+
+    private val syncStatusFlow = combine(_isSyncing, _sheetsSyncMessage) { isSyncing, syncMsg ->
+        SyncStatusState(isSyncing, syncMsg)
+    }
+
     val uiState: StateFlow<SettingsUiState> = combine(
         configFlow,
         sheetsFlow,
         pendingCountFlow,
-        _isSyncing,
-        _sheetsSyncMessage,
+        syncStatusFlow,
         _pairedBluetoothDevices
-    ) { config, sheets, pendingCount, isSyncing, syncMsg, pairedDevices ->
+    ) { config, sheets, pendingCount, syncStatus, pairedDevices ->
         val hasBg = hasBackgroundLocationPermission()
         val isReady = config.general.autoTrackingEnabled && hasRequiredPermissions()
 
@@ -253,9 +261,9 @@ class SettingsViewModel @Inject constructor(
             sheetsWebhookUrl = sheets.webhookUrl,
             sheetsLastSyncTime = sheets.lastSyncTime,
             sheetsLastError = sheets.lastError,
-            sheetsSyncMessage = syncMsg,
+            sheetsSyncMessage = syncStatus.syncMessage,
             pendingTripsCount = pendingCount,
-            isSyncing = isSyncing
+            isSyncing = syncStatus.isSyncing
         )
     }.stateIn(
         scope = viewModelScope,
