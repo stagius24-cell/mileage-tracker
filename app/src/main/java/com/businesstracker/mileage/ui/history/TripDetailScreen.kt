@@ -140,10 +140,9 @@ fun TripDetailScreen(
                     .align(Alignment.TopStart)
                     .padding(12.dp)
                     .size(50.dp)
-                    .graphicsLayer { alpha = 0.7f }
-                    .blur(1.dp),
+                    .graphicsLayer { alpha = 0.8f },
                 shape = CircleShape,
-                color = SucculentPrimary.copy(alpha = 0.7f),
+                color = SucculentPrimary.copy(alpha = 0.8f),
                 shadowElevation = 4.dp
             ) {
                 IconButton(onClick = onBack) {
