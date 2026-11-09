@@ -20,6 +20,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -36,6 +40,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.ReceiptLong
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOut
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -118,19 +124,20 @@ fun ReportsExportScreen(
                     onClick = { showCreateReportDialog = true },
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.ReceiptLong,
                         contentDescription = "Create report",
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(16.dp),
                         tint = Color.White
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
                     Text(
                         text = "Create report",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = Color.White
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                        maxLines = 1
                     )
                 }
             }
@@ -406,6 +413,7 @@ fun ReportsExportScreen(
 
     if (previewPdfFile != null) {
         val file = previewPdfFile!!
+        var zoomScale by remember { mutableFloatStateOf(1f) }
         val pages = remember(file) {
             val bitmaps = mutableListOf<Bitmap>()
             try {
@@ -462,7 +470,7 @@ fun ReportsExportScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -477,8 +485,31 @@ fun ReportsExportScreen(
                             )
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
                             ) {
+                                IconButton(
+                                    onClick = { zoomScale = (zoomScale - 0.25f).coerceAtLeast(0.75f) },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ZoomOut,
+                                        contentDescription = "Zoom out",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { zoomScale = (zoomScale + 0.25f).coerceAtMost(3.0f) },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.ZoomIn,
+                                        contentDescription = "Zoom in",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(2.dp))
                                 Button(
                                     onClick = {
                                         val uri = FileProvider.getUriForFile(
@@ -500,7 +531,7 @@ fun ReportsExportScreen(
                                     },
                                     shape = RoundedCornerShape(10.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                 ) {
                                     Text("Share", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold), color = Color.White)
                                 }
@@ -525,26 +556,40 @@ fun ReportsExportScreen(
                                 Text("Rendering PDF...", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         } else {
-                            LazyColumn(
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .weight(1f),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    .weight(1f)
+                                    .pointerInput(Unit) {
+                                        detectTransformGestures { _, _, zoom, _ ->
+                                            zoomScale = (zoomScale * zoom).coerceIn(0.75f, 3.5f)
+                                        }
+                                    }
                             ) {
-                                items(pages.size) { index ->
-                                    Card(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(8.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                                        border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
-                                    ) {
-                                        Image(
-                                            bitmap = pages[index].asImageBitmap(),
-                                            contentDescription = "Page ${index + 1}",
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(4.dp)
-                                        )
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .graphicsLayer(
+                                            scaleX = zoomScale,
+                                            scaleY = zoomScale
+                                        ),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    items(pages.size) { index ->
+                                        Card(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                                            border = BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.5f))
+                                        ) {
+                                            Image(
+                                                bitmap = pages[index].asImageBitmap(),
+                                                contentDescription = "Page ${index + 1}",
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(4.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }

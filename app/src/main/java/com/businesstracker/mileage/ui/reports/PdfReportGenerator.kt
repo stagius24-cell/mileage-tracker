@@ -200,12 +200,18 @@ object PdfReportGenerator {
 
             y += 12f
 
-            // Second sub-line with addresses if available
-            val routeDesc = "${trip.startAddress ?: "Origin"} → ${trip.endAddress ?: "Destination"}"
-            val truncatedRoute = if (routeDesc.length > 55) routeDesc.take(55) + "..." else routeDesc
+            // Addresses split across up to 2 distinct lines so origin and destination can be read completely
             textPaint.textSize = 7.5f
             textPaint.color = Color.GRAY
-            canvas.drawText(truncatedRoute, colPurpose, y, textPaint)
+            val startAddr = trip.startAddress?.takeIf { it.isNotBlank() } ?: "Recorded start"
+            val endAddr = trip.endAddress?.takeIf { it.isNotBlank() } ?: "Recorded destination"
+            
+            val startLine = "From: " + if (startAddr.length > 50) startAddr.take(50) + "…" else startAddr
+            val endLine = "To: " + if (endAddr.length > 50) endAddr.take(50) + "…" else endAddr
+            
+            canvas.drawText(startLine, colPurpose, y, textPaint)
+            y += 10f
+            canvas.drawText(endLine, colPurpose, y, textPaint)
             textPaint.color = Color.BLACK
             textPaint.textSize = 9f
 

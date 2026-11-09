@@ -680,9 +680,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.63 (Build 64)" to "Single-line Create Report button, 2-line PDF locations, and PDF preview zoom.",
                 "Version 1.0.62 (Build 63)" to "Direct in-app PDF preview with multi-page rendered display before sharing.",
-                "Version 1.0.61 (Build 62)" to "Create report button with 80% blurred floating dialog for tax year, drive type, & format.",
-                "Version 1.0.60 (Build 61)" to "Inline trip purpose & deduction, removed sync icon in history, 220dp map & swipe tabs."
+                "Version 1.0.61 (Build 62)" to "Create report button with 80% blurred floating dialog for tax year, drive type, & format."
             )
         }
 

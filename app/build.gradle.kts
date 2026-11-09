@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 63
-        versionName = "1.0.62"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"In-app PDF preview and export options in create report dialog.\"")
+        versionCode = 64
+        versionName = "1.0.63"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"1-line Create Report button, 2-line PDF destinations, and PDF preview zoom.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
