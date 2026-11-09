@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 61
-        versionName = "1.0.60"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip details map height 220dp, swipeable tabs, and outer swipe navigation.\"")
+        versionCode = 62
+        versionName = "1.0.61"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Create report button with blurred 80% opacity floating dialog.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

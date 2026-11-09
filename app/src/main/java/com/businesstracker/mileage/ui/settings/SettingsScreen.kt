@@ -680,9 +680,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.61 (Build 62)" to "Create report button with 80% blurred floating dialog for tax year, drive type, & format.",
                 "Version 1.0.60 (Build 61)" to "Inline trip purpose & deduction, removed sync icon in history, 220dp map & swipe tabs.",
-                "Version 1.0.59 (Build 60)" to "Made Trip Details compact with reduced spacing and map height to fit without scrolling.",
-                "Version 1.0.58 (Build 59)" to "Added average speed and max speed metrics to the Trip Details More Info tab."
+                "Version 1.0.59 (Build 60)" to "Made Trip Details compact with reduced spacing and map height to fit without scrolling."
             )
         }
 
