@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 60
-        versionName = "1.0.59"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Compact Trip Details view with optimized whitespace to prevent scrolling.\"")
+        versionCode = 61
+        versionName = "1.0.60"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip details map height 220dp, swipeable tabs, and outer swipe navigation.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -23,6 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,8 +60,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +72,8 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -95,12 +102,15 @@ fun TripDetailScreen(
     onSaveTrip: (tripId: String, classification: String, businessEntity: String, purpose: String, notes: String?) -> Unit,
     onDeleteTrip: (tripId: String) -> Unit,
     modifier: Modifier = Modifier,
+    onPreviousTrip: (() -> Unit)? = null,
+    onNextTrip: (() -> Unit)? = null,
     addressViewModel: TripAddressViewModel = hiltViewModel(),
     customPurposes: List<String> = emptyList()
 ) {
     var showEditSheet by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
-    var selectedDetailTab by remember(trip.id) { mutableIntStateOf(0) }
+    val coroutineScope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     val addressState by addressViewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(trip.id, trip.startAddress, trip.endAddress) { addressViewModel.resolve(trip) }
     DisposableEffect(trip.id) { onDispose { addressViewModel.cancelLookup() } }
@@ -124,17 +134,37 @@ fun TripDetailScreen(
     val isBusiness = trip.classification == TripClassification.BUSINESS.value
     val classificationColor = if (isBusiness) SucculentPrimary else SlateNeutral
 
+    var outerDragOffset by remember(trip.id) { mutableFloatStateOf(0f) }
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
+            .pointerInput(trip.id, onPreviousTrip, onNextTrip) {
+                detectHorizontalDragGestures(
+                    onDragStart = { outerDragOffset = 0f },
+                    onHorizontalDrag = { _, dragAmount ->
+                        outerDragOffset += dragAmount
+                    },
+                    onDragEnd = {
+                        val threshold = 90f
+                        if (outerDragOffset > threshold && onPreviousTrip != null) {
+                            onPreviousTrip()
+                        } else if (outerDragOffset < -threshold && onNextTrip != null) {
+                            onNextTrip()
+                        }
+                        outerDragOffset = 0f
+                    },
+                    onDragCancel = { outerDragOffset = 0f }
+                )
+            }
             .verticalScroll(rememberScrollState())
     ) {
         // The route map leads the screen, with a close action layered above it.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(180.dp)
+                .height(220.dp)
         ) {
             TripRouteMap(trip = trip, modifier = Modifier.fillMaxSize())
             Surface(
@@ -161,8 +191,8 @@ fun TripDetailScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Route and more-info tabs matching container roundness.
             Card(
@@ -179,15 +209,19 @@ fun TripDetailScreen(
                     TripDetailTabButton(
                         label = "Route",
                         icon = Icons.Default.LocationOn,
-                        selected = selectedDetailTab == 0,
-                        onClick = { selectedDetailTab = 0 },
+                        selected = pagerState.currentPage == 0,
+                        onClick = {
+                            coroutineScope.launch { pagerState.animateScrollToPage(0) }
+                        },
                         modifier = Modifier.weight(1f)
                     )
                     TripDetailTabButton(
                         label = "More info",
                         icon = Icons.Default.Info,
-                        selected = selectedDetailTab == 1,
-                        onClick = { selectedDetailTab = 1 },
+                        selected = pagerState.currentPage == 1,
+                        onClick = {
+                            coroutineScope.launch { pagerState.animateScrollToPage(1) }
+                        },
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -198,27 +232,33 @@ fun TripDetailScreen(
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                if (selectedDetailTab == 0) {
-                    RouteDetailsTab(
-                        trip = trip,
-                        date = dateFormatted,
-                        startAddress = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
-                            ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
-                            else "Approximate start location unavailable",
-                        endAddress = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
-                            ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
-                            else "Approximate destination unavailable",
-                        startTime = startTimeStr,
-                        endTime = endTimeStr
-                    )
-                } else {
-                    TripStatusTab(
-                        trip = trip,
-                        durationMinutes = durationMinutes,
-                        classificationColor = classificationColor,
-                        onEdit = { showEditSheet = true },
-                        onDelete = { showDeleteConfirmation = true }
-                    )
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Top
+                ) { page ->
+                    if (page == 0) {
+                        RouteDetailsTab(
+                            trip = trip,
+                            date = dateFormatted,
+                            startAddress = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                                ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
+                                else "Approximate start location unavailable",
+                            endAddress = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                                ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
+                                else "Approximate destination unavailable",
+                            startTime = startTimeStr,
+                            endTime = endTimeStr
+                        )
+                    } else {
+                        TripStatusTab(
+                            trip = trip,
+                            durationMinutes = durationMinutes,
+                            classificationColor = classificationColor,
+                            onEdit = { showEditSheet = true },
+                            onDelete = { showDeleteConfirmation = true }
+                        )
+                    }
                 }
             }
         }

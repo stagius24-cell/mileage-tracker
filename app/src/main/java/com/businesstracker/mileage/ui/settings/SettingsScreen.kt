@@ -680,9 +680,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.60 (Build 61)" to "Trip Details map 220dp, swipeable tabs, outer trip swipe, and restored spacing.",
                 "Version 1.0.59 (Build 60)" to "Made Trip Details compact with reduced spacing and map height to fit without scrolling.",
-                "Version 1.0.58 (Build 59)" to "Added average speed and max speed metrics to the Trip Details More Info tab.",
-                "Version 1.0.57 (Build 58)" to "Compact version dialog with 2-line summaries for the latest 3 updates."
+                "Version 1.0.58 (Build 59)" to "Added average speed and max speed metrics to the Trip Details More Info tab."
             )
         }
 

@@ -114,9 +114,20 @@ fun TripHistoryScreen(
     }
 
     if (state.selectedTripForDetails != null) {
+        val selectedTrip = state.selectedTripForDetails!!
+        val currentTripIndex = state.trips.indexOfFirst { it.id == selectedTrip.id }
+        val onPreviousTrip: (() -> Unit)? = if (currentTripIndex > 0) {
+            { viewModel.selectTripForDetails(state.trips[currentTripIndex - 1]) }
+        } else null
+        val onNextTrip: (() -> Unit)? = if (currentTripIndex >= 0 && currentTripIndex < state.trips.size - 1) {
+            { viewModel.selectTripForDetails(state.trips[currentTripIndex + 1]) }
+        } else null
+
         TripDetailScreen(
-            trip = state.selectedTripForDetails!!,
+            trip = selectedTrip,
             onBack = { viewModel.selectTripForDetails(null) },
+            onPreviousTrip = onPreviousTrip,
+            onNextTrip = onNextTrip,
             onSaveTrip = { id, classification, entity, purpose, notes ->
                 viewModel.updateTripDetails(id, classification, entity, purpose, notes)
             },
