@@ -43,8 +43,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
@@ -663,14 +661,7 @@ private fun TripHistoryItem(
                         )
                     }
                 }
-                Spacer(Modifier.width(6.dp))
-                Icon(
-                    imageVector = if (trip.syncStatus == "SYNCED") Icons.Default.CloudDone else Icons.Default.CloudQueue,
-                    contentDescription = trip.syncStatus,
-                    tint = if (trip.syncStatus == "SYNCED") SucculentPrimary else SlateNeutral,
-                    modifier = Modifier.size(15.dp)
-                )
-                Spacer(Modifier.width(7.dp))
+                Spacer(Modifier.width(8.dp))
                 Text(
                     text = if (showDate) "${formatHistoryDate(trip.date)}  •  $timeRange" else timeRange,
                     modifier = Modifier.weight(1f),
@@ -687,13 +678,26 @@ private fun TripHistoryItem(
             }
 
             if (isBusiness && trip.purpose.isNotBlank()) {
-                Text(
-                    text = trip.purpose,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = trip.purpose,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)
+                    )
+                    Text(
+                        text = formatCurrency(trip.calculatedDeduction),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = SucculentPrimary
+                    )
+                }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -705,7 +709,7 @@ private fun TripHistoryItem(
                     HistoryLocationLine(address = end, tint = SpeedRed)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    if (isBusiness) {
+                    if (isBusiness && trip.purpose.isBlank()) {
                         Text(
                             text = formatCurrency(trip.calculatedDeduction),
                             style = MaterialTheme.typography.labelMedium,
