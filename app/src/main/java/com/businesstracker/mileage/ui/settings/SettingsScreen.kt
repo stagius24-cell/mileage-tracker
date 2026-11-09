@@ -680,11 +680,11 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
-                "v1.0.55" to "Floating version history dialog, review card redesign & sheets sync confirmation.",
-                "v1.0.54" to "Redesigned review card to 3 columns, removed car icon & aligned timestamps.",
-                "v1.0.53" to "Sheets sync confirmation banner, zero-pending sync timestamp & ID quick-clear.",
-                "v1.0.52" to "Refined trip deletion dialog: title 'Delete Trip', 80% opacity, cannot be undone.",
-                "v1.0.51" to "Shortened delete message with 89% blurred dialog background."
+                "Version 1.0.56 (Build 57)" to "Reworked version menu layout with version number and summary underneath.",
+                "Version 1.0.55 (Build 56)" to "Floating version history dialog, review card redesign & sheets sync confirmation.",
+                "Version 1.0.54 (Build 55)" to "Redesigned review card to 3 columns, removed car icon & aligned timestamps.",
+                "Version 1.0.53 (Build 54)" to "Sheets sync confirmation banner, zero-pending sync timestamp & ID quick-clear.",
+                "Version 1.0.52 (Build 53)" to "Refined trip deletion dialog: title 'Delete Trip', 80% opacity, cannot be undone."
             )
         }
 
@@ -746,71 +746,46 @@ fun SettingsScreen(
                             }
                         }
 
-                        // Floating Table
+                        // Floating Version List with Summary Underneath
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(12.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f))
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
                                 .border(
                                     BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
-                                    RoundedCornerShape(12.dp)
+                                    RoundedCornerShape(14.dp)
                                 )
+                                .padding(vertical = 4.dp)
                         ) {
-                            // Header Row
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.60f))
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Version",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.width(68.dp)
-                                )
-                                Text(
-                                    text = "Update Summary",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
-
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
-
-                            // Data Rows
                             updates.forEachIndexed { index, (version, summary) ->
-                                Row(
+                                Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 9.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp)
                                 ) {
                                     Text(
                                         text = version,
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontSize = 12.sp,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontSize = 13.sp,
                                             fontWeight = FontWeight.Bold
                                         ),
-                                        color = SucculentPrimary,
-                                        modifier = Modifier.width(68.dp)
+                                        color = SucculentPrimary
                                     )
                                     Text(
                                         text = summary,
-                                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp),
-                                        color = MaterialTheme.colorScheme.onSurface,
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 12.sp,
+                                            lineHeight = 16.sp
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f)
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                                 if (index < updates.lastIndex) {
-                                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.10f))
+                                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
                                 }
                             }
                         }
