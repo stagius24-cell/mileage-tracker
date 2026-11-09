@@ -1,16 +1,17 @@
-# Business Mileage Tracker v1.0.56
+# Business Mileage Tracker v1.0.57
 
-### Release Notes (v1.0.56):
-- **Reworked Version History Menu**:
-  - Displays each version title cleanly (e.g. `Version 1.0.56 (Build 57)` in green bold).
-  - Positions the summary of changes directly underneath each version number for readability without cramped horizontal columns.
+### Release Notes (v1.0.57):
+- **Refined Version History Dialog**:
+  - Displays the 3 latest releases with concise, punchy summaries.
+  - Allows up to 2 lines per summary with clean line height so text does not get cut off.
+  - Displays version title prominently on top with changes directly underneath.
   - Floating dialog with 80% surface opacity, blurred background, and dimmed backdrop.
 
-- **Source commit:** `411584be85df8f501c0f23dfb0138e7aed3295c9`
-- **CI run:** https://github.com/stagius24-cell/mileage-tracker/actions/runs/42540561266
+- **Source commit:** `0779a94751ce23643a90c37567bcaed285622807`
+- **CI run:** https://github.com/stagius24-cell/mileage-tracker/actions/runs/42545599980
 - **Package:** `com.businesstracker.mileage.debug`
-- **Version:** `1.0.56` (Code `57`)
-- **APK SHA-256:** `8f111d87a9fa6590ff3bd90fe715fb39f0021014fc5635440888321749096c2b`
+- **Version:** `1.0.57` (Code `58`)
+- **APK SHA-256:** `2d4c73ec43281976fc8ce28b81e91a3d41a7d3158c807241c04a19517ceceeae`
 
 Direct download:
-[BusinessMileageTracker-v1.0.56.apk](https://raw.githubusercontent.com/stagius24-cell/mileage-tracker/downloads/v1.0.56-release/BusinessMileageTracker-v1.0.56.apk)
+[BusinessMileageTracker-v1.0.57.apk](https://raw.githubusercontent.com/stagius24-cell/mileage-tracker/downloads/v1.0.57-release/BusinessMileageTracker-v1.0.57.apk)
