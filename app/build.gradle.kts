@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 55
-        versionName = "1.0.54"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Redesigned Dashboard review card to 3-column layout (Date, Miles, Potential), removed car icon, moved start/destination timestamps to bottom far-right, and improved Google Sheets sync feedback with quick-clear ID.\"")
+        versionCode = 56
+        versionName = "1.0.55"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Floating version history dialog with 80% opacity, dimmed blur background, and last 5 update summaries.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
