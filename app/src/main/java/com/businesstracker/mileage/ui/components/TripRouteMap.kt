@@ -93,11 +93,35 @@ fun TripRouteMap(trip: TripEntity, modifier: Modifier = Modifier) {
             LaunchedEffect(allPoints) {
                 if (allPoints.isNotEmpty()) {
                     if (allPoints.size == 1) {
-                        cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(allPoints.first(), 15f))
+                        cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(allPoints.first(), 14f))
                     } else {
-                        val builder = LatLngBounds.builder()
-                        allPoints.forEach { builder.include(it) }
-                        cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(builder.build(), 60))
+                        var minLat = Double.MAX_VALUE
+                        var maxLat = -Double.MAX_VALUE
+                        var minLon = Double.MAX_VALUE
+                        var maxLon = -Double.MAX_VALUE
+
+                        allPoints.forEach { pt ->
+                            if (pt.latitude < minLat) minLat = pt.latitude
+                            if (pt.latitude > maxLat) maxLat = pt.latitude
+                            if (pt.longitude < minLon) minLon = pt.longitude
+                            if (pt.longitude > maxLon) maxLon = pt.longitude
+                        }
+
+                        val latSpan = maxLat - minLat
+                        val lonSpan = maxLon - minLon
+
+                        // Ensure a minimum span of at least ~0.008 degrees (~0.55 miles) so short trips aren't over-zoomed
+                        val minSpan = 0.008
+                        val extraLatPad = if (latSpan < minSpan) (minSpan - latSpan) / 2.0 else latSpan * 0.25
+                        val extraLonPad = if (lonSpan < minSpan) (minSpan - lonSpan) / 2.0 else lonSpan * 0.25
+
+                        val paddedBounds = LatLngBounds(
+                            LatLng(minLat - extraLatPad, minLon - extraLonPad),
+                            LatLng(maxLat + extraLatPad, maxLon + extraLonPad)
+                        )
+
+                        // 100px padding ensures markers and route are well within the visible frame
+                        cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(paddedBounds, 100))
                     }
                 }
             }
