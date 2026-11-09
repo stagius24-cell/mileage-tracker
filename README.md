@@ -1,14 +1,16 @@
-# Business Mileage Tracker v1.0.67
+# Business Mileage Tracker v1.0.68
 
-### Release Notes (v1.0.67):
-- **Zoomed Out Route Map Framing**:
-  - Expanded route camera framing with guaranteed minimum coordinate span (`0.008` deg) and extra padding (`100px`) so that the beginning green marker and ending red pin are clearly and fully visible on both short and long trips.
+### Release Notes (v1.0.68):
+- **Formatted Date in PDF Preview**:
+  - Dates in the PDF report are now clearly formatted as Month Date, Year (e.g. `Nov 9, 2026`).
+- **Dedicated TIME Column in PDF Table**:
+  - Added a distinct `TIME` column to display trip start and end times (e.g. `11:14 AM - 11:27 AM`).
 
-- **Source commit:** `6332d027f371b2cdb6171eb68f2aa5e3b918c4ec`
-- **CI run:** https://github.com/stagius24-cell/mileage-tracker/actions/runs/42684420542
+- **Source commit:** `4f36b1c5b7e14430daa07ba646e60bbb3a2644d7`
+- **CI run:** https://github.com/stagius24-cell/mileage-tracker/actions/runs/42721582529
 - **Package:** `com.businesstracker.mileage.debug`
-- **Version:** `1.0.67` (Code `68`)
-- **APK SHA-256:** `a470bb93f9df4a278dadab8b088ad4b3aabe969581c0ff29158913f31e8da0e2`
+- **Version:** `1.0.68` (Code `69`)
+- **APK SHA-256:** `2faf955d399adf76864b348bf9aee741e4c2a56d70b8a8b0e449d9ce0d6fa3b6`
 
 Direct download:
-[BusinessMileageTracker-v1.0.67.apk](https://raw.githubusercontent.com/stagius24-cell/mileage-tracker/downloads/v1.0.67-release/BusinessMileageTracker-v1.0.67.apk)
+[BusinessMileageTracker-v1.0.68.apk](https://raw.githubusercontent.com/stagius24-cell/mileage-tracker/downloads/v1.0.68-release/BusinessMileageTracker-v1.0.68.apk)
