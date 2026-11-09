@@ -1,19 +1,18 @@
-# Business Mileage Tracker v1.0.63
+# Business Mileage Tracker v1.0.64
 
-### Release Notes (v1.0.63):
-- **Single-Line "Create report" Button**:
-  - Adjusted button padding, icon size, and typography with strict `maxLines = 1` so the button and text stay neatly on a single line on all screen widths.
-- **2-Line Origin & Destination in PDF Reports**:
-  - In the generated PDF table, addresses are split cleanly across 2 separate lines (`From: ...` and `To: ...`), preventing address clipping and ensuring beginning and ending destinations are clearly legible.
-- **Zoom In / Zoom Out in PDF Preview**:
-  - Added dedicated Zoom In and Zoom Out controls in the preview header.
-  - Added multi-touch pinch-to-zoom support (`detectTransformGestures`) allowing flexible scaling from 0.75x up to 3.5x.
+### Release Notes (v1.0.64):
+- **Compact Create Yearly Report Dialog**:
+  - Decreased vertical padding and element gaps to make the floating table much more compact.
+- **Inline Tax Year Selector**:
+  - Placed "Tax Year" label and the year dropdown selector on the same row (`Row(Arrangement.SpaceBetween)`).
+- **Single-Line Preview Button**:
+  - Added visibility preview icon with single-line "Preview" text and strict `maxLines = 1` so text never breaks into two lines.
 
-- **Source commit:** `139a346429c29e4c00aea867a0a892a81e601b02`
-- **CI run:** https://github.com/stagius24-cell/mileage-tracker/actions/runs/42629087579
+- **Source commit:** `c0ed743d444d9be34ab2af5b22a8530b007c1cd2`
+- **CI run:** https://github.com/stagius24-cell/mileage-tracker/actions/runs/42632295718
 - **Package:** `com.businesstracker.mileage.debug`
-- **Version:** `1.0.63` (Code `64`)
-- **APK SHA-256:** `395b83fe73f7d052af2ed8376c247e6917535ad1eacc6778f095617587d26787`
+- **Version:** `1.0.64` (Code `65`)
+- **APK SHA-256:** `923dea4141093820b19353b481207dc488b5372d0ebfcbba8e87e2c8cb309388`
 
 Direct download:
-[BusinessMileageTracker-v1.0.63.apk](https://raw.githubusercontent.com/stagius24-cell/mileage-tracker/downloads/v1.0.63-release/BusinessMileageTracker-v1.0.63.apk)
+[BusinessMileageTracker-v1.0.64.apk](https://raw.githubusercontent.com/stagius24-cell/mileage-tracker/downloads/v1.0.64-release/BusinessMileageTracker-v1.0.64.apk)
