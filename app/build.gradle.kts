@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 68
-        versionName = "1.0.67"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Zoomed out route map framing with generous padding so beginning and ending markers are clearly visible.\"")
+        versionCode = 69
+        versionName = "1.0.68"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Formatted PDF report date as Month Date, Year and added a dedicated Time column.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -137,19 +137,25 @@ object PdfReportGenerator {
 
         y += 72f
 
-        // Table Header
+        // Table Header & Column Positions
         val colDate = MARGIN
-        val colClass = MARGIN + 60f
-        val colPurpose = MARGIN + 130f
-        val colMiles = MARGIN + 290f
-        val colRate = MARGIN + 355f
-        val colDeduct = MARGIN + 420f
+        val colTime = MARGIN + 68f
+        val colClass = MARGIN + 130f
+        val colPurpose = MARGIN + 185f
+        val colMiles = MARGIN + 330f
+        val colRate = MARGIN + 390f
+        val colDeduct = MARGIN + 448f
+
+        val timeFormatter = SimpleDateFormat("h:mm a", Locale.US)
+        val dateFormatter = SimpleDateFormat("MMM d, yyyy", Locale.US)
+        val inputDateParser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
         canvas.drawRect(MARGIN, y - 10f, PAGE_WIDTH - MARGIN, y + 8f, headerBgPaint)
         canvas.drawLine(MARGIN, y + 8f, PAGE_WIDTH - MARGIN, y + 8f, linePaint)
 
-        boldPaint.textSize = 9f
+        boldPaint.textSize = 8.5f
         canvas.drawText("DATE", colDate, y, boldPaint)
+        canvas.drawText("TIME", colTime, y, boldPaint)
         canvas.drawText("CATEGORY", colClass, y, boldPaint)
         canvas.drawText("PURPOSE & LOCATIONS", colPurpose, y, boldPaint)
         canvas.drawText("MILES", colMiles, y, boldPaint)
@@ -172,6 +178,7 @@ object PdfReportGenerator {
                 canvas.drawRect(MARGIN, y - 10f, PAGE_WIDTH - MARGIN, y + 8f, headerBgPaint)
                 canvas.drawLine(MARGIN, y + 8f, PAGE_WIDTH - MARGIN, y + 8f, linePaint)
                 canvas.drawText("DATE", colDate, y, boldPaint)
+                canvas.drawText("TIME", colTime, y, boldPaint)
                 canvas.drawText("CATEGORY", colClass, y, boldPaint)
                 canvas.drawText("PURPOSE & LOCATIONS", colPurpose, y, boldPaint)
                 canvas.drawText("MILES", colMiles, y, boldPaint)
@@ -180,13 +187,41 @@ object PdfReportGenerator {
                 y += 18f
             }
 
-            textPaint.textSize = 9f
-            canvas.drawText(trip.date, colDate, y, textPaint)
+            textPaint.textSize = 8.5f
+            
+            // Format Date as Month, Date, Year (e.g. Nov 9, 2026)
+            val formattedDate = try {
+                if (trip.startTime > 0) {
+                    dateFormatter.format(Date(trip.startTime))
+                } else {
+                    val parsed = inputDateParser.parse(trip.date)
+                    if (parsed != null) dateFormatter.format(parsed) else trip.date
+                }
+            } catch (e: Exception) {
+                trip.date
+            }
+            canvas.drawText(formattedDate, colDate, y, textPaint)
+
+            // Format Time (e.g. 11:14 AM - 11:27 AM or 11:14 AM)
+            val timeText = if (trip.startTime > 0) {
+                val startT = timeFormatter.format(Date(trip.startTime))
+                if (trip.endTime > trip.startTime) {
+                    val endT = timeFormatter.format(Date(trip.endTime))
+                    "$startT - $endT"
+                } else {
+                    startT
+                }
+            } else {
+                "-"
+            }
+            textPaint.textSize = 8f
+            canvas.drawText(timeText, colTime, y, textPaint)
+            textPaint.textSize = 8.5f
 
             val catLabel = if (trip.classification == "BUSINESS") "Business" else trip.classification
             canvas.drawText(catLabel, colClass, y, textPaint)
 
-            val purposeText = if (trip.purpose.length > 28) trip.purpose.take(28) + "..." else trip.purpose
+            val purposeText = if (trip.purpose.length > 24) trip.purpose.take(24) + "..." else trip.purpose
             canvas.drawText(purposeText, colPurpose, y, textPaint)
 
             canvas.drawText(String.format(Locale.US, "%.1f", trip.totalDistanceMiles), colMiles, y, textPaint)
@@ -206,8 +241,8 @@ object PdfReportGenerator {
             val startAddr = trip.startAddress?.takeIf { it.isNotBlank() } ?: "Recorded start"
             val endAddr = trip.endAddress?.takeIf { it.isNotBlank() } ?: "Recorded destination"
             
-            val startLine = "From: " + if (startAddr.length > 50) startAddr.take(50) + "…" else startAddr
-            val endLine = "To: " + if (endAddr.length > 50) endAddr.take(50) + "…" else endAddr
+            val startLine = "From: " + if (startAddr.length > 44) startAddr.take(44) + "…" else startAddr
+            val endLine = "To: " + if (endAddr.length > 44) endAddr.take(44) + "…" else endAddr
             
             canvas.drawText(startLine, colPurpose, y, textPaint)
             y += 10f
