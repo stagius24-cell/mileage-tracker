@@ -1,17 +1,18 @@
-# Business Mileage Tracker v1.0.59
+# Business Mileage Tracker v1.0.60
 
-### Release Notes (v1.0.59):
-- **Compact Trip Details Screen**:
-  - Decreased route map height from 260dp to 180dp to maximize content visibility without vertical scrolling.
-  - Reduced tab bar height to 40dp with horizontal layout (icon beside label) to save vertical space.
-  - Compacted card padding and row spacing throughout Route Details and More Info tabs.
-  - Scaled down close and action buttons (Edit/Delete) cleanly to keep all critical metrics and controls immediately visible without scrolling.
+### Release Notes (v1.0.60):
+- **Trip Purpose & Deduction Inlined**: Trip purpose (e.g. "nursery trip") and potential deduction amount are now inline on the same row at opposite ends of the card.
+- **Removed Sync Icon from History Cards**: Removed the cloud sync icon next to business/personal badge tags in Trip History for a cleaner interface.
+- **Trip Details Map Height 220dp**: Updated route map height to 220dp.
+- **Swipeable Tabs**: Smooth horizontal swipe between Route and More Info tabs using `HorizontalPager`.
+- **Outer Trip Swipe**: Swiping horizontally outside the tab card navigates to the previous or next trip in history.
+- **Reverted Outer Spacing**: Restored outer column spacing to 8dp (horizontal 16dp, vertical 8dp).
 
-- **Source commit:** `00020ba74f8e6f88652662921ad5bb1bf463c164`
-- **CI run:** https://github.com/stagius24-cell/mileage-tracker/actions/runs/42553056661
+- **Source commit:** `8efebf8e286da68d891c29094e404c494f1cf1dc`
+- **CI run:** https://github.com/stagius24-cell/mileage-tracker/actions/runs/42561345458
 - **Package:** `com.businesstracker.mileage.debug`
-- **Version:** `1.0.59` (Code `60`)
-- **APK SHA-256:** `71f346228502fc128a1448d18cb92901e1f5de77075567bb04b9d2788dc43315`
+- **Version:** `1.0.60` (Code `61`)
+- **APK SHA-256:** `63317362a6ec7b7ab8c03571431f20d2893dbdb1d2b44d153e8db542ff552001`
 
 Direct download:
-[BusinessMileageTracker-v1.0.59.apk](https://raw.githubusercontent.com/stagius24-cell/mileage-tracker/downloads/v1.0.59-release/BusinessMileageTracker-v1.0.59.apk)
+[BusinessMileageTracker-v1.0.60.apk](https://raw.githubusercontent.com/stagius24-cell/mileage-tracker/downloads/v1.0.60-release/BusinessMileageTracker-v1.0.60.apk)
