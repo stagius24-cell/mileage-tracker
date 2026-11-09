@@ -680,11 +680,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
-                "Version 1.0.56 (Build 57)" to "Reworked version menu layout with version number and summary underneath.",
-                "Version 1.0.55 (Build 56)" to "Floating version history dialog, review card redesign & sheets sync confirmation.",
-                "Version 1.0.54 (Build 55)" to "Redesigned review card to 3 columns, removed car icon & aligned timestamps.",
-                "Version 1.0.53 (Build 54)" to "Sheets sync confirmation banner, zero-pending sync timestamp & ID quick-clear.",
-                "Version 1.0.52 (Build 53)" to "Refined trip deletion dialog: title 'Delete Trip', 80% opacity, cannot be undone."
+                "Version 1.0.57 (Build 58)" to "Compact version dialog with 2-line summaries for the latest 3 updates.",
+                "Version 1.0.56 (Build 57)" to "Reworked version menu with update notes placed directly under each version.",
+                "Version 1.0.55 (Build 56)" to "Added floating version history dialog with 80% opacity and blurred background."
             )
         }
 
@@ -780,7 +778,7 @@ fun SettingsScreen(
                                             lineHeight = 16.sp
                                         ),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
+                                        maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }

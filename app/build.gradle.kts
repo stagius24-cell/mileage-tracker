@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 57
-        versionName = "1.0.56"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Reworked Settings version history menu to display the version number with a brief summary of changes underneath each item.\"")
+        versionCode = 58
+        versionName = "1.0.57"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Display latest 3 versions with up to 2-line concise summaries in the Settings version history dialog.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
