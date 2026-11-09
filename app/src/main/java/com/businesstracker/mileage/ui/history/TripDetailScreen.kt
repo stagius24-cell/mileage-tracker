@@ -134,25 +134,25 @@ fun TripDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(260.dp)
+                .height(180.dp)
         ) {
             TripRouteMap(trip = trip, modifier = Modifier.fillMaxSize())
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(12.dp)
-                    .size(50.dp)
+                    .padding(8.dp)
+                    .size(38.dp)
                     .graphicsLayer { alpha = 0.8f },
                 shape = CircleShape,
                 color = SucculentPrimary.copy(alpha = 0.8f),
-                shadowElevation = 4.dp
+                shadowElevation = 3.dp
             ) {
                 IconButton(onClick = onBack) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Close trip details",
                         tint = Color.White,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -161,8 +161,8 @@ fun TripDetailScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(horizontal = 14.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // Route and more-info tabs matching container roundness.
             Card(
@@ -421,7 +421,7 @@ private fun TripDetailTabButton(
             modifier = Modifier
                 .offset(x = indicatorOffset)
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(40.dp)
                 .background(
                     color = SucculentPrimary.copy(alpha = if (selected) 0.16f else 0f),
                     shape = RoundedCornerShape(8.dp)
@@ -430,19 +430,22 @@ private fun TripDetailTabButton(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(56.dp)
+                .height(40.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp).graphicsLayer(scaleX = iconScale, scaleY = iconScale),
+                    modifier = Modifier.size(17.dp).graphicsLayer(scaleX = iconScale, scaleY = iconScale),
                     tint = selectedColor
                 )
-                Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = selectedColor)
+                Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = selectedColor)
             }
         }
     }
@@ -460,8 +463,8 @@ private fun RouteDetailsTab(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -621,8 +624,8 @@ private fun TripStatusTab(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             StatusValue("Trip type", trip.classification, Modifier.weight(1f), classificationColor)
@@ -653,12 +656,12 @@ private fun TripStatusTab(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onEdit, modifier = Modifier.size(38.dp)) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit trip", tint = SucculentPrimary, modifier = Modifier.size(20.dp))
+            IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.Edit, contentDescription = "Edit trip", tint = SucculentPrimary, modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.width(4.dp))
-            IconButton(onClick = onDelete, modifier = Modifier.size(38.dp)) {
-                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete trip", tint = SpeedRed, modifier = Modifier.size(20.dp))
+            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete trip", tint = SpeedRed, modifier = Modifier.size(18.dp))
             }
         }
     }
