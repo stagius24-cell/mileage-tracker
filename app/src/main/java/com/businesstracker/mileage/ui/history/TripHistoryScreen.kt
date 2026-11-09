@@ -677,12 +677,12 @@ private fun TripHistoryItem(
                 )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                if (isBusiness && trip.purpose.isNotBlank()) {
+            if (isBusiness && trip.purpose.isNotBlank()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         text = trip.purpose,
                         style = MaterialTheme.typography.bodyMedium,
@@ -691,15 +691,25 @@ private fun TripHistoryItem(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)
                     )
-                } else {
-                    Spacer(Modifier.width(1.dp))
+                    Text(
+                        text = formatCurrency(trip.calculatedDeduction),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = SucculentPrimary
+                    )
                 }
+            }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    if (isBusiness) {
+                    HistoryLocationLine(address = start, tint = SucculentPrimary)
+                    HistoryLocationLine(address = end, tint = SpeedRed)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    if (isBusiness && trip.purpose.isBlank()) {
                         Text(
                             text = formatCurrency(trip.calculatedDeduction),
                             style = MaterialTheme.typography.labelMedium,
@@ -707,7 +717,7 @@ private fun TripHistoryItem(
                             color = SucculentPrimary
                         )
                     }
-                    IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                         Icon(
                             Icons.Default.DeleteOutline,
                             contentDescription = "Delete trip",

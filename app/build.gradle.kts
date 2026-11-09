@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 66
-        versionName = "1.0.65"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Removed start and destination from review card and trip history for a cleaner, compact view.\"")
+        versionCode = 67
+        versionName = "1.0.66"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Removed Start and Destination titles from review card while retaining addresses, timestamps, and icons; compact purpose input.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

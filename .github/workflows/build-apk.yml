@@ -116,16 +116,16 @@ jobs:
           VERSION_CODE=$(grep -oE "versionCode='[0-9]+'" "$RUNNER_TEMP/apk-badging.txt" | head -n 1 | grep -oE "[0-9]+")
           VERSION_NAME=$(grep -oE "versionName='[^']+'" "$RUNNER_TEMP/apk-badging.txt" | head -n 1 | cut -d"'" -f2)
           echo "APK versionCode=$VERSION_CODE, versionName=$VERSION_NAME"
-          if [ "$VERSION_CODE" -lt 66 ]; then
-            echo "::error::versionCode ($VERSION_CODE) is lower than 66. In-place update over installed app will fail!"
+          if [ "$VERSION_CODE" -lt 67 ]; then
+            echo "::error::versionCode ($VERSION_CODE) is lower than 67. In-place update over installed app will fail!"
             exit 1
           fi
-          echo "APK version code verification PASSED ($VERSION_CODE >= 66)."
+          echo "APK version code verification PASSED ($VERSION_CODE >= 67)."
 
       - name: Upload Verified Update-Ready APK
         uses: actions/upload-artifact@v4
         with:
-          name: BusinessMileageTracker-v1.0.65-update-ready
+          name: BusinessMileageTracker-v1.0.66-update-ready
           path: ${{ steps.find_apk.outputs.apk_path }}
           retention-days: 30
           if-no-files-found: error
