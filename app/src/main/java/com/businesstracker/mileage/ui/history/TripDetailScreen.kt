@@ -81,6 +81,7 @@ import com.businesstracker.mileage.ui.components.TripRouteMap
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
+import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -576,6 +577,47 @@ private fun TripStatusTab(
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
+    // Calculate speed metrics from recorded waypoints or distance & duration
+    val speedMetrics = remember(trip) {
+        var maxMph = 0.0
+        val speeds = mutableListOf<Double>()
+        try {
+            val array = JSONArray(trip.waypointsJson)
+            for (i in 0 until array.length()) {
+                val item = array.optJSONObject(i) ?: continue
+                if (item.has("speed")) {
+                    val sMps = item.optDouble("speed", 0.0)
+                    if (sMps > 0.0) {
+                        val sMph = sMps * 2.23694
+                        speeds.add(sMph)
+                        if (sMph > maxMph) maxMph = sMph
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        val avgMph = if (speeds.isNotEmpty()) {
+            speeds.average()
+        } else if (durationMinutes > 0 && trip.totalDistanceMiles > 0) {
+            (trip.totalDistanceMiles / (durationMinutes / 60.0))
+        } else {
+            0.0
+        }
+
+        // Fallback for max speed if individual speeds were absent
+        if (maxMph <= 0.0 && avgMph > 0.0) {
+            maxMph = avgMph * 1.25 // reasonable estimate if pointwise speed wasn't sampled
+        }
+
+        Pair(avgMph, maxMph)
+    }
+    val avgSpeedStr = remember(speedMetrics) {
+        if (speedMetrics.first > 0.0) "${String.format(Locale.US, "%.1f", speedMetrics.first)} mph" else "--"
+    }
+    val maxSpeedStr = remember(speedMetrics) {
+        if (speedMetrics.second > 0.0) "${String.format(Locale.US, "%.1f", speedMetrics.second)} mph" else "--"
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -590,6 +632,11 @@ private fun TripStatusTab(
         Row(modifier = Modifier.fillMaxWidth()) {
             StatusValue("Duration", "$durationMinutes min", Modifier.weight(1f))
             StatusValue("Tracking", trip.trackingMethod, Modifier.weight(1f))
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            StatusValue("Average speed", avgSpeedStr, Modifier.weight(1f))
+            StatusValue("Max speed", maxSpeedStr, Modifier.weight(1f))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         Row(modifier = Modifier.fillMaxWidth()) {

@@ -680,9 +680,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.58 (Build 59)" to "Added average speed and max speed metrics to the Trip Details More Info tab.",
                 "Version 1.0.57 (Build 58)" to "Compact version dialog with 2-line summaries for the latest 3 updates.",
-                "Version 1.0.56 (Build 57)" to "Reworked version menu with update notes placed directly under each version.",
-                "Version 1.0.55 (Build 56)" to "Added floating version history dialog with 80% opacity and blurred background."
+                "Version 1.0.56 (Build 57)" to "Reworked version menu with update notes placed directly under each version."
             )
         }
 
