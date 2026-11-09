@@ -1,24 +1,16 @@
-# Business Mileage Tracker v1.0.55
+# Business Mileage Tracker v1.0.56
 
-### Release Notes (v1.0.55):
-- **Floating Version History Table Dialog**:
-  - Tapping the app version row in Settings opens a floating modal table dialog.
-  - Features 80% opacity surface (`alpha = 0.80f`), blurred background (`blur(8.dp)`), and dimmed backdrop (`Color.Black.copy(alpha = 0.55f)`).
-  - Displays the last 5 app versions with clean 1-line update summaries that truncate cleanly without wrapping.
-- **Dashboard Review Card Redesign**:
-  - Removed top car icon.
-  - Organized data into a clean 3-column layout matching Trip Detail: Date, Miles, Potential deduction.
-  - Moved start and destination timestamps to the bottom on the far right of each address row with dividers.
-- **Google Sheets Sync & ID Enhancements**:
-  - Instant positive confirmation banner upon sync.
-  - Sync timestamp refreshes even on zero pending trips.
-  - Spreadsheet ID input includes a one-tap quick-clear button.
+### Release Notes (v1.0.56):
+- **Reworked Version History Menu**:
+  - Displays each version title cleanly (e.g. `Version 1.0.56 (Build 57)` in green bold).
+  - Positions the summary of changes directly underneath each version number for readability without cramped horizontal columns.
+  - Floating dialog with 80% surface opacity, blurred background, and dimmed backdrop.
 
-- **Source commit:** `3359eab227a3ada0e794a43cd2db57683c1b09c8`
-- **CI run:** https://github.com/stagius24-cell/mileage-tracker/actions/runs/42538040526
+- **Source commit:** `411584be85df8f501c0f23dfb0138e7aed3295c9`
+- **CI run:** https://github.com/stagius24-cell/mileage-tracker/actions/runs/42540561266
 - **Package:** `com.businesstracker.mileage.debug`
-- **Version:** `1.0.55` (Code `56`)
-- **APK SHA-256:** `5f6ae2a94a557a79865c2606e87f2890214798aeeb2145ab8493aadab6ba3898`
+- **Version:** `1.0.56` (Code `57`)
+- **APK SHA-256:** `8f111d87a9fa6590ff3bd90fe715fb39f0021014fc5635440888321749096c2b`
 
 Direct download:
-[BusinessMileageTracker-v1.0.55.apk](https://raw.githubusercontent.com/stagius24-cell/mileage-tracker/downloads/v1.0.55-release/BusinessMileageTracker-v1.0.55.apk)
+[BusinessMileageTracker-v1.0.56.apk](https://raw.githubusercontent.com/stagius24-cell/mileage-tracker/downloads/v1.0.56-release/BusinessMileageTracker-v1.0.56.apk)
