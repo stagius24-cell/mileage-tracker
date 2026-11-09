@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 64
-        versionName = "1.0.63"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"1-line Create Report button, 2-line PDF destinations, and PDF preview zoom.\"")
+        versionCode = 65
+        versionName = "1.0.64"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Compact Create Report dialog, inline Tax Year, and single-line Preview icon button.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

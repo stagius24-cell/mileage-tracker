@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
@@ -200,8 +201,8 @@ fun ReportsExportScreen(
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
                 ) {
                     Column(
-                        modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -216,7 +217,7 @@ fun ReportsExportScreen(
                                     imageVector = Icons.Default.ReceiptLong,
                                     contentDescription = null,
                                     tint = SucculentPrimary,
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                                 Text(
                                     text = "Create Yearly Report",
@@ -240,8 +241,12 @@ fun ReportsExportScreen(
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f))
 
-                        // 1. Tax Year Selection
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // 1. Tax Year Selection (Inline with label)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
                                 text = "Tax Year",
                                 style = MaterialTheme.typography.labelMedium,
@@ -256,7 +261,7 @@ fun ReportsExportScreen(
                         }
 
                         // 2. Drive Type (Business, Personal, All) Selection
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
                                 text = "Drive Type",
                                 style = MaterialTheme.typography.labelMedium,
@@ -286,7 +291,7 @@ fun ReportsExportScreen(
                                             .clickable { viewModel.selectClassification(typeKey) }
                                     ) {
                                         Box(
-                                            modifier = Modifier.padding(vertical = 8.dp),
+                                            modifier = Modifier.padding(vertical = 6.dp),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
@@ -302,7 +307,7 @@ fun ReportsExportScreen(
                         }
 
                         // 3. Format Selection (CSV, PDF)
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
                                 text = "Format",
                                 style = MaterialTheme.typography.labelMedium,
@@ -311,7 +316,7 @@ fun ReportsExportScreen(
                             )
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 listOf("PDF", "CSV").forEach { format ->
                                     val isSelected = selectedFormat == format
@@ -327,7 +332,7 @@ fun ReportsExportScreen(
                                             .clickable { selectedFormat = format }
                                     ) {
                                         Box(
-                                            modifier = Modifier.padding(vertical = 8.dp),
+                                            modifier = Modifier.padding(vertical = 6.dp),
                                             contentAlignment = Alignment.Center
                                         ) {
                                             Text(
@@ -342,13 +347,14 @@ fun ReportsExportScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
 
                         // Action buttons: Preview (for PDF) and Export
                         if (selectedFormat == "PDF") {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 OutlinedButton(
                                     onClick = {
@@ -358,14 +364,27 @@ fun ReportsExportScreen(
                                         }
                                     },
                                     shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .height(46.dp)
+                                        .weight(0.9f)
+                                        .height(44.dp)
                                 ) {
-                                    Text(
-                                        text = "Preview PDF",
-                                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold)
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Visibility,
+                                            contentDescription = "Preview",
+                                            modifier = Modifier.size(17.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "Preview",
+                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                            maxLines = 1
+                                        )
+                                    }
                                 }
 
                                 Button(
@@ -375,14 +394,16 @@ fun ReportsExportScreen(
                                     },
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                     modifier = Modifier
-                                        .weight(1f)
-                                        .height(46.dp)
+                                        .weight(1.1f)
+                                        .height(44.dp)
                                 ) {
                                     Text(
                                         text = "Share PDF",
                                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                        color = Color.White
+                                        color = Color.White,
+                                        maxLines = 1
                                     )
                                 }
                             }
@@ -394,14 +415,16 @@ fun ReportsExportScreen(
                                 },
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(46.dp)
+                                    .height(44.dp)
                             ) {
                                 Text(
                                     text = "Export CSV",
                                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White
+                                    color = Color.White,
+                                    maxLines = 1
                                 )
                             }
                         }
