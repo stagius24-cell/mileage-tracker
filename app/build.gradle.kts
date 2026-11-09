@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 65
-        versionName = "1.0.64"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Compact Create Report dialog, inline Tax Year, and single-line Preview icon button.\"")
+        versionCode = 66
+        versionName = "1.0.65"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Removed start and destination from review card and trip history for a cleaner, compact view.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

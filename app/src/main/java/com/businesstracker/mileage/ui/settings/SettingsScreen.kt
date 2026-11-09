@@ -58,6 +58,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -437,20 +439,47 @@ fun SettingsScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedTextField(
-                        value = newPurposeText,
-                        onValueChange = {
-                            newPurposeText = it
-                            if (purposeError != null) purposeError = null
-                        },
-                        label = { Text("New purpose") },
-                        placeholder = { Text("e.g. Pop-up Market") },
-                        singleLine = true,
-                        isError = purposeError != null,
-                        supportingText = purposeError?.let { err -> { Text(err, color = MaterialTheme.colorScheme.error) } },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    )
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(
+                            1.dp,
+                            if (purposeError != null) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                        )
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 14.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            if (newPurposeText.isEmpty()) {
+                                Text(
+                                    text = "New purpose",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    maxLines = 1
+                                )
+                            }
+                            BasicTextField(
+                                value = newPurposeText,
+                                onValueChange = {
+                                    newPurposeText = it
+                                    if (purposeError != null) purposeError = null
+                                },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
+                                cursorBrush = SolidColor(SucculentPrimary),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
 
                     Button(
                         onClick = {
@@ -465,15 +494,23 @@ fun SettingsScreen(
                                 purposeError = null
                             }
                         },
-                        modifier = Modifier.height(56.dp),
+                        modifier = Modifier.height(44.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                        contentPadding = PaddingValues(horizontal = 16.dp)
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Add purpose")
+                        Icon(Icons.Default.Add, contentDescription = "Add purpose", modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Add")
+                        Text("Add", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
                     }
+                }
+
+                if (purposeError != null) {
+                    Text(
+                        text = purposeError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.labelSmall
+                    )
                 }
 
                 // Custom purposes chips
