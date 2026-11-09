@@ -343,7 +343,7 @@ class ReportsExportViewModel @Inject constructor(
         }
     }
 
-    fun exportToPdf(onFileReady: (Intent) -> Unit) {
+    fun generatePdfFile(onGenerated: (File) -> Unit) {
         viewModelScope.launch {
             val state = uiState.value
             val summaryData = ReportSummaryData(
@@ -366,25 +366,31 @@ class ReportsExportViewModel @Inject constructor(
 
             try {
                 val pdfFile = PdfReportGenerator.generatePdfReport(context, summaryData)
-                val uri = FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    pdfFile
-                )
-
-                val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "application/pdf"
-                    putExtra(Intent.EXTRA_SUBJECT, "Business Mileage PDF Report")
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-
-                onFileReady(Intent.createChooser(shareIntent, "Share Mileage PDF").apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                })
+                onGenerated(pdfFile)
             } catch (e: Exception) {
-                android.util.Log.e("ReportsExportViewModel", "Failed to export PDF: ${e.message}", e)
+                android.util.Log.e("ReportsExportViewModel", "Failed to generate PDF: ${e.message}", e)
             }
+        }
+    }
+
+    fun exportToPdf(onFileReady: (Intent) -> Unit) {
+        generatePdfFile { pdfFile ->
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                pdfFile
+            )
+
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_SUBJECT, "Business Mileage PDF Report")
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+
+            onFileReady(Intent.createChooser(shareIntent, "Share Mileage PDF").apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
         }
     }
 
