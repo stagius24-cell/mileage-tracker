@@ -149,7 +149,6 @@ fun SettingsScreen(
         state = listState,
         modifier = modifier
             .fillMaxSize()
-            .imePadding()
             .then(if (showVersionHistoryDialog) Modifier.blur(8.dp) else Modifier)
             .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
@@ -161,89 +160,6 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
-        }
-
-        item {
-            SettingsSection(title = "Appearance", icon = Icons.Default.Palette) {
-                SettingsSwitchRow(
-                    title = "Dark Mode",
-                    description = if (state.themeMode == AppThemeMode.DARK) "Dark theme enabled" else "Light theme enabled",
-                    checked = state.themeMode == AppThemeMode.DARK,
-                    onCheckedChange = { isDark ->
-                        viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
-                    }
-                )
-            }
-        }
-
-        item {
-            SettingsSection(title = "Drive tracking", icon = Icons.Default.LocationOn) {
-                SettingsSwitchRow(
-                    title = "Automatic detection",
-                    description = "Detect drives in the background",
-                    checked = state.autoTrackingEnabled,
-                    onCheckedChange = viewModel::setAutoTrackingEnabled
-                )
-
-                if (state.autoTrackingEnabled && !state.hasBackgroundLocationPermission) {
-                    CompactAlert(
-                        text = "Allow location all the time for automatic tracking.",
-                        actionLabel = "Open settings",
-                        onAction = {
-                            context.startActivity(
-                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = Uri.fromParts("package", context.packageName, null)
-                                }
-                            )
-                        }
-                    )
-                }
-
-                SectionDivider()
-                SettingsSwitchRow(
-                    title = "Work schedule",
-                    description = "Apply work days and hours",
-                    checked = state.scheduleFilteringEnabled,
-                    enabled = state.autoTrackingEnabled,
-                    onCheckedChange = viewModel::setScheduleFilteringEnabled
-                )
-
-                if (state.autoTrackingEnabled && state.scheduleFilteringEnabled) {
-                    ScheduleControls(
-                        state = state,
-                        onToggleDay = viewModel::toggleWorkDay,
-                        onStartChange = viewModel::setWorkHoursStart,
-                        onEndChange = viewModel::setWorkHoursEnd,
-                        onBehaviorChange = viewModel::setOutsideScheduleBehavior,
-                        onFieldFocus = {
-                            coroutineScope.launch {
-                                listState.animateScrollToItem(index = 2, scrollOffset = 0)
-                            }
-                        }
-                    )
-                }
-
-                SectionDivider()
-                OutlinedButton(
-                    onClick = {
-                        try {
-                            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                        } catch (_: Exception) {
-                            context.startActivity(
-                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = Uri.fromParts("package", context.packageName, null)
-                                }
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.BatterySaver, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Battery optimization")
-                }
-            }
         }
 
         item {
@@ -318,6 +234,89 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        item {
+            SettingsSection(title = "Appearance", icon = Icons.Default.Palette) {
+                SettingsSwitchRow(
+                    title = "Dark Mode",
+                    description = if (state.themeMode == AppThemeMode.DARK) "Dark theme enabled" else "Light theme enabled",
+                    checked = state.themeMode == AppThemeMode.DARK,
+                    onCheckedChange = { isDark ->
+                        viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
+                    }
+                )
+            }
+        }
+
+        item {
+            SettingsSection(title = "Drive tracking", icon = Icons.Default.LocationOn) {
+                SettingsSwitchRow(
+                    title = "Automatic detection",
+                    description = "Detect drives in the background",
+                    checked = state.autoTrackingEnabled,
+                    onCheckedChange = viewModel::setAutoTrackingEnabled
+                )
+
+                if (state.autoTrackingEnabled && !state.hasBackgroundLocationPermission) {
+                    CompactAlert(
+                        text = "Allow location all the time for automatic tracking.",
+                        actionLabel = "Open settings",
+                        onAction = {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                            )
+                        }
+                    )
+                }
+
+                SectionDivider()
+                SettingsSwitchRow(
+                    title = "Work schedule",
+                    description = "Apply work days and hours",
+                    checked = state.scheduleFilteringEnabled,
+                    enabled = state.autoTrackingEnabled,
+                    onCheckedChange = viewModel::setScheduleFilteringEnabled
+                )
+
+                if (state.autoTrackingEnabled && state.scheduleFilteringEnabled) {
+                    ScheduleControls(
+                        state = state,
+                        onToggleDay = viewModel::toggleWorkDay,
+                        onStartChange = viewModel::setWorkHoursStart,
+                        onEndChange = viewModel::setWorkHoursEnd,
+                        onBehaviorChange = viewModel::setOutsideScheduleBehavior,
+                        onFieldFocus = {
+                            coroutineScope.launch {
+                                listState.animateScrollToItem(index = 3, scrollOffset = 0)
+                            }
+                        }
+                    )
+                }
+
+                SectionDivider()
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        } catch (_: Exception) {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.BatterySaver, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Battery optimization")
                 }
             }
         }
@@ -1045,7 +1044,7 @@ private fun ScheduleControls(
                         ),
                         cursorBrush = SolidColor(SucculentPrimary),
                         keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Text,
+                            keyboardType = KeyboardType.Number,
                             imeAction = ImeAction.Next
                         )
                     )
@@ -1108,7 +1107,7 @@ private fun ScheduleControls(
                         ),
                         cursorBrush = SolidColor(SucculentPrimary),
                         keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Text,
+                            keyboardType = KeyboardType.Number,
                             imeAction = ImeAction.Done
                         )
                     )

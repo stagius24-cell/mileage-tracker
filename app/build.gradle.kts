@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 74
-        versionName = "1.0.73"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Compact schedule controls: single-row outside hours options, shortened 42dp time boxes with smooth scroll on keyboard focus, and instantaneous editing.\"")
+        versionCode = 75
+        versionName = "1.0.74"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix keyboard overlay: hide bottom nav bar during text entry to reveal entire card and switch time inputs to numeric keypad.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
