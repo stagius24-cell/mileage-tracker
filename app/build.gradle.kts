@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 71
-        versionName = "1.0.70"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Phase 5 UX/UI improvements: PDF/CSV reliability, undo trip deletion, context-aware empty states, and save trip guards.\"")
+        versionCode = 72
+        versionName = "1.0.71"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Phase 5C visual polish: removed Start/Destination titles in review, zoomed out route map view, enhanced accessibility touch targets and tab semantics.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

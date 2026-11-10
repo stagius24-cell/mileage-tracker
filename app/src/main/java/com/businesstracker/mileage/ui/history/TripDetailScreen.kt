@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -73,6 +74,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -179,18 +184,21 @@ fun TripDetailScreen(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(8.dp)
-                    .size(38.dp)
-                    .graphicsLayer { alpha = 0.8f },
+                    .size(44.dp)
+                    .graphicsLayer { alpha = 0.85f },
                 shape = CircleShape,
-                color = SucculentPrimary.copy(alpha = 0.8f),
+                color = SucculentPrimary.copy(alpha = 0.85f),
                 shadowElevation = 3.dp
             ) {
-                IconButton(onClick = onBack) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier.size(44.dp)
+                ) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Close trip details",
                         tint = Color.White,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
@@ -497,7 +505,7 @@ private fun TripDetailTabButton(
             modifier = Modifier
                 .offset(x = indicatorOffset)
                 .fillMaxWidth()
-                .height(40.dp)
+                .height(44.dp)
                 .background(
                     color = SucculentPrimary.copy(alpha = if (selected) 0.16f else 0f),
                     shape = RoundedCornerShape(8.dp)
@@ -506,8 +514,12 @@ private fun TripDetailTabButton(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(40.dp)
+                .defaultMinSize(minHeight = 48.dp)
                 .clip(RoundedCornerShape(8.dp))
+                .semantics {
+                    role = Role.Tab
+                    this.selected = selected
+                }
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
@@ -589,7 +601,6 @@ private fun RouteDetailsTab(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         DestinationRow(
-            label = "Start",
             address = startAddress,
             time = startTime,
             color = SucculentPrimary,
@@ -597,7 +608,6 @@ private fun RouteDetailsTab(
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         DestinationRow(
-            label = "Destination",
             address = endAddress,
             time = endTime,
             color = SpeedRed,
@@ -608,7 +618,6 @@ private fun RouteDetailsTab(
 
 @Composable
 private fun DestinationRow(
-    label: String,
     address: String,
     time: String,
     color: Color,
@@ -628,19 +637,17 @@ private fun DestinationRow(
             }
         }
         Spacer(modifier = Modifier.width(10.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-            Text(
-                address,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        Text(
+            text = address,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            time,
+            text = time,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant
