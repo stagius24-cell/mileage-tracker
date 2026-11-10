@@ -108,6 +108,34 @@ fun TripHistoryScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var tripPendingDeletion by remember { mutableStateOf<TripEntity?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(state.recentlyDeletedTrip) {
+        val deleted = state.recentlyDeletedTrip
+        if (deleted != null) {
+            val result = snackbarHostState.showSnackbar(
+                message = "Trip deleted",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                viewModel.undoDeleteTrip()
+            } else {
+                viewModel.clearRecentlyDeletedTrip()
+            }
+        }
+    }
+
+    LaunchedEffect(state.actionErrorMessage) {
+        val errorMsg = state.actionErrorMessage
+        if (errorMsg != null) {
+            snackbarHostState.showSnackbar(
+                message = errorMsg,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.clearActionErrorMessage()
+        }
+    }
 
     LaunchedEffect(initialMonthIso) {
         if (initialMonthIso.matches(Regex("\\d{4}-\\d{2}"))) {
@@ -140,64 +168,73 @@ fun TripHistoryScreen(
         return
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .then(if (tripPendingDeletion != null) Modifier.blur(8.dp) else Modifier)
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        HistoryControls(
-            state = state,
-            onSearchChange = viewModel::setSearchQuery,
-            onSortChange = viewModel::setSortOrder,
-            onClassificationChange = viewModel::setClassificationFilter,
-            onEntityChange = viewModel::setBusinessEntityFilter,
-            onSyncChange = viewModel::setSyncStatusFilter,
-            onClearDateFilter = { viewModel.setDateRange("", "") },
-            onBackToReports = onBackToReports
-        )
-
-        if (state.trips.isEmpty()) {
-            EmptyHistory(
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (tripPendingDeletion != null) Modifier.blur(8.dp) else Modifier)
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            HistoryControls(
                 state = state,
-                onClearSearch = { viewModel.setSearchQuery("") },
-                onClearFilters = { viewModel.clearAllFilters() }
+                onSearchChange = viewModel::setSearchQuery,
+                onSortChange = viewModel::setSortOrder,
+                onClassificationChange = viewModel::setClassificationFilter,
+                onEntityChange = viewModel::setBusinessEntityFilter,
+                onSyncChange = viewModel::setSyncStatusFilter,
+                onClearDateFilter = { viewModel.setDateRange("", "") },
+                onBackToReports = onBackToReports
             )
-        } else {
-            val groupByDate = state.sortOrder == SortOrder.NEWEST_FIRST ||
-                state.sortOrder == SortOrder.OLDEST_FIRST
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (groupByDate) {
-                    state.trips.groupBy { it.date }.forEach { (date, trips) ->
-                        item(key = "date-$date") {
-                            DateSectionHeader(date = date, trips = trips)
+            if (state.trips.isEmpty()) {
+                EmptyHistory(
+                    state = state,
+                    onClearSearch = { viewModel.setSearchQuery("") },
+                    onClearFilters = { viewModel.clearAllFilters() }
+                )
+            } else {
+                val groupByDate = state.sortOrder == SortOrder.NEWEST_FIRST ||
+                    state.sortOrder == SortOrder.OLDEST_FIRST
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (groupByDate) {
+                        state.trips.groupBy { it.date }.forEach { (date, trips) ->
+                            item(key = "date-$date") {
+                                DateSectionHeader(date = date, trips = trips)
+                            }
+                            items(trips, key = { it.id }) { trip ->
+                                TripHistoryItem(
+                                    trip = trip,
+                                    showDate = false,
+                                    onClick = { viewModel.selectTripForDetails(trip) },
+                                    onDelete = { tripPendingDeletion = trip }
+                                )
+                            }
                         }
-                        items(trips, key = { it.id }) { trip ->
+                    } else {
+                        items(state.trips, key = { it.id }) { trip ->
                             TripHistoryItem(
                                 trip = trip,
-                                showDate = false,
+                                showDate = true,
                                 onClick = { viewModel.selectTripForDetails(trip) },
                                 onDelete = { tripPendingDeletion = trip }
                             )
                         }
                     }
-                } else {
-                    items(state.trips, key = { it.id }) { trip ->
-                        TripHistoryItem(
-                            trip = trip,
-                            showDate = true,
-                            onClick = { viewModel.selectTripForDetails(trip) },
-                            onDelete = { tripPendingDeletion = trip }
-                        )
-                    }
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
+        )
     }
 
     if (tripPendingDeletion != null) {
@@ -243,7 +280,7 @@ fun TripHistoryScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Delete this ${formatMiles(targetTrip.totalDistanceMiles)} mi trip? This action cannot be undone.",
+                            text = "Delete this ${formatMiles(targetTrip.totalDistanceMiles)} mi trip from your trip history?",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

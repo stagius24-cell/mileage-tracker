@@ -363,4 +363,69 @@ class TripHistoryFilterAndSortTest {
         assertEquals("Unable to save trip changes. Please try again.", errorReported)
         assertEquals("Unable to save trip changes. Please try again.", viewModel.uiState.value.actionErrorMessage)
     }
+
+    @Test
+    fun deleteTrip_fromTripDetails_clearsSelectedTripAndStagesForUndo() = runTest {
+        val tripList = sampleTrips.toMutableList()
+        val repo = object : TripRepository by fakeRepository {
+            override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(tripList)
+            override suspend fun getTripById(tripId: String): TripEntity? = tripList.find { it.id == tripId }
+            override suspend fun deleteTrip(tripId: String) {
+                tripList.removeAll { it.id == tripId }
+            }
+            override suspend fun insertTrip(trip: TripEntity) {
+                tripList.add(trip)
+            }
+        }
+        val viewModel = TripHistoryViewModel(repo)
+        advanceUntilIdle()
+
+        // User enters details for trip "1"
+        viewModel.selectTripForDetails(sampleTrips[0])
+        advanceUntilIdle()
+        assertEquals("1", viewModel.uiState.value.selectedTripForDetails?.id)
+
+        // Deleting from Trip Details view triggers deleteTrip
+        viewModel.deleteTrip("1")
+        advanceUntilIdle()
+
+        // Details view is closed (selectedTripForDetails is null) and trip is staged for Undo
+        org.junit.Assert.assertNull(viewModel.uiState.value.selectedTripForDetails)
+        assertEquals("1", viewModel.uiState.value.recentlyDeletedTrip?.id)
+        org.junit.Assert.assertFalse(tripList.any { it.id == "1" })
+
+        // Undo restores the trip cleanly
+        viewModel.undoDeleteTrip()
+        advanceUntilIdle()
+        org.junit.Assert.assertNull(viewModel.uiState.value.recentlyDeletedTrip)
+        assertTrue(tripList.any { it.id == "1" })
+    }
+
+    @Test
+    fun snackbarUndoLifecycle_whenClearedWithoutUndo_doesNotRestoreTrip() = runTest {
+        val tripList = sampleTrips.toMutableList()
+        val repo = object : TripRepository by fakeRepository {
+            override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(tripList)
+            override suspend fun getTripById(tripId: String): TripEntity? = tripList.find { it.id == tripId }
+            override suspend fun deleteTrip(tripId: String) {
+                tripList.removeAll { it.id == tripId }
+            }
+            override suspend fun insertTrip(trip: TripEntity) {
+                tripList.add(trip)
+            }
+        }
+        val viewModel = TripHistoryViewModel(repo)
+        advanceUntilIdle()
+
+        viewModel.deleteTrip("2")
+        advanceUntilIdle()
+        assertEquals("2", viewModel.uiState.value.recentlyDeletedTrip?.id)
+
+        // User dismisses or snackbar times out (SnackbarResult.Dismissed)
+        viewModel.clearRecentlyDeletedTrip()
+        advanceUntilIdle()
+
+        org.junit.Assert.assertNull(viewModel.uiState.value.recentlyDeletedTrip)
+        org.junit.Assert.assertFalse(tripList.any { it.id == "2" })
+    }
 }
