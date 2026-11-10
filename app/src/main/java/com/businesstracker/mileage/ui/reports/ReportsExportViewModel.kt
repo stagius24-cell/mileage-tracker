@@ -72,6 +72,8 @@ data class ReportsUiState(
     val entityBreakdown: List<EntityBreakdown> = emptyList(),
     val purposeBreakdown: List<PurposeBreakdown> = emptyList(),
     val isExporting: Boolean = false,
+    val isGeneratingPdf: Boolean = false,
+    val exportErrorMessage: String? = null,
     val ytdLoggedDeduction: Double = 0.0,
     val ytdPotentialDeduction: Double = 0.0,
     val ytdBusinessMiles: Double = 0.0,
@@ -92,6 +94,8 @@ class ReportsExportViewModel @Inject constructor(
     private val _customStartDate = MutableStateFlow("")
     private val _customEndDate = MutableStateFlow("")
     private val _isExporting = MutableStateFlow(false)
+    private val _isGeneratingPdf = MutableStateFlow(false)
+    private val _exportErrorMessage = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<ReportsUiState> = combine(
         tripRepository.getAllTrips(),
@@ -101,8 +105,8 @@ class ReportsExportViewModel @Inject constructor(
     ) { trips, year, entity, classification ->
         FilterArgs(trips, year, entity, classification)
     }.combine(
-        combine(_customStartDate, _customEndDate, _isExporting) { start, end, exporting ->
-            DateArgs(start, end, exporting)
+        combine(_customStartDate, _customEndDate, _isExporting, _isGeneratingPdf, _exportErrorMessage) { start, end, exporting, generatingPdf, errorMsg ->
+            DateArgs(start, end, exporting, generatingPdf, errorMsg)
         }
     ) { filterArgs, dateArgs ->
         val trips = filterArgs.trips
@@ -251,6 +255,8 @@ class ReportsExportViewModel @Inject constructor(
             entityBreakdown = entityBreakdowns,
             purposeBreakdown = purposeBreakdowns,
             isExporting = dateArgs.exporting,
+            isGeneratingPdf = dateArgs.generatingPdf,
+            exportErrorMessage = dateArgs.errorMsg,
             ytdLoggedDeduction = totalDeduction,
             ytdPotentialDeduction = round(totalDeduction + unreviewedPotential),
             ytdBusinessMiles = bMiles,
@@ -279,119 +285,160 @@ class ReportsExportViewModel @Inject constructor(
         _customEndDate.value = end
     }
 
+    fun clearExportError() {
+        _exportErrorMessage.value = null
+    }
+
     fun exportToCsv(monthIso: String? = null, onFileReady: (Intent) -> Unit) {
+        if (_isExporting.value) return
+        _isExporting.value = true
+        _exportErrorMessage.value = null
+
         viewModelScope.launch {
-            val state = uiState.value
-            val tripsToExport = if (monthIso != null) {
-                state.filteredTrips.filter { it.date.startsWith(monthIso) }
-            } else {
-                state.filteredTrips
-            }
-
-            val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
-            val suffix = monthIso ?: "${state.selectedYear}_${state.selectedBusinessEntity}"
-            val csvFile = File(exportDir, "BusinessMileage_${suffix}_${System.currentTimeMillis()}.csv")
-
-            FileWriter(csvFile).use { writer ->
-                writer.append("Trip ID,Date,Start Time,End Time,Start Address,End Address,Total Miles,Business Miles,Classification,Business Entity,Purpose,Mileage Rate,Estimated Deduction,Notes,Tracking Method,Sync Status\n")
-
-                val timeFmt = java.text.SimpleDateFormat("h:mm a", Locale.US)
-
-                for (trip in tripsToExport) {
-                    val startStr = if (trip.startTime > 0) timeFmt.format(java.util.Date(trip.startTime)) else ""
-                    val endStr = if (trip.endTime > 0) timeFmt.format(java.util.Date(trip.endTime)) else ""
-
-                    writer.append("\"${escapeCsv(trip.id)}\",")
-                    writer.append("\"${escapeCsv(trip.date)}\",")
-                    writer.append("\"${escapeCsv(startStr)}\",")
-                    writer.append("\"${escapeCsv(endStr)}\",")
-                    writer.append("\"${escapeCsv(trip.startAddress.orEmpty())}\",")
-                    writer.append("\"${escapeCsv(trip.endAddress.orEmpty())}\",")
-                    writer.append("${trip.totalDistanceMiles},")
-                    writer.append("${trip.businessMiles},")
-                    writer.append("\"${escapeCsv(trip.classification)}\",")
-                    writer.append("\"${escapeCsv(trip.businessEntity)}\",")
-                    writer.append("\"${escapeCsv(trip.purpose)}\",")
-                    writer.append("${trip.applicableRate},")
-                    writer.append("${trip.calculatedDeduction},")
-                    writer.append("\"${escapeCsv(trip.notes.orEmpty())}\",")
-                    writer.append("\"${escapeCsv(trip.trackingMethod)}\",")
-                    writer.append("\"${escapeCsv(trip.syncStatus)}\"\n")
+            try {
+                val state = uiState.value
+                val tripsToExport = if (monthIso != null) {
+                    state.filteredTrips.filter { it.date.startsWith(monthIso) }
+                } else {
+                    state.filteredTrips
                 }
-            }
 
-            val uri = try {
-                FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    csvFile
-                )
-            } catch (_: Exception) {
-                android.net.Uri.fromFile(csvFile)
-            }
+                val exportDir = File(context.cacheDir, "exports").apply { mkdirs() }
+                val suffix = monthIso ?: "${state.selectedYear}_${state.selectedBusinessEntity}"
+                val csvFile = File(exportDir, "BusinessMileage_${suffix}_${System.currentTimeMillis()}.csv")
 
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/csv"
-                putExtra(Intent.EXTRA_SUBJECT, "Business Mileage Report ($suffix)")
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
+                FileWriter(csvFile).use { writer ->
+                    writer.append("Trip ID,Date,Start Time,End Time,Start Address,End Address,Total Miles,Business Miles,Classification,Business Entity,Purpose,Mileage Rate,Estimated Deduction,Notes,Tracking Method,Sync Status\n")
 
-            onFileReady(Intent.createChooser(shareIntent, "Share Mileage CSV").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
+                    val timeFmt = java.text.SimpleDateFormat("h:mm a", Locale.US)
+
+                    for (trip in tripsToExport) {
+                        val startStr = if (trip.startTime > 0) timeFmt.format(java.util.Date(trip.startTime)) else ""
+                        val endStr = if (trip.endTime > 0) timeFmt.format(java.util.Date(trip.endTime)) else ""
+
+                        writer.append("\"${escapeCsv(trip.id)}\",")
+                        writer.append("\"${escapeCsv(trip.date)}\",")
+                        writer.append("\"${escapeCsv(startStr)}\",")
+                        writer.append("\"${escapeCsv(endStr)}\",")
+                        writer.append("\"${escapeCsv(trip.startAddress.orEmpty())}\",")
+                        writer.append("\"${escapeCsv(trip.endAddress.orEmpty())}\",")
+                        writer.append("${trip.totalDistanceMiles},")
+                        writer.append("${trip.businessMiles},")
+                        writer.append("\"${escapeCsv(trip.classification)}\",")
+                        writer.append("\"${escapeCsv(trip.businessEntity)}\",")
+                        writer.append("\"${escapeCsv(trip.purpose)}\",")
+                        writer.append("${trip.applicableRate},")
+                        writer.append("${trip.calculatedDeduction},")
+                        writer.append("\"${escapeCsv(trip.notes.orEmpty())}\",")
+                        writer.append("\"${escapeCsv(trip.trackingMethod)}\",")
+                        writer.append("\"${escapeCsv(trip.syncStatus)}\"\n")
+                    }
+                }
+
+                val uri = try {
+                    FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        csvFile
+                    )
+                } catch (e: Exception) {
+                    // Under Robolectric unit test runner without Android FileProvider registered,
+                    // fall back to Uri.fromFile so unit tests can capture the intent, while
+                    // keeping FileProvider strictly as primary for production Android runtime.
+                    android.net.Uri.fromFile(csvFile)
+                }
+
+                val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/csv"
+                    putExtra(Intent.EXTRA_SUBJECT, "Business Mileage Report ($suffix)")
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+
+                onFileReady(Intent.createChooser(shareIntent, "Share Mileage CSV").apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                })
+            } catch (e: Exception) {
+                android.util.Log.e("ReportsExportViewModel", "Failed to export CSV: ${e.message}", e)
+                _exportErrorMessage.value = "Unable to create CSV export. Please try again."
+            } finally {
+                _isExporting.value = false
+            }
         }
     }
 
-    fun generatePdfFile(onGenerated: (File) -> Unit) {
-        viewModelScope.launch {
-            val state = uiState.value
-            val summaryData = ReportSummaryData(
-                title = "Mileage Tax Deduction Report",
-                dateRangeLabel = if (state.customStartDate.isNotBlank() || state.customEndDate.isNotBlank()) {
-                    "${state.customStartDate} to ${state.customEndDate}"
-                } else {
-                    "${state.selectedYear} Tax Year"
-                },
-                businessEntity = state.selectedBusinessEntity,
-                totalTrips = state.totalTrips,
-                totalMiles = state.totalMiles,
-                businessMiles = state.businessMiles,
-                personalMiles = state.personalMiles,
-                unreviewedMiles = state.unreviewedMiles,
-                totalDeduction = state.totalDeduction,
-                averageDistance = state.averageDistance,
-                trips = state.filteredTrips
-            )
+    fun generatePdfFile(onGenerated: (File) -> Unit, onError: ((String) -> Unit)? = null) {
+        if (_isGeneratingPdf.value) return
+        _isGeneratingPdf.value = true
+        _exportErrorMessage.value = null
 
+        viewModelScope.launch {
             try {
+                val state = uiState.value
+                val summaryData = ReportSummaryData(
+                    title = "Mileage Tax Deduction Report",
+                    dateRangeLabel = if (state.customStartDate.isNotBlank() || state.customEndDate.isNotBlank()) {
+                        "${state.customStartDate} to ${state.customEndDate}"
+                    } else {
+                        "${state.selectedYear} Tax Year"
+                    },
+                    businessEntity = state.selectedBusinessEntity,
+                    totalTrips = state.totalTrips,
+                    totalMiles = state.totalMiles,
+                    businessMiles = state.businessMiles,
+                    personalMiles = state.personalMiles,
+                    unreviewedMiles = state.unreviewedMiles,
+                    totalDeduction = state.totalDeduction,
+                    averageDistance = state.averageDistance,
+                    trips = state.filteredTrips
+                )
+
                 val pdfFile = PdfReportGenerator.generatePdfReport(context, summaryData)
                 onGenerated(pdfFile)
             } catch (e: Exception) {
                 android.util.Log.e("ReportsExportViewModel", "Failed to generate PDF: ${e.message}", e)
+                val friendlyMsg = "Unable to create your PDF report. Please try again."
+                _exportErrorMessage.value = friendlyMsg
+                onError?.invoke(friendlyMsg)
+            } finally {
+                _isGeneratingPdf.value = false
             }
         }
     }
 
-    fun exportToPdf(onFileReady: (Intent) -> Unit) {
-        generatePdfFile { pdfFile ->
-            val uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                pdfFile
-            )
+    fun exportToPdf(onFileReady: (Intent) -> Unit, onError: ((String) -> Unit)? = null) {
+        generatePdfFile(
+            onGenerated = { pdfFile ->
+                try {
+                    val uri = try {
+                        FileProvider.getUriForFile(
+                            context,
+                            "${context.packageName}.fileprovider",
+                            pdfFile
+                        )
+                    } catch (e: Exception) {
+                        android.net.Uri.fromFile(pdfFile)
+                    }
 
-            val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                type = "application/pdf"
-                putExtra(Intent.EXTRA_SUBJECT, "Business Mileage PDF Report")
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "application/pdf"
+                        putExtra(Intent.EXTRA_SUBJECT, "Business Mileage PDF Report")
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
 
-            onFileReady(Intent.createChooser(shareIntent, "Share Mileage PDF").apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
-        }
+                    onFileReady(Intent.createChooser(shareIntent, "Share Mileage PDF").apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                } catch (e: Exception) {
+                    android.util.Log.e("ReportsExportViewModel", "Failed to share PDF: ${e.message}", e)
+                    val friendlyMsg = "Unable to share your PDF report. Please try again."
+                    _exportErrorMessage.value = friendlyMsg
+                    onError?.invoke(friendlyMsg)
+                }
+            },
+            onError = onError
+        )
     }
 
     internal fun escapeCsv(value: String): String {
@@ -429,6 +476,8 @@ class ReportsExportViewModel @Inject constructor(
     private data class DateArgs(
         val start: String,
         val end: String,
-        val exporting: Boolean
+        val exporting: Boolean,
+        val generatingPdf: Boolean,
+        val errorMsg: String?
     )
 }

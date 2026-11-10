@@ -54,7 +54,12 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -153,7 +158,11 @@ fun TripHistoryScreen(
         )
 
         if (state.trips.isEmpty()) {
-            EmptyHistory()
+            EmptyHistory(
+                state = state,
+                onClearSearch = { viewModel.setSearchQuery("") },
+                onClearFilters = { viewModel.clearAllFilters() }
+            )
         } else {
             val groupByDate = state.sortOrder == SortOrder.NEWEST_FIRST ||
                 state.sortOrder == SortOrder.OLDEST_FIRST
@@ -593,7 +602,17 @@ private fun DateSectionHeader(date: String, trips: List<TripEntity>) {
 }
 
 @Composable
-private fun EmptyHistory() {
+private fun EmptyHistory(
+    state: TripHistoryUiState,
+    onClearSearch: () -> Unit,
+    onClearFilters: () -> Unit
+) {
+    val isFilterActive = state.selectedClassificationFilter != "ALL" ||
+        state.selectedBusinessEntityFilter != "ALL" ||
+        state.selectedSyncStatusFilter != "ALL" ||
+        state.startDateFilter.isNotBlank() ||
+        state.endDateFilter.isNotBlank()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -601,13 +620,80 @@ private fun EmptyHistory() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("No trips found", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Try changing the search or filters.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        when {
+            state.totalRecordedTripsCount == 0 -> {
+                Text(
+                    "No trips recorded yet",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Your drives will appear here automatically.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+            state.searchQuery.isNotBlank() -> {
+                Text(
+                    "No matching results",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "No trips match your search \"${state.searchQuery}\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = onClearSearch,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Clear Search")
+                }
+            }
+            isFilterActive -> {
+                Text(
+                    "No matching trips",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "No trips match the selected filters.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = onClearFilters,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Clear Filters")
+                }
+            }
+            else -> {
+                Text(
+                    "No trips found",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Try changing the search or filters.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 

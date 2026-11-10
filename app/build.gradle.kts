@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 70
-        versionName = "1.0.69"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"2-line timestamp and compact type badge icon in PDF table to prevent column overlap.\"")
+        versionCode = 71
+        versionName = "1.0.70"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Phase 5 UX/UI improvements: PDF/CSV reliability, undo trip deletion, context-aware empty states, and save trip guards.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

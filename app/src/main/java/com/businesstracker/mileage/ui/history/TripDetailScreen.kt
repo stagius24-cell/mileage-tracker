@@ -296,6 +296,7 @@ fun TripDetailScreen(
         var selectedEntity by remember { mutableStateOf(trip.businessEntity) }
         var selectedPurpose by remember { mutableStateOf(trip.purpose) }
         var notesText by remember { mutableStateOf(trip.notes.orEmpty()) }
+        var isSaving by remember { mutableStateOf(false) }
         val purposes = remember(customPurposes, trip.purpose) {
             val base = if (customPurposes.isNotEmpty()) customPurposes else TripPurpose.DEFAULT_SUCCULENT_PURPOSES
             val list = base.toMutableList()
@@ -406,12 +407,17 @@ fun TripDetailScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
-                    TextButton(onClick = { showEditSheet = false }) {
+                    TextButton(
+                        onClick = { showEditSheet = false },
+                        enabled = !isSaving
+                    ) {
                         Text("Cancel")
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Button(
                         onClick = {
+                            if (isSaving) return@Button
+                            isSaving = true
                             showEditSheet = false
                             onSaveTrip(
                                 trip.id,
@@ -421,6 +427,7 @@ fun TripDetailScreen(
                                 notesText.ifBlank { null }
                             )
                         },
+                        enabled = !isSaving,
                         colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
                     ) {
                         Text("Save Changes", fontWeight = FontWeight.Bold, color = Color.White)

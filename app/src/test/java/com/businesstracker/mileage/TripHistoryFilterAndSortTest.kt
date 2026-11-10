@@ -196,4 +196,63 @@ class TripHistoryFilterAndSortTest {
         assertEquals("2026-11-01", state.startDateFilter)
         assertEquals("2026-11-30", state.endDateFilter)
     }
+
+    @Test
+    fun deleteTrip_andUndo_restoresTripSuccessfully() = runTest {
+        val tripList = sampleTrips.toMutableList()
+        val repo = object : TripRepository by fakeRepository {
+            override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(tripList)
+            override suspend fun getTripById(tripId: String): TripEntity? = tripList.find { it.id == tripId }
+            override suspend fun deleteTrip(tripId: String) {
+                tripList.removeAll { it.id == tripId }
+            }
+            override suspend fun insertTrip(trip: TripEntity) {
+                tripList.add(trip)
+            }
+        }
+        val viewModel = TripHistoryViewModel(repo)
+        advanceUntilIdle()
+
+        assertEquals(4, viewModel.uiState.value.totalRecordedTripsCount)
+
+        // Delete trip 1
+        viewModel.deleteTrip("1")
+        advanceUntilIdle()
+
+        assertEquals("1", viewModel.uiState.value.recentlyDeletedTrip?.id)
+
+        // Undo deletion
+        viewModel.undoDeleteTrip()
+        advanceUntilIdle()
+
+        org.junit.Assert.assertNull(viewModel.uiState.value.recentlyDeletedTrip)
+        assertTrue(tripList.any { it.id == "1" })
+    }
+
+    @Test
+    fun clearAllFilters_resetsQueryAndFilters() = runTest {
+        val viewModel = TripHistoryViewModel(fakeRepository)
+        advanceUntilIdle()
+
+        viewModel.setSearchQuery("errand")
+        viewModel.setClassificationFilter("PERSONAL")
+        viewModel.setBusinessEntityFilter("MySucculentCorner")
+        viewModel.setSyncStatusFilter("SYNCED")
+        viewModel.setDateRange("2026-11-01", "2026-11-30")
+        advanceUntilIdle()
+
+        assertEquals("errand", viewModel.uiState.value.searchQuery)
+        assertEquals("PERSONAL", viewModel.uiState.value.selectedClassificationFilter)
+
+        viewModel.clearAllFilters()
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("", state.searchQuery)
+        assertEquals("ALL", state.selectedClassificationFilter)
+        assertEquals("ALL", state.selectedBusinessEntityFilter)
+        assertEquals("ALL", state.selectedSyncStatusFilter)
+        assertEquals("", state.startDateFilter)
+        assertEquals("", state.endDateFilter)
+    }
 }

@@ -23,6 +23,7 @@ data class TripHistoryUiState(
     val trips: List<TripEntity> = emptyList(),
     val totalFilteredMiles: Double = 0.0,
     val totalFilteredDeduction: Double = 0.0,
+    val totalRecordedTripsCount: Int = 0,
     val searchQuery: String = "",
     val selectedClassificationFilter: String = "ALL", // "ALL", "BUSINESS", "PERSONAL", "UNREVIEWED"
     val selectedBusinessEntityFilter: String = "ALL", // "ALL", "MySucculentCorner", "Personal"
@@ -31,7 +32,8 @@ data class TripHistoryUiState(
     val endDateFilter: String = "",
     val sortOrder: SortOrder = SortOrder.NEWEST_FIRST,
     val selectedTripForDetails: TripEntity? = null,
-    val customPurposes: List<String> = emptyList()
+    val customPurposes: List<String> = emptyList(),
+    val recentlyDeletedTrip: TripEntity? = null
 )
 
 @HiltViewModel
@@ -48,6 +50,7 @@ class TripHistoryViewModel @Inject constructor(
     private val _endDateFilter = MutableStateFlow("")
     private val _sortOrder = MutableStateFlow(SortOrder.NEWEST_FIRST)
     private val _selectedTripForDetails = MutableStateFlow<TripEntity?>(null)
+    private val _recentlyDeletedTrip = MutableStateFlow<TripEntity?>(null)
 
     val uiState: StateFlow<TripHistoryUiState> = combine(
         tripRepository.getAllTrips(),
@@ -60,8 +63,10 @@ class TripHistoryViewModel @Inject constructor(
     }.combine(
         combine(_startDateFilter, _endDateFilter, _sortOrder, _selectedTripForDetails, preferencesManager?.customPurposes ?: flowOf(emptyList())) { start, end, sort, selectedTrip, customPurposes ->
             FilterStatePart2(start, end, sort, selectedTrip, customPurposes)
+        }.combine(_recentlyDeletedTrip) { part2, recentlyDeleted ->
+            Pair(part2, recentlyDeleted)
         }
-    ) { part1, part2 ->
+    ) { part1, (part2, recentlyDeleted) ->
         val filtered = part1.allTrips.filter { trip ->
             // Search filter: address, business entity, purpose, notes, date
             val matchesQuery = part1.query.isBlank() ||
@@ -107,6 +112,7 @@ class TripHistoryViewModel @Inject constructor(
             trips = sorted,
             totalFilteredMiles = kotlin.math.round(totalMiles * 100.0) / 100.0,
             totalFilteredDeduction = kotlin.math.round(totalDeduction * 100.0) / 100.0,
+            totalRecordedTripsCount = part1.allTrips.size,
             searchQuery = part1.query,
             selectedClassificationFilter = part1.classification,
             selectedBusinessEntityFilter = part1.entity,
@@ -115,7 +121,8 @@ class TripHistoryViewModel @Inject constructor(
             endDateFilter = part2.endDate,
             sortOrder = part2.sortOrder,
             selectedTripForDetails = part2.selectedTrip,
-            customPurposes = part2.customPurposes
+            customPurposes = part2.customPurposes,
+            recentlyDeletedTrip = recentlyDeleted
         )
     }.stateIn(
         scope = viewModelScope,
@@ -175,13 +182,38 @@ class TripHistoryViewModel @Inject constructor(
         }
     }
 
+    fun clearAllFilters() {
+        _searchQuery.value = ""
+        _classificationFilter.value = "ALL"
+        _businessEntityFilter.value = "ALL"
+        _syncStatusFilter.value = "ALL"
+        _startDateFilter.value = ""
+        _endDateFilter.value = ""
+    }
+
     fun deleteTrip(tripId: String) {
         viewModelScope.launch {
+            val tripToDelete = tripRepository.getTripById(tripId)
             if (_selectedTripForDetails.value?.id == tripId) {
                 _selectedTripForDetails.value = null
             }
+            if (tripToDelete != null) {
+                _recentlyDeletedTrip.value = tripToDelete
+            }
             tripRepository.deleteTrip(tripId)
         }
+    }
+
+    fun undoDeleteTrip() {
+        val tripToRestore = _recentlyDeletedTrip.value ?: return
+        _recentlyDeletedTrip.value = null
+        viewModelScope.launch {
+            tripRepository.insertTrip(tripToRestore)
+        }
+    }
+
+    fun clearRecentlyDeletedTrip() {
+        _recentlyDeletedTrip.value = null
     }
 
     private data class FilterStatePart1(

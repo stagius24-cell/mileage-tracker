@@ -48,6 +48,10 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -96,17 +100,33 @@ fun ReportsExportScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
     var showCreateReportDialog by rememberSaveable { mutableStateOf(false) }
     var previewPdfFile by remember { mutableStateOf<File?>(null) }
 
-    LazyColumn(
-        modifier = modifier
-            .fillMaxSize()
-            .then(if (showCreateReportDialog || previewPdfFile != null) Modifier.blur(8.dp) else Modifier)
-            .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    androidx.compose.runtime.LaunchedEffect(state.exportErrorMessage) {
+        state.exportErrorMessage?.let { errorMsg ->
+            val result = snackbarHostState.showSnackbar(
+                message = errorMsg,
+                actionLabel = "Retry",
+                duration = androidx.compose.material3.SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                showCreateReportDialog = true
+            }
+            viewModel.clearExportError()
+        }
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (showCreateReportDialog || previewPdfFile != null) Modifier.blur(8.dp) else Modifier)
+                .background(MaterialTheme.colorScheme.background),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
         item {
             Row(
                 modifier = Modifier
@@ -349,83 +369,118 @@ fun ReportsExportScreen(
 
                         Spacer(modifier = Modifier.height(2.dp))
 
-                        // Action buttons: Preview (for PDF) and Export
-                        if (selectedFormat == "PDF") {
+                        val isBusy = state.isGeneratingPdf || state.isExporting
+
+                        if (isBusy) {
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(44.dp),
+                                horizontalArrangement = Arrangement.Center,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OutlinedButton(
-                                    onClick = {
-                                        showCreateReportDialog = false
-                                        viewModel.generatePdfFile { file ->
-                                            previewPdfFile = file
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                                    modifier = Modifier
-                                        .weight(0.9f)
-                                        .height(44.dp)
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(22.dp),
+                                    color = SucculentPrimary,
+                                    strokeWidth = 2.5.dp
+                                )
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = if (state.isGeneratingPdf) "Preparing PDF report..." else "Generating CSV...",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            // Action buttons: Preview (for PDF) and Export
+                            if (selectedFormat == "PDF") {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.Center
+                                    OutlinedButton(
+                                        onClick = {
+                                            viewModel.generatePdfFile(
+                                                onGenerated = { file ->
+                                                    showCreateReportDialog = false
+                                                    previewPdfFile = file
+                                                }
+                                            )
+                                        },
+                                        enabled = !isBusy,
+                                        shape = RoundedCornerShape(12.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                        modifier = Modifier
+                                            .weight(0.9f)
+                                            .height(44.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Visibility,
-                                            contentDescription = "Preview",
-                                            modifier = Modifier.size(17.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Visibility,
+                                                contentDescription = "Preview",
+                                                modifier = Modifier.size(17.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "Preview",
+                                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            viewModel.exportToPdf(
+                                                onFileReady = { intent ->
+                                                    showCreateReportDialog = false
+                                                    context.startActivity(intent)
+                                                }
+                                            )
+                                        },
+                                        enabled = !isBusy,
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                        modifier = Modifier
+                                            .weight(1.1f)
+                                            .height(44.dp)
+                                    ) {
                                         Text(
-                                            text = "Preview",
-                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                            text = "Share PDF",
+                                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                            color = Color.White,
                                             maxLines = 1
                                         )
                                     }
                                 }
-
+                            } else {
                                 Button(
                                     onClick = {
-                                        showCreateReportDialog = false
-                                        viewModel.exportToPdf { intent -> context.startActivity(intent) }
+                                        viewModel.exportToCsv { intent ->
+                                            showCreateReportDialog = false
+                                            context.startActivity(intent)
+                                        }
                                     },
+                                    enabled = !isBusy,
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                                     modifier = Modifier
-                                        .weight(1.1f)
+                                        .fillMaxWidth()
                                         .height(44.dp)
                                 ) {
                                     Text(
-                                        text = "Share PDF",
+                                        text = "Export CSV",
                                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                                         color = Color.White,
                                         maxLines = 1
                                     )
                                 }
-                            }
-                        } else {
-                            Button(
-                                onClick = {
-                                    showCreateReportDialog = false
-                                    viewModel.exportToCsv { intent -> context.startActivity(intent) }
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp)
-                            ) {
-                                Text(
-                                    text = "Export CSV",
-                                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = Color.White,
-                                    maxLines = 1
-                                )
                             }
                         }
                     }
@@ -621,6 +676,14 @@ fun ReportsExportScreen(
                 }
             }
         }
+    }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
+        )
     }
 }
 
