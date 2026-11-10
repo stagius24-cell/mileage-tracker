@@ -33,7 +33,8 @@ data class TripHistoryUiState(
     val sortOrder: SortOrder = SortOrder.NEWEST_FIRST,
     val selectedTripForDetails: TripEntity? = null,
     val customPurposes: List<String> = emptyList(),
-    val recentlyDeletedTrip: TripEntity? = null
+    val recentlyDeletedTrip: TripEntity? = null,
+    val actionErrorMessage: String? = null
 )
 
 @HiltViewModel
@@ -51,6 +52,7 @@ class TripHistoryViewModel @Inject constructor(
     private val _sortOrder = MutableStateFlow(SortOrder.NEWEST_FIRST)
     private val _selectedTripForDetails = MutableStateFlow<TripEntity?>(null)
     private val _recentlyDeletedTrip = MutableStateFlow<TripEntity?>(null)
+    private val _actionErrorMessage = MutableStateFlow<String?>(null)
 
     val uiState: StateFlow<TripHistoryUiState> = combine(
         tripRepository.getAllTrips(),
@@ -65,8 +67,10 @@ class TripHistoryViewModel @Inject constructor(
             FilterStatePart2(start, end, sort, selectedTrip, customPurposes)
         }.combine(_recentlyDeletedTrip) { part2, recentlyDeleted ->
             Pair(part2, recentlyDeleted)
+        }.combine(_actionErrorMessage) { (part2, recentlyDeleted), actionError ->
+            Triple(part2, recentlyDeleted, actionError)
         }
-    ) { part1, (part2, recentlyDeleted) ->
+    ) { part1, (part2, recentlyDeleted, actionError) ->
         val filtered = part1.allTrips.filter { trip ->
             // Search filter: address, business entity, purpose, notes, date
             val matchesQuery = part1.query.isBlank() ||
@@ -122,7 +126,8 @@ class TripHistoryViewModel @Inject constructor(
             sortOrder = part2.sortOrder,
             selectedTripForDetails = part2.selectedTrip,
             customPurposes = part2.customPurposes,
-            recentlyDeletedTrip = recentlyDeleted
+            recentlyDeletedTrip = recentlyDeleted,
+            actionErrorMessage = actionError
         )
     }.stateIn(
         scope = viewModelScope,
@@ -164,20 +169,30 @@ class TripHistoryViewModel @Inject constructor(
         classification: String,
         businessEntity: String,
         purpose: String,
-        notes: String?
+        notes: String?,
+        onError: ((String) -> Unit)? = null,
+        onSuccess: (() -> Unit)? = null
     ) {
         viewModelScope.launch {
-            tripRepository.updateTripDetails(
-                tripId = tripId,
-                classification = classification,
-                businessEntity = businessEntity,
-                purpose = purpose,
-                notes = notes
-            )
-            // Update selected trip in details view if open
-            val updated = tripRepository.getTripById(tripId)
-            if (_selectedTripForDetails.value?.id == tripId) {
-                _selectedTripForDetails.value = updated
+            try {
+                tripRepository.updateTripDetails(
+                    tripId = tripId,
+                    classification = classification,
+                    businessEntity = businessEntity,
+                    purpose = purpose,
+                    notes = notes
+                )
+                // Update selected trip in details view if open
+                val updated = tripRepository.getTripById(tripId)
+                if (_selectedTripForDetails.value?.id == tripId) {
+                    _selectedTripForDetails.value = updated
+                }
+                onSuccess?.invoke()
+            } catch (e: Exception) {
+                android.util.Log.e("TripHistoryViewModel", "Failed to update trip details: ${e.message}", e)
+                val msg = "Unable to save trip changes. Please try again."
+                _actionErrorMessage.value = msg
+                onError?.invoke(msg)
             }
         }
     }
@@ -193,14 +208,19 @@ class TripHistoryViewModel @Inject constructor(
 
     fun deleteTrip(tripId: String) {
         viewModelScope.launch {
-            val tripToDelete = tripRepository.getTripById(tripId)
-            if (_selectedTripForDetails.value?.id == tripId) {
-                _selectedTripForDetails.value = null
+            try {
+                val tripToDelete = tripRepository.getTripById(tripId)
+                if (_selectedTripForDetails.value?.id == tripId) {
+                    _selectedTripForDetails.value = null
+                }
+                if (tripToDelete != null) {
+                    _recentlyDeletedTrip.value = tripToDelete
+                }
+                tripRepository.deleteTrip(tripId)
+            } catch (e: Exception) {
+                android.util.Log.e("TripHistoryViewModel", "Failed to delete trip: ${e.message}", e)
+                _actionErrorMessage.value = "Unable to delete trip. Please try again."
             }
-            if (tripToDelete != null) {
-                _recentlyDeletedTrip.value = tripToDelete
-            }
-            tripRepository.deleteTrip(tripId)
         }
     }
 
@@ -208,12 +228,23 @@ class TripHistoryViewModel @Inject constructor(
         val tripToRestore = _recentlyDeletedTrip.value ?: return
         _recentlyDeletedTrip.value = null
         viewModelScope.launch {
-            tripRepository.insertTrip(tripToRestore)
+            try {
+                tripRepository.insertTrip(tripToRestore)
+            } catch (e: Exception) {
+                android.util.Log.e("TripHistoryViewModel", "Failed to restore deleted trip: ${e.message}", e)
+                // Re-cache trip to allow another retry if insertion failed
+                _recentlyDeletedTrip.value = tripToRestore
+                _actionErrorMessage.value = "Unable to restore trip. Please try again."
+            }
         }
     }
 
     fun clearRecentlyDeletedTrip() {
         _recentlyDeletedTrip.value = null
+    }
+
+    fun clearActionErrorMessage() {
+        _actionErrorMessage.value = null
     }
 
     private data class FilterStatePart1(

@@ -335,18 +335,11 @@ class ReportsExportViewModel @Inject constructor(
                     }
                 }
 
-                val uri = try {
-                    FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        csvFile
-                    )
-                } catch (e: Exception) {
-                    // Under Robolectric unit test runner without Android FileProvider registered,
-                    // fall back to Uri.fromFile so unit tests can capture the intent, while
-                    // keeping FileProvider strictly as primary for production Android runtime.
-                    android.net.Uri.fromFile(csvFile)
-                }
+                val uri = FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    csvFile
+                )
 
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/csv"
@@ -410,15 +403,11 @@ class ReportsExportViewModel @Inject constructor(
         generatePdfFile(
             onGenerated = { pdfFile ->
                 try {
-                    val uri = try {
-                        FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            pdfFile
-                        )
-                    } catch (e: Exception) {
-                        android.net.Uri.fromFile(pdfFile)
-                    }
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        pdfFile
+                    )
 
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "application/pdf"

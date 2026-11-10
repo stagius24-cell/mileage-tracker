@@ -99,7 +99,15 @@ import java.util.concurrent.TimeUnit
 fun TripDetailScreen(
     trip: TripEntity,
     onBack: () -> Unit,
-    onSaveTrip: (tripId: String, classification: String, businessEntity: String, purpose: String, notes: String?) -> Unit,
+    onSaveTrip: (
+        tripId: String,
+        classification: String,
+        businessEntity: String,
+        purpose: String,
+        notes: String?,
+        onError: ((String) -> Unit)?,
+        onSuccess: (() -> Unit)?
+    ) -> Unit,
     onDeleteTrip: (tripId: String) -> Unit,
     modifier: Modifier = Modifier,
     onPreviousTrip: (() -> Unit)? = null,
@@ -297,6 +305,7 @@ fun TripDetailScreen(
         var selectedPurpose by remember { mutableStateOf(trip.purpose) }
         var notesText by remember { mutableStateOf(trip.notes.orEmpty()) }
         var isSaving by remember { mutableStateOf(false) }
+        var editErrorMessage by remember { mutableStateOf<String?>(null) }
         val purposes = remember(customPurposes, trip.purpose) {
             val base = if (customPurposes.isNotEmpty()) customPurposes else TripPurpose.DEFAULT_SUCCULENT_PURPOSES
             val list = base.toMutableList()
@@ -395,11 +404,23 @@ fun TripDetailScreen(
                 Text("Notes", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 OutlinedTextField(
                     value = notesText,
-                    onValueChange = { notesText = it },
+                    onValueChange = { 
+                        notesText = it 
+                        editErrorMessage = null
+                    },
                     modifier = Modifier.fillMaxWidth(),
                     placeholder = { Text("Add trip notes...") },
                     minLines = 2
                 )
+
+                if (editErrorMessage != null) {
+                    Text(
+                        text = editErrorMessage!!,
+                        color = SpeedRed,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -418,13 +439,21 @@ fun TripDetailScreen(
                         onClick = {
                             if (isSaving) return@Button
                             isSaving = true
-                            showEditSheet = false
+                            editErrorMessage = null
                             onSaveTrip(
                                 trip.id,
                                 selectedClassification,
                                 selectedEntity,
                                 selectedPurpose,
-                                notesText.ifBlank { null }
+                                notesText.ifBlank { null },
+                                { error ->
+                                    isSaving = false
+                                    editErrorMessage = error
+                                },
+                                {
+                                    isSaving = false
+                                    showEditSheet = false
+                                }
                             )
                         },
                         enabled = !isSaving,

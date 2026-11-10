@@ -23,10 +23,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import com.businesstracker.mileage.testutils.TestFileProviderShadow
 import java.io.File
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
+@Config(shadows = [TestFileProviderShadow::class])
 class ReportsCsvSecurityTest {
 
     private lateinit var context: Context

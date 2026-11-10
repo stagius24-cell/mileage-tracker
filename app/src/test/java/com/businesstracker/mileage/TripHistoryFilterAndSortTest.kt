@@ -19,8 +19,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@RunWith(RobolectricTestRunner::class)
 class TripHistoryFilterAndSortTest {
 
     private val testDispatcher = StandardTestDispatcher()
@@ -254,5 +257,110 @@ class TripHistoryFilterAndSortTest {
         assertEquals("ALL", state.selectedSyncStatusFilter)
         assertEquals("", state.startDateFilter)
         assertEquals("", state.endDateFilter)
+    }
+
+    @Test
+    fun rapidRepeatedDeletion_overwritesRecentlyDeletedWithLatest() = runTest {
+        val tripList = sampleTrips.toMutableList()
+        val repo = object : TripRepository by fakeRepository {
+            override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(tripList)
+            override suspend fun getTripById(tripId: String): TripEntity? = tripList.find { it.id == tripId }
+            override suspend fun deleteTrip(tripId: String) {
+                tripList.removeAll { it.id == tripId }
+            }
+            override suspend fun insertTrip(trip: TripEntity) {
+                tripList.add(trip)
+            }
+        }
+        val viewModel = TripHistoryViewModel(repo)
+        advanceUntilIdle()
+
+        // Delete trip "1" rapidly followed by trip "2"
+        viewModel.deleteTrip("1")
+        viewModel.deleteTrip("2")
+        advanceUntilIdle()
+
+        // The latest deleted trip ("2") is staged in recentlyDeletedTrip
+        assertEquals("2", viewModel.uiState.value.recentlyDeletedTrip?.id)
+
+        // Undo restores trip "2"
+        viewModel.undoDeleteTrip()
+        advanceUntilIdle()
+
+        org.junit.Assert.assertNull(viewModel.uiState.value.recentlyDeletedTrip)
+        assertTrue(tripList.any { it.id == "2" })
+    }
+
+    @Test
+    fun undoRestoreFailure_retainsRecentlyDeletedTripAndReportsError() = runTest {
+        val tripList = sampleTrips.toMutableList()
+        var shouldThrowOnInsert = true
+        val repo = object : TripRepository by fakeRepository {
+            override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(tripList)
+            override suspend fun getTripById(tripId: String): TripEntity? = tripList.find { it.id == tripId }
+            override suspend fun deleteTrip(tripId: String) {
+                tripList.removeAll { it.id == tripId }
+            }
+            override suspend fun insertTrip(trip: TripEntity) {
+                if (shouldThrowOnInsert) throw java.io.IOException("Disk full")
+                tripList.add(trip)
+            }
+        }
+        val viewModel = TripHistoryViewModel(repo)
+        advanceUntilIdle()
+
+        viewModel.deleteTrip("1")
+        advanceUntilIdle()
+
+        // Attempt undo when repository throws
+        viewModel.undoDeleteTrip()
+        advanceUntilIdle()
+
+        // Verify failure was captured and trip was not discarded
+        assertEquals("Unable to restore trip. Please try again.", viewModel.uiState.value.actionErrorMessage)
+        assertEquals("1", viewModel.uiState.value.recentlyDeletedTrip?.id)
+
+        // Retry after issue resolved
+        shouldThrowOnInsert = false
+        viewModel.undoDeleteTrip()
+        advanceUntilIdle()
+
+        org.junit.Assert.assertNull(viewModel.uiState.value.recentlyDeletedTrip)
+        assertTrue(tripList.any { it.id == "1" })
+    }
+
+    @Test
+    fun updateTripDetails_onPersistenceFailure_invokesOnErrorCallback() = runTest {
+        val repo = object : TripRepository by fakeRepository {
+            override suspend fun updateTripDetails(
+                tripId: String,
+                classification: String,
+                businessEntity: String,
+                purpose: String,
+                notes: String?
+            ) {
+                throw android.database.sqlite.SQLiteDiskIOException("Database write failed")
+            }
+        }
+        val viewModel = TripHistoryViewModel(repo)
+        advanceUntilIdle()
+
+        var errorReported: String? = null
+        var successReported = false
+
+        viewModel.updateTripDetails(
+            tripId = "1",
+            classification = "BUSINESS",
+            businessEntity = "MySucculentCorner",
+            purpose = "Nursery Pickup",
+            notes = "Test Note",
+            onError = { errorReported = it },
+            onSuccess = { successReported = true }
+        )
+        advanceUntilIdle()
+
+        org.junit.Assert.assertFalse(successReported)
+        assertEquals("Unable to save trip changes. Please try again.", errorReported)
+        assertEquals("Unable to save trip changes. Please try again.", viewModel.uiState.value.actionErrorMessage)
     }
 }
