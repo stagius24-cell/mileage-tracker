@@ -951,6 +951,24 @@ private fun SettingsSwitchRow(
     }
 }
 
+private fun formatDisplayTime(time24: String): String {
+    return try {
+        val parts = time24.trim().split(":")
+        val h = parts[0].toInt().coerceIn(0, 23)
+        val m = if (parts.size > 1) parts[1].toInt().coerceIn(0, 59) else 0
+        val isPm = h >= 12
+        val h12 = when {
+            h == 0 -> 12
+            h > 12 -> h - 12
+            else -> h
+        }
+        val amPm = if (isPm) "PM" else "AM"
+        String.format("%02d:%02d %s", h12, m, amPm)
+    } catch (_: Exception) {
+        time24
+    }
+}
+
 @Composable
 private fun ScheduleControls(
     state: SettingsUiState,
@@ -964,10 +982,24 @@ private fun ScheduleControls(
         "MON" to "M", "TUE" to "T", "WED" to "W", "THU" to "T",
         "FRI" to "F", "SAT" to "S", "SUN" to "S"
     )
-    var startText by remember(state.workHoursStart) { mutableStateOf(state.workHoursStart) }
-    var endText by remember(state.workHoursEnd) { mutableStateOf(state.workHoursEnd) }
-    var isStartFocused by remember { mutableStateOf(false) }
-    var isEndFocused by remember { mutableStateOf(false) }
+    var pickingTimeFor by remember { mutableStateOf<String?>(null) } // "START", "END", or null
+
+    if (pickingTimeFor != null) {
+        val isStart = pickingTimeFor == "START"
+        val currentTime = if (isStart) state.workHoursStart else state.workHoursEnd
+        WheelTimePickerDialog(
+            initialTime24 = currentTime,
+            onDismiss = { pickingTimeFor = null },
+            onTimeConfirm = { newTime24 ->
+                if (isStart) {
+                    onStartChange(newTime24)
+                } else {
+                    onEndChange(newTime24)
+                }
+                pickingTimeFor = null
+            }
+        )
+    }
 
     Text("Work days", style = MaterialTheme.typography.labelLarge)
     Row(
@@ -989,129 +1021,95 @@ private fun ScheduleControls(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Start Time Box (compact height 42.dp matching chips/rows)
+        // Start Time Card (clickable, opens Wheel Time Picker Dialog)
         Surface(
             modifier = Modifier
                 .weight(1f)
-                .height(42.dp),
+                .height(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { pickingTimeFor = "START" },
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(
                 1.dp,
-                if (isStartFocused) SucculentPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
             )
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "Start",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (isStartFocused) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.width(10.dp))
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    if (startText.isEmpty()) {
-                        Text(
-                            text = "08:00",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        )
-                    }
-                    BasicTextField(
-                        value = startText,
-                        onValueChange = {
-                            startText = it
-                            onStartChange(it)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onFocusChanged {
-                                isStartFocused = it.isFocused
-                                if (it.isFocused) onFieldFocus()
-                            },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        cursorBrush = SolidColor(SucculentPrimary),
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
-                            imeAction = ImeAction.Next
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Start",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = formatDisplayTime(state.workHoursStart),
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     )
                 }
+                Icon(
+                    imageVector = Icons.Default.ExpandMore,
+                    contentDescription = "Pick start time",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
 
-        // End Time Box (compact height 42.dp matching chips/rows)
+        // End Time Card (clickable, opens Wheel Time Picker Dialog)
         Surface(
             modifier = Modifier
                 .weight(1f)
-                .height(42.dp),
+                .height(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { pickingTimeFor = "END" },
             shape = RoundedCornerShape(12.dp),
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(
                 1.dp,
-                if (isEndFocused) SucculentPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
             )
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(
-                    text = "End",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (isEndFocused) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.width(10.dp))
-                Box(
-                    modifier = Modifier.weight(1f),
-                    contentAlignment = Alignment.CenterStart
-                ) {
-                    if (endText.isEmpty()) {
-                        Text(
-                            text = "18:00",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                        )
-                    }
-                    BasicTextField(
-                        value = endText,
-                        onValueChange = {
-                            endText = it
-                            onEndChange(it)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .onFocusChanged {
-                                isEndFocused = it.isFocused
-                                if (it.isFocused) onFieldFocus()
-                            },
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodyMedium.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        cursorBrush = SolidColor(SucculentPrimary),
-                        keyboardOptions = KeyboardOptions(
-                            keyboardType = KeyboardType.Number,
-                            imeAction = ImeAction.Done
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "End",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = formatDisplayTime(state.workHoursEnd),
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                     )
                 }
+                Icon(
+                    imageVector = Icons.Default.ExpandMore,
+                    contentDescription = "Pick end time",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
             }
         }
     }

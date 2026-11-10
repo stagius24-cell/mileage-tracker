@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 76
-        versionName = "1.0.75"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Move Vehicle settings to top of Settings screen and restore stable root Scaffold without crash-prone bottomBar animation.\"")
+        versionCode = 77
+        versionName = "1.0.76"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Option 1 interactive vertical wheel time picker dialog for Start and End work hours with AM/PM swipe-up-down selection.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
