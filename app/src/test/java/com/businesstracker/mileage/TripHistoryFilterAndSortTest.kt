@@ -260,7 +260,29 @@ class TripHistoryFilterAndSortTest {
     }
 
     @Test
-    fun rapidRepeatedDeletion_overwritesRecentlyDeletedWithLatest() = runTest {
+    fun deleteTrip_whenRepositoryFails_retainsTripInHistory_doesNotSetRecentlyDeletedTrip_andReportsError() = runTest {
+        val tripList = sampleTrips.toMutableList()
+        val repo = object : TripRepository by fakeRepository {
+            override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(tripList)
+            override suspend fun getTripById(tripId: String): TripEntity? = tripList.find { it.id == tripId }
+            override suspend fun deleteTrip(tripId: String) {
+                throw java.io.IOException("Database write error")
+            }
+        }
+        val viewModel = TripHistoryViewModel(repo)
+        advanceUntilIdle()
+
+        viewModel.deleteTrip("1")
+        advanceUntilIdle()
+
+        // Finding 1: Do not set recentlyDeletedTrip on failure, show error only, retain trip in list
+        org.junit.Assert.assertNull(viewModel.uiState.value.recentlyDeletedTrip)
+        assertEquals("Unable to delete trip. Please try again.", viewModel.uiState.value.actionErrorMessage)
+        assertTrue(tripList.any { it.id == "1" })
+    }
+
+    @Test
+    fun rapidSuccessiveDeletions_preservesUndoStack_allowingBothTripsToBeRestoredSequentially() = runTest {
         val tripList = sampleTrips.toMutableList()
         val repo = object : TripRepository by fakeRepository {
             override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(tripList)
@@ -280,21 +302,33 @@ class TripHistoryFilterAndSortTest {
         viewModel.deleteTrip("2")
         advanceUntilIdle()
 
-        // The latest deleted trip ("2") is staged in recentlyDeletedTrip
+        // Finding 2: The latest deleted trip ("2") is the top undo candidate
         assertEquals("2", viewModel.uiState.value.recentlyDeletedTrip?.id)
 
         // Undo restores trip "2"
         viewModel.undoDeleteTrip()
         advanceUntilIdle()
 
+        // Crucial Finding 2 check: Trip "1" was NOT silently overwritten or lost!
+        // The undo stack now exposes earlier trip "1" for undo recovery:
+        assertEquals("1", viewModel.uiState.value.recentlyDeletedTrip?.id)
+        assertTrue(tripList.any { it.id == "2" })
+
+        // Undo restores trip "1"
+        viewModel.undoDeleteTrip()
+        advanceUntilIdle()
+
+        // Both trips are fully recovered and undo stack is empty
         org.junit.Assert.assertNull(viewModel.uiState.value.recentlyDeletedTrip)
+        assertTrue(tripList.any { it.id == "1" })
         assertTrue(tripList.any { it.id == "2" })
     }
 
     @Test
-    fun undoRestoreFailure_retainsRecentlyDeletedTripAndReportsError() = runTest {
+    fun undoRestoreFailure_retainsRecentlyDeletedTripAndReportsError_withRetrySupport() = runTest {
         val tripList = sampleTrips.toMutableList()
         var shouldThrowOnInsert = true
+        var insertAttempts = 0
         val repo = object : TripRepository by fakeRepository {
             override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(tripList)
             override suspend fun getTripById(tripId: String): TripEntity? = tripList.find { it.id == tripId }
@@ -302,6 +336,7 @@ class TripHistoryFilterAndSortTest {
                 tripList.removeAll { it.id == tripId }
             }
             override suspend fun insertTrip(trip: TripEntity) {
+                insertAttempts++
                 if (shouldThrowOnInsert) throw java.io.IOException("Disk full")
                 tripList.add(trip)
             }
@@ -316,16 +351,54 @@ class TripHistoryFilterAndSortTest {
         viewModel.undoDeleteTrip()
         advanceUntilIdle()
 
-        // Verify failure was captured and trip was not discarded
+        // Finding 3: Record is preserved, failure exposed for Retry action
         assertEquals("Unable to restore trip. Please try again.", viewModel.uiState.value.actionErrorMessage)
         assertEquals("1", viewModel.uiState.value.recentlyDeletedTrip?.id)
+        assertEquals("1", viewModel.uiState.value.restoreFailedTrip?.id)
+        assertEquals(1, insertAttempts)
 
-        // Retry after issue resolved
+        // Retry via undoDeleteTrip() after issue resolved
         shouldThrowOnInsert = false
         viewModel.undoDeleteTrip()
         advanceUntilIdle()
 
+        // Confirmed restoration: restoreFailedTrip cleared, recentlyDeletedTrip cleared, trip restored
+        org.junit.Assert.assertNull(viewModel.uiState.value.restoreFailedTrip)
         org.junit.Assert.assertNull(viewModel.uiState.value.recentlyDeletedTrip)
+        assertTrue(tripList.any { it.id == "1" })
+        assertEquals(2, insertAttempts)
+    }
+
+    @Test
+    fun undoDeleteTrip_preventsDuplicateConcurrentRestoreRequests() = runTest {
+        val tripList = sampleTrips.toMutableList()
+        var insertInvocations = 0
+        val repo = object : TripRepository by fakeRepository {
+            override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(tripList)
+            override suspend fun getTripById(tripId: String): TripEntity? = tripList.find { it.id == tripId }
+            override suspend fun deleteTrip(tripId: String) {
+                tripList.removeAll { it.id == tripId }
+            }
+            override suspend fun insertTrip(trip: TripEntity) {
+                insertInvocations++
+                kotlinx.coroutines.delay(100)
+                tripList.add(trip)
+            }
+        }
+        val viewModel = TripHistoryViewModel(repo)
+        advanceUntilIdle()
+
+        viewModel.deleteTrip("1")
+        advanceUntilIdle()
+
+        // Fire multiple rapid undo calls while first is in-flight
+        viewModel.undoDeleteTrip()
+        viewModel.undoDeleteTrip()
+        viewModel.undoDeleteTrip()
+        advanceUntilIdle()
+
+        // Finding 3: Mutex prevented duplicate restore requests, insert called exactly once
+        assertEquals(1, insertInvocations)
         assertTrue(tripList.any { it.id == "1" })
     }
 

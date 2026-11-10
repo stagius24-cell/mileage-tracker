@@ -112,7 +112,7 @@ fun TripHistoryScreen(
 
     LaunchedEffect(state.recentlyDeletedTrip) {
         val deleted = state.recentlyDeletedTrip
-        if (deleted != null) {
+        if (deleted != null && state.restoreFailedTrip == null) {
             val result = snackbarHostState.showSnackbar(
                 message = "Trip deleted",
                 actionLabel = "Undo",
@@ -121,14 +121,30 @@ fun TripHistoryScreen(
             if (result == SnackbarResult.ActionPerformed) {
                 viewModel.undoDeleteTrip()
             } else {
-                viewModel.clearRecentlyDeletedTrip()
+                viewModel.dismissRecentlyDeletedTrip(deleted.id)
+            }
+        }
+    }
+
+    LaunchedEffect(state.restoreFailedTrip) {
+        val failed = state.restoreFailedTrip
+        if (failed != null) {
+            val result = snackbarHostState.showSnackbar(
+                message = "Unable to restore trip. Please try again.",
+                actionLabel = "Retry",
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                viewModel.undoDeleteTrip()
+            } else {
+                viewModel.clearRestoreFailure()
             }
         }
     }
 
     LaunchedEffect(state.actionErrorMessage) {
         val errorMsg = state.actionErrorMessage
-        if (errorMsg != null) {
+        if (errorMsg != null && state.restoreFailedTrip == null) {
             snackbarHostState.showSnackbar(
                 message = errorMsg,
                 duration = SnackbarDuration.Short

@@ -16,7 +16,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 
 data class TripHistoryUiState(
@@ -34,6 +37,8 @@ data class TripHistoryUiState(
     val selectedTripForDetails: TripEntity? = null,
     val customPurposes: List<String> = emptyList(),
     val recentlyDeletedTrip: TripEntity? = null,
+    val restoreFailedTrip: TripEntity? = null,
+    val isRestoring: Boolean = false,
     val actionErrorMessage: String? = null
 )
 
@@ -51,8 +56,13 @@ class TripHistoryViewModel @Inject constructor(
     private val _endDateFilter = MutableStateFlow("")
     private val _sortOrder = MutableStateFlow(SortOrder.NEWEST_FIRST)
     private val _selectedTripForDetails = MutableStateFlow<TripEntity?>(null)
-    private val _recentlyDeletedTrip = MutableStateFlow<TripEntity?>(null)
+    private val _recentlyDeletedTrips = MutableStateFlow<List<TripEntity>>(emptyList())
+    private val _restoreFailedTrip = MutableStateFlow<TripEntity?>(null)
+    private val _isRestoring = MutableStateFlow(false)
     private val _actionErrorMessage = MutableStateFlow<String?>(null)
+
+    private val deleteMutex = Mutex()
+    private val restoreMutex = Mutex()
 
     val uiState: StateFlow<TripHistoryUiState> = combine(
         tripRepository.getAllTrips(),
@@ -63,14 +73,27 @@ class TripHistoryViewModel @Inject constructor(
     ) { allTrips, query, classification, entity, syncStatus ->
         FilterStatePart1(allTrips, query, classification, entity, syncStatus)
     }.combine(
-        combine(_startDateFilter, _endDateFilter, _sortOrder, _selectedTripForDetails, preferencesManager?.customPurposes ?: flowOf(emptyList())) { start, end, sort, selectedTrip, customPurposes ->
+        combine(
+            _startDateFilter,
+            _endDateFilter,
+            _sortOrder,
+            _selectedTripForDetails,
+            preferencesManager?.customPurposes ?: flowOf(emptyList())
+        ) { start, end, sort, selectedTrip, customPurposes ->
             FilterStatePart2(start, end, sort, selectedTrip, customPurposes)
-        }.combine(_recentlyDeletedTrip) { part2, recentlyDeleted ->
-            Pair(part2, recentlyDeleted)
-        }.combine(_actionErrorMessage) { (part2, recentlyDeleted), actionError ->
-            Triple(part2, recentlyDeleted, actionError)
         }
-    ) { part1, (part2, recentlyDeleted, actionError) ->
+    ) { part1, part2 ->
+        Pair(part1, part2)
+    }.combine(
+        combine(
+            _recentlyDeletedTrips,
+            _restoreFailedTrip,
+            _isRestoring,
+            _actionErrorMessage
+        ) { deletedTrips, restoreFailed, isRestoring, actionError ->
+            UndoState(deletedTrips.lastOrNull(), restoreFailed, isRestoring, actionError)
+        }
+    ) { (part1, part2), undoState ->
         val filtered = part1.allTrips.filter { trip ->
             // Search filter: address, business entity, purpose, notes, date
             val matchesQuery = part1.query.isBlank() ||
@@ -126,8 +149,10 @@ class TripHistoryViewModel @Inject constructor(
             sortOrder = part2.sortOrder,
             selectedTripForDetails = part2.selectedTrip,
             customPurposes = part2.customPurposes,
-            recentlyDeletedTrip = recentlyDeleted,
-            actionErrorMessage = actionError
+            recentlyDeletedTrip = undoState.recentlyDeleted,
+            restoreFailedTrip = undoState.restoreFailed,
+            isRestoring = undoState.isRestoring,
+            actionErrorMessage = undoState.actionError
         )
     }.stateIn(
         scope = viewModelScope,
@@ -208,44 +233,98 @@ class TripHistoryViewModel @Inject constructor(
 
     fun deleteTrip(tripId: String) {
         viewModelScope.launch {
-            try {
-                val tripToDelete = tripRepository.getTripById(tripId)
-                if (_selectedTripForDetails.value?.id == tripId) {
-                    _selectedTripForDetails.value = null
+            deleteMutex.withLock {
+                try {
+                    val tripToDelete = tripRepository.getTripById(tripId)
+                    if (tripToDelete == null) {
+                        _actionErrorMessage.value = "Unable to delete trip. Trip not found."
+                        return@withLock
+                    }
+
+                    // Perform deletion in repository FIRST
+                    tripRepository.deleteTrip(tripId)
+
+                    // On verified repository deletion success:
+                    if (_selectedTripForDetails.value?.id == tripId) {
+                        _selectedTripForDetails.value = null
+                    }
+                    _recentlyDeletedTrips.update { current ->
+                        current.filterNot { it.id == tripId } + tripToDelete
+                    }
+                    _restoreFailedTrip.value = null
+                } catch (e: Exception) {
+                    android.util.Log.e("TripHistoryViewModel", "Failed to delete trip: ${e.message}", e)
+                    // On failure, retain trip in repository, never set recentlyDeletedTrip or show false success
+                    _actionErrorMessage.value = "Unable to delete trip. Please try again."
                 }
-                if (tripToDelete != null) {
-                    _recentlyDeletedTrip.value = tripToDelete
-                }
-                tripRepository.deleteTrip(tripId)
-            } catch (e: Exception) {
-                android.util.Log.e("TripHistoryViewModel", "Failed to delete trip: ${e.message}", e)
-                _actionErrorMessage.value = "Unable to delete trip. Please try again."
             }
         }
     }
 
     fun undoDeleteTrip() {
-        val tripToRestore = _recentlyDeletedTrip.value ?: return
-        _recentlyDeletedTrip.value = null
         viewModelScope.launch {
+            if (!restoreMutex.tryLock()) {
+                // Prevent duplicate restore requests while one is active
+                return@launch
+            }
+            _isRestoring.value = true
             try {
-                tripRepository.insertTrip(tripToRestore)
-            } catch (e: Exception) {
-                android.util.Log.e("TripHistoryViewModel", "Failed to restore deleted trip: ${e.message}", e)
-                // Re-cache trip to allow another retry if insertion failed
-                _recentlyDeletedTrip.value = tripToRestore
-                _actionErrorMessage.value = "Unable to restore trip. Please try again."
+                val tripToRestore = _recentlyDeletedTrips.value.lastOrNull() ?: return@launch
+                try {
+                    tripRepository.insertTrip(tripToRestore)
+                    // Confirmed restoration: remove restored trip from the undo stack
+                    _recentlyDeletedTrips.update { current ->
+                        current.filterNot { it.id == tripToRestore.id }
+                    }
+                    _restoreFailedTrip.value = null
+                } catch (e: Exception) {
+                    android.util.Log.e("TripHistoryViewModel", "Failed to restore deleted trip: ${e.message}", e)
+                    // Preserve the deleted record in the stack and expose failure for Retry action
+                    _restoreFailedTrip.value = tripToRestore
+                    _actionErrorMessage.value = "Unable to restore trip. Please try again."
+                }
+            } finally {
+                _isRestoring.value = false
+                restoreMutex.unlock()
+            }
+        }
+    }
+
+    fun dismissRecentlyDeletedTrip(tripId: String? = null) {
+        _recentlyDeletedTrips.update { list ->
+            if (tripId != null) {
+                list.filterNot { it.id == tripId }
+            } else if (list.isNotEmpty()) {
+                list.dropLast(1)
+            } else {
+                emptyList()
             }
         }
     }
 
     fun clearRecentlyDeletedTrip() {
-        _recentlyDeletedTrip.value = null
+        dismissRecentlyDeletedTrip()
+    }
+
+    fun clearAllRecentlyDeletedTrips() {
+        _recentlyDeletedTrips.value = emptyList()
+        _restoreFailedTrip.value = null
+    }
+
+    fun clearRestoreFailure() {
+        _restoreFailedTrip.value = null
     }
 
     fun clearActionErrorMessage() {
         _actionErrorMessage.value = null
     }
+
+    private data class UndoState(
+        val recentlyDeleted: TripEntity?,
+        val restoreFailed: TripEntity?,
+        val isRestoring: Boolean,
+        val actionError: String?
+    )
 
     private data class FilterStatePart1(
         val allTrips: List<TripEntity>,
