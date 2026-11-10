@@ -10,13 +10,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -99,19 +93,11 @@ class MainActivity : ComponentActivity() {
             )
             BusinessMileageTrackerTheme(themeMode = themeMode) {
                 val navController = rememberNavController()
-                @OptIn(ExperimentalLayoutApi::class)
-                val isKeyboardOpen = WindowInsets.isImeVisible
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
-                        AnimatedVisibility(
-                            visible = !isKeyboardOpen,
-                            enter = slideInVertically(initialOffsetY = { it }),
-                            exit = slideOutVertically(targetOffsetY = { it })
-                        ) {
-                            MileageBottomBar(navController = navController)
-                        }
+                        MileageBottomBar(navController = navController)
                     }
                 ) { innerPadding ->
                     MileageNavHost(

@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 75
-        versionName = "1.0.74"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix keyboard overlay: hide bottom nav bar during text entry to reveal entire card and switch time inputs to numeric keypad.\"")
+        versionCode = 76
+        versionName = "1.0.75"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Move Vehicle settings to top of Settings screen and restore stable root Scaffold without crash-prone bottomBar animation.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
