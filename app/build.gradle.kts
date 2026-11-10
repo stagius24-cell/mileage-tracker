@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 77
-        versionName = "1.0.76"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Option 1 interactive vertical wheel time picker dialog for Start and End work hours with AM/PM swipe-up-down selection.\"")
+        versionCode = 78
+        versionName = "1.0.77"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Compact wheel time picker dialog by 20%, compact button spacing, and remove description text.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

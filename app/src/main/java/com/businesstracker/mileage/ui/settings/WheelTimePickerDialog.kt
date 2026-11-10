@@ -1,7 +1,10 @@
 package com.businesstracker.mileage.ui.settings
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,7 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -31,16 +33,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 
 @Composable
@@ -79,118 +81,167 @@ fun WheelTimePickerDialog(
     var selectedMinuteIndex by remember { mutableIntStateOf(initialMinuteIndex) }
     var selectedAmPmIndex by remember { mutableIntStateOf(initialAmPmIndex) }
 
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text(
-                text = "Select Time",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-        },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = true,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.5f))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) { onDismiss() },
+            contentAlignment = Alignment.Center
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth(0.72f) // ~20% smaller width compared to typical 90% dialogs
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {},
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
             ) {
-                Text(
-                    text = "Swipe up or down to set time",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(16.dp))
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(144.dp), // 3 items * 48.dp
-                    contentAlignment = Alignment.Center
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // Center highlighted selection band
-                    Surface(
+                    // Dialog Title
+                    Text(
+                        text = "Select Time",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Wheels container: 3 items * 36.dp = 108.dp height
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        color = SucculentPrimary.copy(alpha = 0.12f)
-                    ) {}
+                            .height(108.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Center highlighted selection band
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(36.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            color = SucculentPrimary.copy(alpha = 0.12f)
+                        ) {}
 
-                    // 3 scrolling wheel columns: Hour : Minute  AM/PM
+                        // 3 scrolling wheel columns: Hour : Minute  AM/PM
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Hour Column
+                            WheelColumn(
+                                items = hoursList,
+                                initialIndex = initialHourIndex,
+                                itemHeight = 36.dp,
+                                modifier = Modifier.weight(1f),
+                                onItemSelected = { selectedHourIndex = it }
+                            )
+
+                            // Colon separator
+                            Text(
+                                text = ":",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 18.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 2.dp)
+                            )
+
+                            // Minute Column
+                            WheelColumn(
+                                items = minutesList,
+                                initialIndex = initialMinuteIndex,
+                                itemHeight = 36.dp,
+                                modifier = Modifier.weight(1f),
+                                onItemSelected = { selectedMinuteIndex = it }
+                            )
+
+                            Spacer(Modifier.width(4.dp))
+
+                            // AM/PM Column
+                            WheelColumn(
+                                items = amPmList,
+                                initialIndex = initialAmPmIndex,
+                                itemHeight = 36.dp,
+                                modifier = Modifier.weight(1f),
+                                onItemSelected = { selectedAmPmIndex = it }
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Buttons row with compacted spacing
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Hour Column
-                        WheelColumn(
-                            items = hoursList,
-                            initialIndex = initialHourIndex,
-                            itemHeight = 48.dp,
-                            modifier = Modifier.weight(1f),
-                            onItemSelected = { selectedHourIndex = it }
-                        )
-
-                        // Colon separator
-                        Text(
-                            text = ":",
-                            style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 24.sp
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.padding(horizontal = 4.dp)
-                        )
-
-                        // Minute Column
-                        WheelColumn(
-                            items = minutesList,
-                            initialIndex = initialMinuteIndex,
-                            itemHeight = 48.dp,
-                            modifier = Modifier.weight(1f),
-                            onItemSelected = { selectedMinuteIndex = it }
-                        )
-
+                        TextButton(
+                            onClick = onDismiss,
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Text(
+                                text = "Cancel",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+                            )
+                        }
                         Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                val hour12 = hoursList.getOrElse(selectedHourIndex) { "08" }.toInt()
+                                val minute = minutesList.getOrElse(selectedMinuteIndex) { "00" }.toInt()
+                                val isPm = selectedAmPmIndex == 1
 
-                        // AM/PM Column
-                        WheelColumn(
-                            items = amPmList,
-                            initialIndex = initialAmPmIndex,
-                            itemHeight = 48.dp,
-                            modifier = Modifier.weight(1f),
-                            onItemSelected = { selectedAmPmIndex = it }
-                        )
+                                val hour24 = when {
+                                    isPm && hour12 < 12 -> hour12 + 12
+                                    !isPm && hour12 == 12 -> 0
+                                    else -> hour12
+                                }
+
+                                val formatted24 = String.format("%02d:%02d", hour24, minute)
+                                onTimeConfirm(formatted24)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                            modifier = Modifier.height(36.dp)
+                        ) {
+                            Text(
+                                text = "Confirm",
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                            )
+                        }
                     }
                 }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val hour12 = hoursList.getOrElse(selectedHourIndex) { "08" }.toInt()
-                    val minute = minutesList.getOrElse(selectedMinuteIndex) { "00" }.toInt()
-                    val isPm = selectedAmPmIndex == 1
-
-                    val hour24 = when {
-                        isPm && hour12 < 12 -> hour12 + 12
-                        !isPm && hour12 == 12 -> 0
-                        else -> hour12
-                    }
-
-                    val formatted24 = String.format("%02d:%02d", hour24, minute)
-                    onTimeConfirm(formatted24)
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-            ) {
-                Text("Confirm")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
         }
-    )
+    }
 }
 
 @Composable
@@ -251,16 +302,16 @@ private fun WheelColumn(
                         style = if (isSelected) {
                             MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 20.sp
+                                fontSize = 17.sp
                             )
                         } else {
                             MaterialTheme.typography.bodyMedium.copy(
                                 fontWeight = FontWeight.Normal,
-                                fontSize = 16.sp
+                                fontSize = 14.sp
                             )
                         },
                         color = if (isSelected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.alpha(if (isSelected) 1f else 0.45f)
+                        modifier = Modifier.alpha(if (isSelected) 1f else 0.4f)
                     )
                 }
             }
