@@ -25,16 +25,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -89,6 +96,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -134,10 +142,14 @@ fun SettingsScreen(
     LaunchedEffect(Unit) { viewModel.refreshPairedBluetoothDevices() }
 
     var showVersionHistoryDialog by rememberSaveable { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
     LazyColumn(
+        state = listState,
         modifier = modifier
             .fillMaxSize()
+            .imePadding()
             .then(if (showVersionHistoryDialog) Modifier.blur(8.dp) else Modifier)
             .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
@@ -202,7 +214,12 @@ fun SettingsScreen(
                         onToggleDay = viewModel::toggleWorkDay,
                         onStartChange = viewModel::setWorkHoursStart,
                         onEndChange = viewModel::setWorkHoursEnd,
-                        onBehaviorChange = viewModel::setOutsideScheduleBehavior
+                        onBehaviorChange = viewModel::setOutsideScheduleBehavior,
+                        onFieldFocus = {
+                            coroutineScope.launch {
+                                listState.animateScrollToItem(index = 2, scrollOffset = 0)
+                            }
+                        }
                     )
                 }
 
@@ -941,12 +958,17 @@ private fun ScheduleControls(
     onToggleDay: (String) -> Unit,
     onStartChange: (String) -> Unit,
     onEndChange: (String) -> Unit,
-    onBehaviorChange: (String) -> Unit
+    onBehaviorChange: (String) -> Unit,
+    onFieldFocus: () -> Unit = {}
 ) {
     val days = listOf(
         "MON" to "M", "TUE" to "T", "WED" to "W", "THU" to "T",
         "FRI" to "F", "SAT" to "S", "SUN" to "S"
     )
+    var startText by remember(state.workHoursStart) { mutableStateOf(state.workHoursStart) }
+    var endText by remember(state.workHoursEnd) { mutableStateOf(state.workHoursEnd) }
+    var isStartFocused by remember { mutableStateOf(false) }
+    var isEndFocused by remember { mutableStateOf(false) }
 
     Text("Work days", style = MaterialTheme.typography.labelLarge)
     Row(
@@ -965,52 +987,186 @@ private fun ScheduleControls(
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        OutlinedTextField(
-            value = state.workHoursStart,
-            onValueChange = onStartChange,
-            label = { Text("Start") },
-            modifier = Modifier.weight(1f),
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp)
-        )
-        OutlinedTextField(
-            value = state.workHoursEnd,
-            onValueChange = onEndChange,
-            label = { Text("End") },
-            modifier = Modifier.weight(1f),
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp)
-        )
+        // Start Time Box (compact height 42.dp matching chips/rows)
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .height(42.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(
+                1.dp,
+                if (isStartFocused) SucculentPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Start",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isStartFocused) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.width(10.dp))
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (startText.isEmpty()) {
+                        Text(
+                            text = "08:00",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                    }
+                    BasicTextField(
+                        value = startText,
+                        onValueChange = {
+                            startText = it
+                            onStartChange(it)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged {
+                                isStartFocused = it.isFocused
+                                if (it.isFocused) onFieldFocus()
+                            },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        cursorBrush = SolidColor(SucculentPrimary),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Next
+                        )
+                    )
+                }
+            }
+        }
+
+        // End Time Box (compact height 42.dp matching chips/rows)
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .height(42.dp),
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(
+                1.dp,
+                if (isEndFocused) SucculentPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "End",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isEndFocused) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.width(10.dp))
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (endText.isEmpty()) {
+                        Text(
+                            text = "18:00",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        )
+                    }
+                    BasicTextField(
+                        value = endText,
+                        onValueChange = {
+                            endText = it
+                            onEndChange(it)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onFocusChanged {
+                                isEndFocused = it.isFocused
+                                if (it.isFocused) onFieldFocus()
+                            },
+                        singleLine = true,
+                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        cursorBrush = SolidColor(SucculentPrimary),
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Text,
+                            imeAction = ImeAction.Done
+                        )
+                    )
+                }
+            }
+        }
     }
 
     Text("Outside work hours", style = MaterialTheme.typography.labelLarge)
-    CompactRadioRow(
-        title = "Classify as personal",
-        selected = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-        onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL) }
-    )
-    CompactRadioRow(
-        title = "Do not track",
-        selected = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY,
-        onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) }
-    )
-}
-
-@Composable
-private fun CompactRadioRow(title: String, selected: Boolean, onClick: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RadioButton(selected = selected, onClick = onClick)
-        Spacer(Modifier.width(8.dp))
-        Text(title, style = MaterialTheme.typography.bodyMedium)
+        val isPersonal = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL
+        val isDoNotTrack = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY
+
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 40.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL) },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(
+                selected = isPersonal,
+                onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL) }
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = "Personal",
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 40.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(
+                selected = isDoNotTrack,
+                onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) }
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = "Do not track",
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 73
-        versionName = "1.0.72"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Phase 5 reliability: safe confirmation before delete, multi-trip undo stack, retry on restore failure, and duplicate restore prevention.\"")
+        versionCode = 74
+        versionName = "1.0.73"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Compact schedule controls: single-row outside hours options, shortened 42dp time boxes with smooth scroll on keyboard focus, and instantaneous editing.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
