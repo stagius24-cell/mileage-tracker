@@ -22,10 +22,13 @@ import org.junit.Before
 import org.junit.Test
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
 import org.junit.runner.RunWith
+import com.businesstracker.mileage.testutils.TestFileProviderShadow
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
+@Config(shadows = [TestFileProviderShadow::class])
 class ReportsExportCalculationTest {
 
     private val testDispatcher = StandardTestDispatcher()

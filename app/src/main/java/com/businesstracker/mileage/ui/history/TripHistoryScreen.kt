@@ -54,7 +54,12 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -103,6 +108,50 @@ fun TripHistoryScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     var tripPendingDeletion by remember { mutableStateOf<TripEntity?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(state.recentlyDeletedTrip) {
+        val deleted = state.recentlyDeletedTrip
+        if (deleted != null && state.restoreFailedTrip == null) {
+            val result = snackbarHostState.showSnackbar(
+                message = "Trip deleted",
+                actionLabel = "Undo",
+                duration = SnackbarDuration.Short
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                viewModel.undoDeleteTrip()
+            } else {
+                viewModel.dismissRecentlyDeletedTrip(deleted.id)
+            }
+        }
+    }
+
+    LaunchedEffect(state.restoreFailedTrip) {
+        val failed = state.restoreFailedTrip
+        if (failed != null) {
+            val result = snackbarHostState.showSnackbar(
+                message = "Unable to restore trip. Please try again.",
+                actionLabel = "Retry",
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                viewModel.undoDeleteTrip()
+            } else {
+                viewModel.clearRestoreFailure()
+            }
+        }
+    }
+
+    LaunchedEffect(state.actionErrorMessage) {
+        val errorMsg = state.actionErrorMessage
+        if (errorMsg != null && state.restoreFailedTrip == null) {
+            snackbarHostState.showSnackbar(
+                message = errorMsg,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.clearActionErrorMessage()
+        }
+    }
 
     LaunchedEffect(initialMonthIso) {
         if (initialMonthIso.matches(Regex("\\d{4}-\\d{2}"))) {
@@ -126,8 +175,8 @@ fun TripHistoryScreen(
             onBack = { viewModel.selectTripForDetails(null) },
             onPreviousTrip = onPreviousTrip,
             onNextTrip = onNextTrip,
-            onSaveTrip = { id, classification, entity, purpose, notes ->
-                viewModel.updateTripDetails(id, classification, entity, purpose, notes)
+            onSaveTrip = { id, classification, entity, purpose, notes, onError, onSuccess ->
+                viewModel.updateTripDetails(id, classification, entity, purpose, notes, onError, onSuccess)
             },
             onDeleteTrip = { id -> viewModel.deleteTrip(id) },
             customPurposes = state.customPurposes
@@ -135,60 +184,73 @@ fun TripHistoryScreen(
         return
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .then(if (tripPendingDeletion != null) Modifier.blur(8.dp) else Modifier)
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        HistoryControls(
-            state = state,
-            onSearchChange = viewModel::setSearchQuery,
-            onSortChange = viewModel::setSortOrder,
-            onClassificationChange = viewModel::setClassificationFilter,
-            onEntityChange = viewModel::setBusinessEntityFilter,
-            onSyncChange = viewModel::setSyncStatusFilter,
-            onClearDateFilter = { viewModel.setDateRange("", "") },
-            onBackToReports = onBackToReports
-        )
+    Box(modifier = modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .then(if (tripPendingDeletion != null) Modifier.blur(8.dp) else Modifier)
+                .background(MaterialTheme.colorScheme.background)
+        ) {
+            HistoryControls(
+                state = state,
+                onSearchChange = viewModel::setSearchQuery,
+                onSortChange = viewModel::setSortOrder,
+                onClassificationChange = viewModel::setClassificationFilter,
+                onEntityChange = viewModel::setBusinessEntityFilter,
+                onSyncChange = viewModel::setSyncStatusFilter,
+                onClearDateFilter = { viewModel.setDateRange("", "") },
+                onBackToReports = onBackToReports
+            )
 
-        if (state.trips.isEmpty()) {
-            EmptyHistory()
-        } else {
-            val groupByDate = state.sortOrder == SortOrder.NEWEST_FIRST ||
-                state.sortOrder == SortOrder.OLDEST_FIRST
+            if (state.trips.isEmpty()) {
+                EmptyHistory(
+                    state = state,
+                    onClearSearch = { viewModel.setSearchQuery("") },
+                    onClearFilters = { viewModel.clearAllFilters() }
+                )
+            } else {
+                val groupByDate = state.sortOrder == SortOrder.NEWEST_FIRST ||
+                    state.sortOrder == SortOrder.OLDEST_FIRST
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (groupByDate) {
-                    state.trips.groupBy { it.date }.forEach { (date, trips) ->
-                        item(key = "date-$date") {
-                            DateSectionHeader(date = date, trips = trips)
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (groupByDate) {
+                        state.trips.groupBy { it.date }.forEach { (date, trips) ->
+                            item(key = "date-$date") {
+                                DateSectionHeader(date = date, trips = trips)
+                            }
+                            items(trips, key = { it.id }) { trip ->
+                                TripHistoryItem(
+                                    trip = trip,
+                                    showDate = false,
+                                    onClick = { viewModel.selectTripForDetails(trip) },
+                                    onDelete = { tripPendingDeletion = trip }
+                                )
+                            }
                         }
-                        items(trips, key = { it.id }) { trip ->
+                    } else {
+                        items(state.trips, key = { it.id }) { trip ->
                             TripHistoryItem(
                                 trip = trip,
-                                showDate = false,
+                                showDate = true,
                                 onClick = { viewModel.selectTripForDetails(trip) },
                                 onDelete = { tripPendingDeletion = trip }
                             )
                         }
                     }
-                } else {
-                    items(state.trips, key = { it.id }) { trip ->
-                        TripHistoryItem(
-                            trip = trip,
-                            showDate = true,
-                            onClick = { viewModel.selectTripForDetails(trip) },
-                            onDelete = { tripPendingDeletion = trip }
-                        )
-                    }
                 }
             }
         }
+
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
+        )
     }
 
     if (tripPendingDeletion != null) {
@@ -234,7 +296,7 @@ fun TripHistoryScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Delete this ${formatMiles(targetTrip.totalDistanceMiles)} mi trip? This action cannot be undone.",
+                            text = "Delete this ${formatMiles(targetTrip.totalDistanceMiles)} mi trip from your trip history?",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -593,7 +655,17 @@ private fun DateSectionHeader(date: String, trips: List<TripEntity>) {
 }
 
 @Composable
-private fun EmptyHistory() {
+private fun EmptyHistory(
+    state: TripHistoryUiState,
+    onClearSearch: () -> Unit,
+    onClearFilters: () -> Unit
+) {
+    val isFilterActive = state.selectedClassificationFilter != "ALL" ||
+        state.selectedBusinessEntityFilter != "ALL" ||
+        state.selectedSyncStatusFilter != "ALL" ||
+        state.startDateFilter.isNotBlank() ||
+        state.endDateFilter.isNotBlank()
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -601,13 +673,80 @@ private fun EmptyHistory() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("No trips found", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Try changing the search or filters.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        when {
+            state.totalRecordedTripsCount == 0 -> {
+                Text(
+                    "No trips recorded yet",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "Your drives will appear here automatically.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+            state.searchQuery.isNotBlank() -> {
+                Text(
+                    "No matching results",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "No trips match your search \"${state.searchQuery}\".",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = onClearSearch,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Clear Search")
+                }
+            }
+            isFilterActive -> {
+                Text(
+                    "No matching trips",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    "No trips match the selected filters.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedButton(
+                    onClick = onClearFilters,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Clear Filters")
+                }
+            }
+            else -> {
+                Text(
+                    "No trips found",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Try changing the search or filters.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 

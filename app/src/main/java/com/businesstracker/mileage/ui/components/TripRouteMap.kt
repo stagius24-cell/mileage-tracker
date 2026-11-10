@@ -93,7 +93,7 @@ fun TripRouteMap(trip: TripEntity, modifier: Modifier = Modifier) {
             LaunchedEffect(allPoints) {
                 if (allPoints.isNotEmpty()) {
                     if (allPoints.size == 1) {
-                        cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(allPoints.first(), 14f))
+                        cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(allPoints.first(), 13.5f))
                     } else {
                         var minLat = Double.MAX_VALUE
                         var maxLat = -Double.MAX_VALUE
@@ -110,18 +110,26 @@ fun TripRouteMap(trip: TripEntity, modifier: Modifier = Modifier) {
                         val latSpan = maxLat - minLat
                         val lonSpan = maxLon - minLon
 
-                        // Ensure a minimum span of at least ~0.008 degrees (~0.55 miles) so short trips aren't over-zoomed
-                        val minSpan = 0.008
-                        val extraLatPad = if (latSpan < minSpan) (minSpan - latSpan) / 2.0 else latSpan * 0.25
-                        val extraLonPad = if (lonSpan < minSpan) (minSpan - lonSpan) / 2.0 else lonSpan * 0.25
+                        // Ensure a minimum span of at least ~0.016 degrees (~1.1 miles) so short trips aren't over-zoomed
+                        val minSpan = 0.016
+                        val baseLatPad = latSpan * 0.40
+                        val extraLatPad = maxOf(baseLatPad, (minSpan - latSpan).coerceAtLeast(0.0) / 2.0, 0.005)
+                        val baseLonPad = lonSpan * 0.40
+                        val extraLonPad = maxOf(baseLonPad, (minSpan - lonSpan).coerceAtLeast(0.0) / 2.0, 0.005)
+
+                        // Google Map marker pins stand upright with their anchor at (0.5, 1.0) so the pin head extends
+                        // well above the coordinate. In addition, the close button overlays the top-left area.
+                        // Allocate extra north padding so the start/destination markers are never cropped at the top edge.
+                        val northPad = extraLatPad * 1.6
+                        val southPad = extraLatPad
 
                         val paddedBounds = LatLngBounds(
-                            LatLng(minLat - extraLatPad, minLon - extraLonPad),
-                            LatLng(maxLat + extraLatPad, maxLon + extraLonPad)
+                            LatLng(minLat - southPad, minLon - extraLonPad),
+                            LatLng(maxLat + northPad, maxLon + extraLonPad)
                         )
 
-                        // 100px padding ensures markers and route are well within the visible frame
-                        cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(paddedBounds, 100))
+                        // 120px padding ensures markers and route are well within the visible frame
+                        cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(paddedBounds, 120))
                     }
                 }
             }
@@ -221,7 +229,7 @@ internal fun createRouteMap(context: Context, data: RouteMapData, allowNetwork: 
         }
         val boundsPoints = (data.recordedPoints + data.endpoints).map { GeoPoint(it.latitude, it.longitude) }
         if (boundsPoints.isNotEmpty()) addOnFirstLayoutListener { _, _, _, _, _ ->
-            zoomToBoundingBox(BoundingBox.fromGeoPointsSafe(boundsPoints), false, (24 * resources.displayMetrics.density).toInt(), 16.0, null)
+            zoomToBoundingBox(BoundingBox.fromGeoPointsSafe(boundsPoints), false, (36 * resources.displayMetrics.density).toInt(), 15.0, null)
         }
     }
 }
