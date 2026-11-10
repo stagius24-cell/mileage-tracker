@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 69
-        versionName = "1.0.68"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Formatted PDF report date as Month Date, Year and added a dedicated Time column.\"")
+        versionCode = 70
+        versionName = "1.0.69"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"2-line timestamp and compact type badge icon in PDF table to prevent column overlap.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

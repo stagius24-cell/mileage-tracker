@@ -138,17 +138,36 @@ object PdfReportGenerator {
         y += 72f
 
         // Table Header & Column Positions
-        val colDate = MARGIN
-        val colTime = MARGIN + 68f
-        val colClass = MARGIN + 130f
-        val colPurpose = MARGIN + 185f
-        val colMiles = MARGIN + 330f
-        val colRate = MARGIN + 390f
-        val colDeduct = MARGIN + 448f
+        // Total usable table width = PAGE_WIDTH - 2 * MARGIN = 595 - 72 = 523pt
+        val colDate = MARGIN          // 36f  (Width ~58pt)
+        val colTime = MARGIN + 60f    // 96f  (Width ~48pt, 2 lines: Start / End)
+        val colType = MARGIN + 110f   // 146f (Width ~30pt, compact icon badge)
+        val colPurpose = MARGIN + 144f// 180f (Width ~190pt, Purpose + From/To addresses)
+        val colMiles = MARGIN + 338f  // 374f (Width ~46pt)
+        val colRate = MARGIN + 388f   // 424f (Width ~46pt)
+        val colDeduct = MARGIN + 438f // 474f (Width ~85pt)
 
         val timeFormatter = SimpleDateFormat("h:mm a", Locale.US)
         val dateFormatter = SimpleDateFormat("MMM d, yyyy", Locale.US)
         val inputDateParser = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+
+        val bizBadgePaint = Paint().apply {
+            isAntiAlias = true
+            color = Color.rgb(46, 125, 50) // Succulent Primary Green
+            style = Paint.Style.FILL
+        }
+        val personalBadgePaint = Paint().apply {
+            isAntiAlias = true
+            color = Color.rgb(37, 99, 235) // Personal Blue
+            style = Paint.Style.FILL
+        }
+        val badgeTextPaint = Paint().apply {
+            isAntiAlias = true
+            color = Color.WHITE
+            textSize = 7f
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+        }
 
         canvas.drawRect(MARGIN, y - 10f, PAGE_WIDTH - MARGIN, y + 8f, headerBgPaint)
         canvas.drawLine(MARGIN, y + 8f, PAGE_WIDTH - MARGIN, y + 8f, linePaint)
@@ -156,7 +175,7 @@ object PdfReportGenerator {
         boldPaint.textSize = 8.5f
         canvas.drawText("DATE", colDate, y, boldPaint)
         canvas.drawText("TIME", colTime, y, boldPaint)
-        canvas.drawText("CATEGORY", colClass, y, boldPaint)
+        canvas.drawText("TYPE", colType, y, boldPaint)
         canvas.drawText("PURPOSE & LOCATIONS", colPurpose, y, boldPaint)
         canvas.drawText("MILES", colMiles, y, boldPaint)
         canvas.drawText("RATE", colRate, y, boldPaint)
@@ -179,7 +198,7 @@ object PdfReportGenerator {
                 canvas.drawLine(MARGIN, y + 8f, PAGE_WIDTH - MARGIN, y + 8f, linePaint)
                 canvas.drawText("DATE", colDate, y, boldPaint)
                 canvas.drawText("TIME", colTime, y, boldPaint)
-                canvas.drawText("CATEGORY", colClass, y, boldPaint)
+                canvas.drawText("TYPE", colType, y, boldPaint)
                 canvas.drawText("PURPOSE & LOCATIONS", colPurpose, y, boldPaint)
                 canvas.drawText("MILES", colMiles, y, boldPaint)
                 canvas.drawText("RATE", colRate, y, boldPaint)
@@ -189,7 +208,7 @@ object PdfReportGenerator {
 
             textPaint.textSize = 8.5f
             
-            // Format Date as Month, Date, Year (e.g. Nov 9, 2026)
+            // Format Date as Month Date, Year (e.g. Nov 9, 2026)
             val formattedDate = try {
                 if (trip.startTime > 0) {
                     dateFormatter.format(Date(trip.startTime))
@@ -202,26 +221,29 @@ object PdfReportGenerator {
             }
             canvas.drawText(formattedDate, colDate, y, textPaint)
 
-            // Format Time (e.g. 11:14 AM - 11:27 AM or 11:14 AM)
-            val timeText = if (trip.startTime > 0) {
-                val startT = timeFormatter.format(Date(trip.startTime))
+            // Format Time across 2 lines to strictly prevent overlapping: Line 1 = Start, Line 2 = End
+            textPaint.textSize = 7.5f
+            if (trip.startTime > 0) {
+                val startStr = timeFormatter.format(Date(trip.startTime))
+                canvas.drawText(startStr, colTime, y, textPaint)
                 if (trip.endTime > trip.startTime) {
-                    val endT = timeFormatter.format(Date(trip.endTime))
-                    "$startT - $endT"
-                } else {
-                    startT
+                    val endStr = "– " + timeFormatter.format(Date(trip.endTime))
+                    canvas.drawText(endStr, colTime, y + 9f, textPaint)
                 }
             } else {
-                "-"
+                canvas.drawText("-", colTime, y, textPaint)
             }
-            textPaint.textSize = 8f
-            canvas.drawText(timeText, colTime, y, textPaint)
             textPaint.textSize = 8.5f
 
-            val catLabel = if (trip.classification == "BUSINESS") "Business" else trip.classification
-            canvas.drawText(catLabel, colClass, y, textPaint)
+            // Compact icon-badge for Business (B) or Personal (P) to save horizontal space and prevent overlap
+            val isBiz = trip.classification == "BUSINESS"
+            val badgeRadius = 7.5f
+            val badgeCenterX = colType + 10f
+            val badgeCenterY = y - 3f
+            canvas.drawCircle(badgeCenterX, badgeCenterY, badgeRadius, if (isBiz) bizBadgePaint else personalBadgePaint)
+            canvas.drawText(if (isBiz) "B" else "P", badgeCenterX, badgeCenterY + 2.5f, badgeTextPaint)
 
-            val purposeText = if (trip.purpose.length > 24) trip.purpose.take(24) + "..." else trip.purpose
+            val purposeText = if (trip.purpose.length > 26) trip.purpose.take(26) + "…" else trip.purpose
             canvas.drawText(purposeText, colPurpose, y, textPaint)
 
             canvas.drawText(String.format(Locale.US, "%.1f", trip.totalDistanceMiles), colMiles, y, textPaint)
@@ -241,8 +263,8 @@ object PdfReportGenerator {
             val startAddr = trip.startAddress?.takeIf { it.isNotBlank() } ?: "Recorded start"
             val endAddr = trip.endAddress?.takeIf { it.isNotBlank() } ?: "Recorded destination"
             
-            val startLine = "From: " + if (startAddr.length > 44) startAddr.take(44) + "…" else startAddr
-            val endLine = "To: " + if (endAddr.length > 44) endAddr.take(44) + "…" else endAddr
+            val startLine = "From: " + if (startAddr.length > 46) startAddr.take(46) + "…" else startAddr
+            val endLine = "To: " + if (endAddr.length > 46) endAddr.take(46) + "…" else endAddr
             
             canvas.drawText(startLine, colPurpose, y, textPaint)
             y += 10f
