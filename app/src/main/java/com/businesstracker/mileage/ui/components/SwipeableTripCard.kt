@@ -499,18 +499,7 @@ fun TripCardContent(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .background(SucculentPrimary.copy(alpha = 0.16f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(9.dp)
-                                .background(SucculentPrimary, CircleShape)
-                        )
-                    }
+                    StartBeaconIcon(tint = SucculentPrimary)
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = startAddressStr,
@@ -538,19 +527,7 @@ fun TripCardContent(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(22.dp)
-                            .background(SpeedRed.copy(alpha = 0.16f), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = SpeedRed,
-                            modifier = Modifier.size(15.dp)
-                        )
-                    }
+                    EndFlagIcon(tint = SpeedRed)
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
                         text = endAddressStr,

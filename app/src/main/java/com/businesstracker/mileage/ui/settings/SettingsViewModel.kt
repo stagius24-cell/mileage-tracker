@@ -131,6 +131,9 @@ class SettingsViewModel @Inject constructor(
         GeneralPrefs(autoTrack, vehicle, themeMode, customPurposes)
     }
 
+    private val _workHoursStartInput = MutableStateFlow<String?>(null)
+    private val _workHoursEndInput = MutableStateFlow<String?>(null)
+
     private val scheduleFlow = combine(
         preferencesManager.isScheduleFilteringEnabled,
         preferencesManager.workDays,
@@ -143,6 +146,15 @@ class SettingsViewModel @Inject constructor(
             .filter { it.isNotEmpty() }
             .toSet()
         SchedulePrefs(enabled, daysSet, start, end, behavior)
+    }.combine(
+        combine(_workHoursStartInput, _workHoursEndInput) { startInput, endInput ->
+            Pair(startInput, endInput)
+        }
+    ) { schedule, (startInput, endInput) ->
+        schedule.copy(
+            startTime = startInput ?: schedule.startTime,
+            endTime = endInput ?: schedule.endTime
+        )
     }
 
     private val bluetoothFlow = combine(
@@ -348,12 +360,14 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun setWorkHoursStart(time: String) {
+        _workHoursStartInput.value = time
         viewModelScope.launch {
             preferencesManager.setWorkHoursStart(time)
         }
     }
 
     fun setWorkHoursEnd(time: String) {
+        _workHoursEndInput.value = time
         viewModelScope.launch {
             preferencesManager.setWorkHoursEnd(time)
         }

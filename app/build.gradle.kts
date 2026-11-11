@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 74
-        versionName = "1.0.73"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Phase 6: Saved Locations & Smart Trip Naming with offline Haversine matching, customizable radius and icons, smart name trip history presentation aliases, and classification suggestions.\"")
+        versionCode = 81
+        versionName = "1.0.80"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Saved Locations: name familiar places and review trip suggestions. Includes the latest map startup fix.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
