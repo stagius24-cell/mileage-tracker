@@ -733,9 +733,10 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
-                "Version 1.0.63 (Build 64)" to "Single-line Create Report button, 2-line PDF locations, and PDF preview zoom.",
-                "Version 1.0.62 (Build 63)" to "Direct in-app PDF preview with multi-page rendered display before sharing.",
-                "Version 1.0.61 (Build 62)" to "Create report button with 80% blurred floating dialog for tax year, drive type, & format."
+                "Version 1.0.78 (Build 79)" to "Matching Origin GPS Radar & Destination Finish Flag icons on Google Map and trip cards; tighter map zoom; updated version history.",
+                "Version 1.0.77 (Build 78)" to "Compacted wheel time picker dialog by 20%, tightened button spacing, and removed subtitle description text.",
+                "Version 1.0.76 (Build 77)" to "Option 1 interactive vertical swipe up/down wheel time picker for Work Schedule start & end times with AM/PM support.",
+                "Version 1.0.75 (Build 76)" to "Moved vehicle settings to top of settings list and restored stable bottom navigation bar."
             )
         }
 

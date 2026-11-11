@@ -110,17 +110,16 @@ fun TripRouteMap(trip: TripEntity, modifier: Modifier = Modifier) {
                         val latSpan = maxLat - minLat
                         val lonSpan = maxLon - minLon
 
-                        // Ensure a minimum span of at least ~0.016 degrees (~1.1 miles) so short trips aren't over-zoomed
-                        val minSpan = 0.016
-                        val baseLatPad = latSpan * 0.40
-                        val extraLatPad = maxOf(baseLatPad, (minSpan - latSpan).coerceAtLeast(0.0) / 2.0, 0.005)
-                        val baseLonPad = lonSpan * 0.40
-                        val extraLonPad = maxOf(baseLonPad, (minSpan - lonSpan).coerceAtLeast(0.0) / 2.0, 0.005)
+                        // Ensure a minimum span of ~0.008 degrees (~0.5 miles) so short trips aren't over-zoomed
+                        // Reduced padding ratios from 0.40 to 0.15 so the map is substantially less zoomed out
+                        val minSpan = 0.008
+                        val baseLatPad = latSpan * 0.15
+                        val extraLatPad = maxOf(baseLatPad, (minSpan - latSpan).coerceAtLeast(0.0) / 2.0, 0.002)
+                        val baseLonPad = lonSpan * 0.15
+                        val extraLonPad = maxOf(baseLonPad, (minSpan - lonSpan).coerceAtLeast(0.0) / 2.0, 0.002)
 
-                        // Google Map marker pins stand upright with their anchor at (0.5, 1.0) so the pin head extends
-                        // well above the coordinate. In addition, the close button overlays the top-left area.
-                        // Allocate extra north padding so the start/destination markers are never cropped at the top edge.
-                        val northPad = extraLatPad * 1.6
+                        // Allocate slightly more top padding so the top marker is comfortably clear of the back button
+                        val northPad = extraLatPad * 1.25
                         val southPad = extraLatPad
 
                         val paddedBounds = LatLngBounds(
@@ -128,11 +127,14 @@ fun TripRouteMap(trip: TripEntity, modifier: Modifier = Modifier) {
                             LatLng(maxLat + northPad, maxLon + extraLonPad)
                         )
 
-                        // 120px padding ensures markers and route are well within the visible frame
-                        cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(paddedBounds, 120))
+                        // 64px padding (reduced from 120px) keeps the route nicely framed without unnecessary zoom-out
+                        cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(paddedBounds, 64))
                     }
                 }
             }
+
+            val startMarkerIcon = remember { MapMarkerFactory.createStartBeaconBitmapDescriptor() }
+            val endMarkerIcon = remember { MapMarkerFactory.createEndFlagBitmapDescriptor() }
 
             GoogleMap(
                 modifier = Modifier.fillMaxSize(),
@@ -165,9 +167,8 @@ fun TripRouteMap(trip: TripEntity, modifier: Modifier = Modifier) {
                     Marker(
                         state = MarkerState(position = LatLng(point.latitude, point.longitude)),
                         title = if (isStart) "Start" else "End",
-                        icon = BitmapDescriptorFactory.defaultMarker(
-                            if (isStart) BitmapDescriptorFactory.HUE_GREEN else BitmapDescriptorFactory.HUE_RED
-                        )
+                        icon = if (isStart) startMarkerIcon else endMarkerIcon,
+                        anchor = if (isStart) androidx.compose.ui.geometry.Offset(0.5f, 0.5f) else androidx.compose.ui.geometry.Offset(0.30f, 0.90f)
                     )
                 }
             }

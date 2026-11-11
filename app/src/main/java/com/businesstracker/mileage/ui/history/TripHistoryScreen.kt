@@ -844,8 +844,8 @@ private fun TripHistoryItem(
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
-                    HistoryLocationLine(address = start, tint = SucculentPrimary)
-                    HistoryLocationLine(address = end, tint = SpeedRed)
+                    HistoryLocationLine(address = start, tint = SucculentPrimary, isStart = true)
+                    HistoryLocationLine(address = end, tint = SpeedRed, isStart = false)
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     if (isBusiness && trip.purpose.isBlank()) {
@@ -871,15 +871,14 @@ private fun TripHistoryItem(
 }
 
 @Composable
-private fun HistoryLocationLine(address: String, tint: androidx.compose.ui.graphics.Color) {
+private fun HistoryLocationLine(address: String, tint: androidx.compose.ui.graphics.Color, isStart: Boolean) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            Icons.Default.LocationOn,
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(14.dp)
-        )
-        Spacer(Modifier.width(5.dp))
+        if (isStart) {
+            com.businesstracker.mileage.ui.components.StartBeaconIcon(tint = tint, size = 16.dp)
+        } else {
+            com.businesstracker.mileage.ui.components.EndFlagIcon(tint = tint, size = 16.dp)
+        }
+        Spacer(Modifier.width(6.dp))
         Text(
             text = address,
             modifier = Modifier.weight(1f),
