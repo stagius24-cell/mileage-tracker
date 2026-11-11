@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 84
-        versionName = "1.0.83"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Backup & Restore: Unified compact Google Sheets card with combined status and inline controls.\"")
+        versionCode = 85
+        versionName = "1.0.84"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Backup & Restore: Streamlined compact card redesign with pill buttons, unified status metrics, and collapsible Google Sheets details.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
