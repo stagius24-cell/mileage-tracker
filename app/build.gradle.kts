@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 79
-        versionName = "1.0.78"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Option B matching Origin Radar Beacon and Destination Finish Flag icons on Google Map and trip cards, tighter route camera framing, and updated settings version history.\"")
+        versionCode = 80
+        versionName = "1.0.79"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix crash by safely initializing MapsInitializer and guarding BitmapDescriptor creation with fallback.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

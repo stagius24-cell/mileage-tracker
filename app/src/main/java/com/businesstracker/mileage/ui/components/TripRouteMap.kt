@@ -31,6 +31,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.businesstracker.mileage.BuildConfig
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -133,8 +134,21 @@ fun TripRouteMap(trip: TripEntity, modifier: Modifier = Modifier) {
                 }
             }
 
-            val startMarkerIcon = remember { MapMarkerFactory.createStartBeaconBitmapDescriptor() }
-            val endMarkerIcon = remember { MapMarkerFactory.createEndFlagBitmapDescriptor() }
+            var startMarkerIcon by remember {
+                mutableStateOf<BitmapDescriptor?>(null)
+            }
+            var endMarkerIcon by remember {
+                mutableStateOf<BitmapDescriptor?>(null)
+            }
+
+            LaunchedEffect(Unit) {
+                try {
+                    startMarkerIcon = MapMarkerFactory.createStartBeaconBitmapDescriptor()
+                    endMarkerIcon = MapMarkerFactory.createEndFlagBitmapDescriptor()
+                } catch (_: Throwable) {
+                    // Falls back to safe default markers below
+                }
+            }
 
             GoogleMap(
                 modifier = Modifier.fillMaxSize(),
@@ -164,12 +178,23 @@ fun TripRouteMap(trip: TripEntity, modifier: Modifier = Modifier) {
 
                 data.endpoints.forEachIndexed { index, point ->
                     val isStart = index == 0
-                    Marker(
-                        state = MarkerState(position = LatLng(point.latitude, point.longitude)),
-                        title = if (isStart) "Start" else "End",
-                        icon = if (isStart) startMarkerIcon else endMarkerIcon,
-                        anchor = if (isStart) androidx.compose.ui.geometry.Offset(0.5f, 0.5f) else androidx.compose.ui.geometry.Offset(0.30f, 0.90f)
-                    )
+                    val markerIcon = if (isStart) startMarkerIcon else endMarkerIcon
+                    if (markerIcon != null) {
+                        Marker(
+                            state = MarkerState(position = LatLng(point.latitude, point.longitude)),
+                            title = if (isStart) "Start" else "End",
+                            icon = markerIcon,
+                            anchor = if (isStart) androidx.compose.ui.geometry.Offset(0.5f, 0.5f) else androidx.compose.ui.geometry.Offset(0.30f, 0.90f)
+                        )
+                    } else {
+                        Marker(
+                            state = MarkerState(position = LatLng(point.latitude, point.longitude)),
+                            title = if (isStart) "Start" else "End",
+                            icon = BitmapDescriptorFactory.defaultMarker(
+                                if (isStart) BitmapDescriptorFactory.HUE_GREEN else BitmapDescriptorFactory.HUE_RED
+                            )
+                        )
+                    }
                 }
             }
         }

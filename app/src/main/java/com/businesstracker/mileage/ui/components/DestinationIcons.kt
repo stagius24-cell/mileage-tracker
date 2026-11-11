@@ -32,121 +32,129 @@ import com.google.android.gms.maps.model.BitmapDescriptorFactory
 object MapMarkerFactory {
 
     fun createStartBeaconBitmapDescriptor(): BitmapDescriptor {
-        val size = 72
-        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
+        return try {
+            val size = 72
+            val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
 
-        val cx = size / 2f
-        val cy = size / 2f
+            val cx = size / 2f
+            val cy = size / 2f
 
-        // Outer pulse circle
-        val pulsePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.argb(70, 16, 185, 129) // SucculentPrimary translucent
-            style = Paint.Style.FILL
+            // Outer pulse circle
+            val pulsePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.argb(70, 16, 185, 129) // SucculentPrimary translucent
+                style = Paint.Style.FILL
+            }
+            canvas.drawCircle(cx, cy, 32f, pulsePaint)
+
+            // Middle beacon ring
+            val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(16, 185, 129) // SucculentPrimary
+                style = Paint.Style.STROKE
+                strokeWidth = 5f
+            }
+            canvas.drawCircle(cx, cy, 22f, ringPaint)
+
+            // Inner solid dot
+            val centerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(16, 185, 129)
+                style = Paint.Style.FILL
+            }
+            canvas.drawCircle(cx, cy, 11f, centerPaint)
+
+            // Center white specular pip
+            val whitePip = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                style = Paint.Style.FILL
+            }
+            canvas.drawCircle(cx, cy, 4f, whitePip)
+
+            BitmapDescriptorFactory.fromBitmap(bitmap)
+        } catch (_: Throwable) {
+            BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
         }
-        canvas.drawCircle(cx, cy, 32f, pulsePaint)
-
-        // Middle beacon ring
-        val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(16, 185, 129) // SucculentPrimary
-            style = Paint.Style.STROKE
-            strokeWidth = 5f
-        }
-        canvas.drawCircle(cx, cy, 22f, ringPaint)
-
-        // Inner solid dot
-        val centerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(16, 185, 129)
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(cx, cy, 11f, centerPaint)
-
-        // Center white specular pip
-        val whitePip = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(cx, cy, 4f, whitePip)
-
-        return BitmapDescriptorFactory.fromBitmap(bitmap)
     }
 
     fun createEndFlagBitmapDescriptor(): BitmapDescriptor {
-        val width = 76
-        val height = 76
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
+        return try {
+            val width = 76
+            val height = 76
+            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(bitmap)
 
-        // Drop shadow for flagpole anchor
-        val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.argb(80, 0, 0, 0)
-            style = Paint.Style.FILL
-        }
-        canvas.drawOval(14f, 66f, 32f, 74f, shadowPaint)
+            // Drop shadow for flagpole anchor
+            val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.argb(80, 0, 0, 0)
+                style = Paint.Style.FILL
+            }
+            canvas.drawOval(14f, 66f, 32f, 74f, shadowPaint)
 
-        // Pole (dark slate)
-        val polePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(51, 65, 85)
-            strokeWidth = 6f
-            strokeCap = Paint.Cap.ROUND
-        }
-        canvas.drawLine(23f, 10f, 23f, 68f, polePaint)
+            // Pole (dark slate)
+            val polePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(51, 65, 85)
+                strokeWidth = 6f
+                strokeCap = Paint.Cap.ROUND
+            }
+            canvas.drawLine(23f, 10f, 23f, 68f, polePaint)
 
-        // Ball top of flagpole
-        val ballPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(239, 68, 68) // SpeedRed
-            style = Paint.Style.FILL
-        }
-        canvas.drawCircle(23f, 9f, 6f, ballPaint)
+            // Ball top of flagpole
+            val ballPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(239, 68, 68) // SpeedRed
+                style = Paint.Style.FILL
+            }
+            canvas.drawCircle(23f, 9f, 6f, ballPaint)
 
-        // Waving Flag Path (Red background)
-        val flagPath = Path().apply {
-            moveTo(23f, 14f)
-            cubicTo(36f, 11f, 50f, 19f, 66f, 15f)
-            lineTo(66f, 42f)
-            cubicTo(50f, 46f, 36f, 38f, 23f, 41f)
-            close()
-        }
+            // Waving Flag Path (Red background)
+            val flagPath = Path().apply {
+                moveTo(23f, 14f)
+                cubicTo(36f, 11f, 50f, 19f, 66f, 15f)
+                lineTo(66f, 42f)
+                cubicTo(50f, 46f, 36f, 38f, 23f, 41f)
+                close()
+            }
 
-        val flagBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(239, 68, 68) // SpeedRed
-            style = Paint.Style.FILL
-        }
-        canvas.drawPath(flagPath, flagBgPaint)
+            val flagBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(239, 68, 68) // SpeedRed
+                style = Paint.Style.FILL
+            }
+            canvas.drawPath(flagPath, flagBgPaint)
 
-        // White checkered squares on waving flag
-        val whiteCheckPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.WHITE
-            style = Paint.Style.FILL
-        }
+            // White checkered squares on waving flag
+            val whiteCheckPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.WHITE
+                style = Paint.Style.FILL
+            }
 
-        // Draw checkered boxes
-        canvas.save()
-        canvas.clipPath(flagPath)
-        val cols = 4
-        val rows = 3
-        val colWidth = 44f / cols
-        val rowHeight = 28f / rows
-        for (r in 0 until rows) {
-            for (c in 0 until cols) {
-                if ((r + c) % 2 == 0) {
-                    val left = 23f + c * colWidth
-                    val top = 13f + r * rowHeight
-                    canvas.drawRect(left, top, left + colWidth, top + rowHeight, whiteCheckPaint)
+            // Draw checkered boxes
+            canvas.save()
+            canvas.clipPath(flagPath)
+            val cols = 4
+            val rows = 3
+            val colWidth = 44f / cols
+            val rowHeight = 28f / rows
+            for (r in 0 until rows) {
+                for (c in 0 until cols) {
+                    if ((r + c) % 2 == 0) {
+                        val left = 23f + c * colWidth
+                        val top = 13f + r * rowHeight
+                        canvas.drawRect(left, top, left + colWidth, top + rowHeight, whiteCheckPaint)
+                    }
                 }
             }
-        }
-        canvas.restore()
+            canvas.restore()
 
-        // Border around flag
-        val flagBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = android.graphics.Color.rgb(185, 28, 28)
-            style = Paint.Style.STROKE
-            strokeWidth = 2f
-        }
-        canvas.drawPath(flagPath, flagBorderPaint)
+            // Border around flag
+            val flagBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = android.graphics.Color.rgb(185, 28, 28)
+                style = Paint.Style.STROKE
+                strokeWidth = 2f
+            }
+            canvas.drawPath(flagPath, flagBorderPaint)
 
-        return BitmapDescriptorFactory.fromBitmap(bitmap)
+            BitmapDescriptorFactory.fromBitmap(bitmap)
+        } catch (_: Throwable) {
+            BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
+        }
     }
 }
 
