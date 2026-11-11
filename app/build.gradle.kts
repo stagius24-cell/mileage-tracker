@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 81
-        versionName = "1.0.80"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Saved Locations: name familiar places and review trip suggestions. Includes the latest map startup fix.\"")
+        versionCode = 82
+        versionName = "1.0.81"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Saved Locations: improved save reliability and trip suggestions.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
