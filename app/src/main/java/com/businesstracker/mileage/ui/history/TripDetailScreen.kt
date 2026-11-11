@@ -294,10 +294,9 @@ fun TripDetailScreen(
                                         targetEntity,
                                         targetPurpose,
                                         trip.notes,
-                                        null,
-                                        null
+                                        { /* Keep the suggestion visible so the user can retry. */ },
+                                        { suggestionDismissed = true }
                                     )
-                                    suggestionDismissed = true
                                 },
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (isBizSuggestion) SucculentPrimary else MaterialTheme.colorScheme.primary

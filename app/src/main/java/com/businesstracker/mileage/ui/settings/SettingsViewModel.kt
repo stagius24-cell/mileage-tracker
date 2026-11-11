@@ -573,7 +573,7 @@ class SettingsViewModel @Inject constructor(
 
     suspend fun getCurrentLocation() = getCurrentLocationUseCase()
 
-    private var locationSaveInProgress = false
+    private val locationSaveGate = SavedLocationSaveGate()
 
     fun saveLocation(
         id: String? = null,
@@ -588,8 +588,7 @@ class SettingsViewModel @Inject constructor(
         onSuccess: (() -> Unit)? = null,
         onError: ((String) -> Unit)? = null
     ) {
-        if (locationSaveInProgress) return
-        locationSaveInProgress = true
+        if (!locationSaveGate.tryBegin()) return
         viewModelScope.launch {
             try {
                 if (name.isBlank()) {
@@ -631,7 +630,7 @@ class SettingsViewModel @Inject constructor(
             } catch (e: Exception) {
                 onError?.invoke("Could not save location. Please try again.")
             } finally {
-                locationSaveInProgress = false
+                locationSaveGate.end()
             }
         }
     }
