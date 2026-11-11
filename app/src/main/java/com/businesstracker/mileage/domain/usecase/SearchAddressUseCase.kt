@@ -28,6 +28,8 @@ class SearchAddressUseCase @Inject constructor(
     private val ioDispatcher: CoroutineDispatcher
 ) {
 
+    suspend operator fun invoke(query: String, maxResults: Int = 5): List<SearchAddressResult> = search(query, maxResults)
+
     suspend fun search(query: String, maxResults: Int = 5): List<SearchAddressResult> = withContext(ioDispatcher) {
         val cleanQuery = query.trim()
         if (cleanQuery.length < 3) return@withContext emptyList()

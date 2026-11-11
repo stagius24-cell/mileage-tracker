@@ -30,6 +30,8 @@ class GetCurrentLocationUseCase @Inject constructor(
     private val ioDispatcher: CoroutineDispatcher
 ) {
 
+    suspend operator fun invoke(): CurrentLocationResult? = getCurrentLocation()
+
     @SuppressLint("MissingPermission")
     suspend fun getCurrentLocation(): CurrentLocationResult? = withContext(ioDispatcher) {
         val cts = CancellationTokenSource()

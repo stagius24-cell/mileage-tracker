@@ -85,7 +85,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.businesstracker.mileage.data.local.entity.SavedLocationEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
-import com.businesstracker.mileage.domain.usecase.AddressSearchResult
+import com.businesstracker.mileage.domain.usecase.SearchAddressResult
 import com.businesstracker.mileage.domain.usecase.CurrentLocationResult
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
@@ -224,8 +224,8 @@ fun SavedLocationDialog(
     prefillLat: Double? = null,
     prefillLng: Double? = null,
     onDismiss: () -> Unit,
-    onSearchAddress: suspend (String) -> List<AddressSearchResult>,
-    onGetCurrentLocation: suspend () -> CurrentLocationResult,
+    onSearchAddress: suspend (String) -> List<SearchAddressResult>,
+    onGetCurrentLocation: suspend () -> CurrentLocationResult?,
     onSave: (
         id: String?,
         name: String,
@@ -252,7 +252,7 @@ fun SavedLocationDialog(
 
     // Search Mode State
     var searchQuery by remember { mutableStateOf("") }
-    var searchResults by remember { mutableStateOf<List<AddressSearchResult>>(emptyList()) }
+    var searchResults by remember { mutableStateOf<List<SearchAddressResult>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
     var searchError by remember { mutableStateOf<String?>(null) }
     var formError by remember { mutableStateOf<String?>(null) }
@@ -268,16 +268,13 @@ fun SavedLocationDialog(
                 isLocating = true
                 val res = onGetCurrentLocation()
                 isLocating = false
-                when (res) {
-                    is CurrentLocationResult.Success -> {
-                        latitude = res.latitude
-                        longitude = res.longitude
-                        address = res.address
-                        if (name.isBlank()) name = "Current Location"
-                    }
-                    is CurrentLocationResult.Error -> {
-                        formError = res.message
-                    }
+                if (res != null) {
+                    latitude = res.latitude
+                    longitude = res.longitude
+                    address = res.formattedAddress ?: address
+                    if (name.isBlank()) name = "Current Location"
+                } else {
+                    formError = "Unable to determine current location"
                 }
             }
         } else {
@@ -338,16 +335,13 @@ fun SavedLocationDialog(
                                         isLocating = true
                                         val res = onGetCurrentLocation()
                                         isLocating = false
-                                        when (res) {
-                                            is CurrentLocationResult.Success -> {
-                                                latitude = res.latitude
-                                                longitude = res.longitude
-                                                address = res.address
-                                                if (name.isBlank()) name = "Current Location"
-                                            }
-                                            is CurrentLocationResult.Error -> {
-                                                formError = res.message
-                                            }
+                                        if (res != null) {
+                                            latitude = res.latitude
+                                            longitude = res.longitude
+                                            address = res.formattedAddress ?: address
+                                            if (name.isBlank()) name = "Current Location"
+                                        } else {
+                                            formError = "Unable to determine current location"
                                         }
                                     }
                                 } else {
@@ -429,7 +423,7 @@ fun SavedLocationDialog(
                                                 latitude = result.latitude
                                                 longitude = result.longitude
                                                 if (name.isBlank()) {
-                                                    name = result.featureName.ifBlank { "Saved Location" }
+                                                    name = "Saved Location"
                                                 }
                                                 searchResults = emptyList()
                                                 searchQuery = ""
@@ -441,7 +435,10 @@ fun SavedLocationDialog(
                                         Spacer(Modifier.width(8.dp))
                                         Text(result.formattedAddress, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                     }
-                                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                                    HorizontalDivider(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                    )
                                 }
                             }
                         }
