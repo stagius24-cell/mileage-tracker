@@ -18,6 +18,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -74,7 +75,7 @@ class TripHistoryViewModel @Inject constructor(
 
     val uiState: StateFlow<TripHistoryUiState> = combine(
         tripRepository.getAllTrips(),
-        savedLocationRepository?.getAllLocationsFlow() ?: flowOf(emptyList()),
+        (savedLocationRepository?.getAllLocationsFlow() ?: flowOf(emptyList())).catch { emit(emptyList()) },
         _searchQuery,
         _classificationFilter,
         _businessEntityFilter
