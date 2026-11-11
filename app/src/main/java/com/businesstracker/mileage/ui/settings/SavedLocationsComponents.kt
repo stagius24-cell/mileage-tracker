@@ -830,6 +830,25 @@ fun SavedLocationsRestorePreviewDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
+                        Spacer(Modifier.height(8.dp))
+
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Trip sync is upload-only (restore unavailable). Saved Locations are ready to restore.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
                         Spacer(Modifier.height(10.dp))
 
                         if (preview.localOnlyLocations.isNotEmpty()) {

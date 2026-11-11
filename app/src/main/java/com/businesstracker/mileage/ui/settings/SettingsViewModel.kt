@@ -76,8 +76,30 @@ data class SettingsUiState(
     val isLoadingRestorePreview: Boolean = false,
     val isApplyingRestore: Boolean = false,
     val savedLocationsBackupMessage: String? = null,
-    val restorePreviewState: SavedLocationsRestorePreviewUi? = null
-)
+    val restorePreviewState: SavedLocationsRestorePreviewUi? = null,
+    // Unified Backup & Restore State
+    val isBackingUpAll: Boolean = false,
+    val unifiedBackupMessage: String? = null,
+    val unifiedBackupError: String? = null
+) {
+    val isUnifiedBackingUp: Boolean
+        get() = isBackingUpAll || isSyncing || isBackingUpSavedLocations
+
+    val latestBackupTimestamp: Long
+        get() = maxOf(sheetsLastSyncTime, savedLocationsLastBackupTime)
+
+    val totalPendingCount: Int
+        get() = pendingTripsCount + savedLocationsPendingBackupCount
+
+    val isAllDataBackedUp: Boolean
+        get() = isSheetsConnected &&
+            pendingTripsCount == 0 &&
+            savedLocationsPendingBackupCount == 0 &&
+            sheetsLastError.isNullOrBlank() &&
+            savedLocationsLastBackupError.isNullOrBlank() &&
+            unifiedBackupError.isNullOrBlank() &&
+            (sheetsLastSyncTime > 0L || savedLocationsLastBackupTime > 0L)
+}
 
 sealed interface SavedLocationsRestorePreviewUi {
     data class Loaded(
@@ -145,7 +167,10 @@ private data class LocationBackupStatusState(
     val isLoadingRestorePreview: Boolean,
     val isApplyingRestore: Boolean,
     val backupMessage: String?,
-    val restorePreview: SavedLocationsRestorePreviewUi?
+    val restorePreview: SavedLocationsRestorePreviewUi?,
+    val isBackingUpAll: Boolean,
+    val unifiedBackupMessage: String?,
+    val unifiedBackupError: String?
 )
 
 @HiltViewModel
@@ -171,6 +196,9 @@ class SettingsViewModel @Inject constructor(
     private val _isApplyingRestore = MutableStateFlow(false)
     private val _savedLocationsBackupMessage = MutableStateFlow<String?>(null)
     private val _restorePreviewState = MutableStateFlow<SavedLocationsRestorePreviewUi?>(null)
+    private val _isBackingUpAll = MutableStateFlow(false)
+    private val _unifiedBackupMessage = MutableStateFlow<String?>(null)
+    private val _unifiedBackupError = MutableStateFlow<String?>(null)
 
     private val generalFlow = combine(
         preferencesManager.isAutoTrackingEnabled,
@@ -294,13 +322,33 @@ class SettingsViewModel @Inject constructor(
     }
 
     private val locationBackupActionsFlow = combine(
-        _isBackingUpSavedLocations,
-        _isLoadingRestorePreview,
-        _isApplyingRestore,
-        _savedLocationsBackupMessage,
-        _restorePreviewState
-    ) { backingUp, loadingPreview, applyingRestore, msg, preview ->
-        listOf<Any?>(backingUp, loadingPreview, applyingRestore, msg, preview)
+        combine(
+            _isBackingUpSavedLocations,
+            _isLoadingRestorePreview,
+            _isApplyingRestore,
+            _savedLocationsBackupMessage,
+            _restorePreviewState
+        ) { backingUp, loadingPreview, applyingRestore, msg, preview ->
+            listOf<Any?>(backingUp, loadingPreview, applyingRestore, msg, preview)
+        },
+        combine(
+            _isBackingUpAll,
+            _unifiedBackupMessage,
+            _unifiedBackupError
+        ) { backingUpAll, unifiedMsg, unifiedErr ->
+            Triple(backingUpAll, unifiedMsg, unifiedErr)
+        }
+    ) { locActions, (backingUpAll, unifiedMsg, unifiedErr) ->
+        listOf<Any?>(
+            locActions[0],
+            locActions[1],
+            locActions[2],
+            locActions[3],
+            locActions[4],
+            backingUpAll,
+            unifiedMsg,
+            unifiedErr
+        )
     }
 
     private val locationBackupStatusFlow = combine(
@@ -315,7 +363,10 @@ class SettingsViewModel @Inject constructor(
             isLoadingRestorePreview = actions[1] as Boolean,
             isApplyingRestore = actions[2] as Boolean,
             backupMessage = actions[3] as String?,
-            restorePreview = actions[4] as SavedLocationsRestorePreviewUi?
+            restorePreview = actions[4] as SavedLocationsRestorePreviewUi?,
+            isBackingUpAll = actions[5] as Boolean,
+            unifiedBackupMessage = actions[6] as String?,
+            unifiedBackupError = actions[7] as String?
         )
     }
 
@@ -379,7 +430,10 @@ class SettingsViewModel @Inject constructor(
             isLoadingRestorePreview = backupStatus.isLoadingRestorePreview,
             isApplyingRestore = backupStatus.isApplyingRestore,
             savedLocationsBackupMessage = backupStatus.backupMessage,
-            restorePreviewState = backupStatus.restorePreview
+            restorePreviewState = backupStatus.restorePreview,
+            isBackingUpAll = backupStatus.isBackingUpAll,
+            unifiedBackupMessage = backupStatus.unifiedBackupMessage,
+            unifiedBackupError = backupStatus.unifiedBackupError
         )
     }.stateIn(
         scope = viewModelScope,
@@ -862,6 +916,64 @@ class SettingsViewModel @Inject constructor(
 
     fun clearSavedLocationsBackupMessage() {
         _savedLocationsBackupMessage.value = null
+    }
+
+    fun clearUnifiedBackupMessage() {
+        _unifiedBackupMessage.value = null
+        _unifiedBackupError.value = null
+    }
+
+    fun backupAllNow() {
+        if (_isBackingUpAll.value || _isSyncing.value || _isBackingUpSavedLocations.value) return
+        _isBackingUpAll.value = true
+        _unifiedBackupMessage.value = null
+        _unifiedBackupError.value = null
+        viewModelScope.launch {
+            try {
+                // 1. Sync pending trips to Google Sheets
+                val tripResult = sheetsSyncService.syncPendingTrips()
+                // 2. Back up all Saved Locations (full snapshot)
+                val locResult = savedLocationsSheetsService.backupSavedLocations(fullSnapshot = true)
+
+                val tripSuccess = tripResult is SheetsSyncResult.Success
+                val locSuccess = locResult is SavedLocationsSyncResult.Success
+
+                if (tripSuccess && locSuccess) {
+                    _unifiedBackupMessage.value = "All data backed up"
+                    _unifiedBackupError.value = null
+                } else if (tripSuccess && !locSuccess) {
+                    _unifiedBackupError.value = "Trips up to date, but Saved Locations backup failed: ${locResult.toMessage()}"
+                } else if (!tripSuccess && locSuccess) {
+                    val tripMsg = when (tripResult) {
+                        is SheetsSyncResult.PartialSuccess -> "Trips partially synced (${tripResult.successCount} succeeded, ${tripResult.failedCount} failed)"
+                        is SheetsSyncResult.NotConfigured -> "Google Sheets not configured"
+                        is SheetsSyncResult.TokenExpired -> tripResult.message
+                        is SheetsSyncResult.AccessDenied -> tripResult.message
+                        is SheetsSyncResult.NotFound -> tripResult.message
+                        is SheetsSyncResult.RateLimited -> tripResult.message
+                        is SheetsSyncResult.ServerError -> tripResult.message
+                        is SheetsSyncResult.HttpError -> tripResult.message
+                        is SheetsSyncResult.NetworkError -> tripResult.message
+                        is SheetsSyncResult.InvalidConfiguration -> tripResult.message
+                        is SheetsSyncResult.UnexpectedError -> tripResult.exception.localizedMessage ?: "Trips sync error"
+                        is SheetsSyncResult.Success -> ""
+                    }
+                    _unifiedBackupError.value = "Saved Locations backed up, but trips failed: $tripMsg"
+                } else {
+                    val tripMsg = when (tripResult) {
+                        is SheetsSyncResult.NotConfigured -> "Google Sheets not configured"
+                        is SheetsSyncResult.TokenExpired -> tripResult.message
+                        is SheetsSyncResult.AccessDenied -> tripResult.message
+                        is SheetsSyncResult.NetworkError -> tripResult.message
+                        is SheetsSyncResult.UnexpectedError -> tripResult.exception.localizedMessage ?: "Sync error"
+                        else -> "Trips sync failed"
+                    }
+                    _unifiedBackupError.value = "Backup failed: $tripMsg; ${locResult.toMessage()}"
+                }
+            } finally {
+                _isBackingUpAll.value = false
+            }
+        }
     }
 
     fun confirmApplySavedLocationsRestore() {

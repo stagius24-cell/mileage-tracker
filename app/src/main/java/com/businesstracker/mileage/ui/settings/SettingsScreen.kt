@@ -45,7 +45,11 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatterySaver
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Error
@@ -772,109 +776,111 @@ fun SettingsScreen(
                     Spacer(Modifier.width(8.dp))
                     Text("Add Saved Location", fontWeight = FontWeight.Bold)
                 }
-
-                SectionDivider()
-
-                val locTimeFormat = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
-                val lastLocationBackup = if (state.savedLocationsLastBackupTime > 0L) {
-                    locTimeFormat.format(Date(state.savedLocationsLastBackupTime))
-                } else {
-                    "Never"
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    MetaText("Last backup", lastLocationBackup)
-                    MetaText("Pending changes", state.savedLocationsPendingBackupCount.toString(), Alignment.End)
-                }
-
-                if (!state.savedLocationsLastBackupError.isNullOrBlank()) {
-                    CompactError(state.savedLocationsLastBackupError.orEmpty())
-                }
-                if (!state.savedLocationsBackupMessage.isNullOrBlank()) {
-                    CompactSuccess(state.savedLocationsBackupMessage.orEmpty())
-                }
-
-                val backupControlsEnabled = !state.isBackingUpSavedLocations &&
-                    !state.isLoadingRestorePreview &&
-                    !state.isApplyingRestore
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = viewModel::backUpSavedLocationsNow,
-                        enabled = backupControlsEnabled,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .defaultMinSize(minHeight = 44.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        if (state.isBackingUpSavedLocations) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = SucculentPrimary,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = if (state.isBackingUpSavedLocations) "Backing Up..." else "Back Up Now"
-                        )
-                    }
-
-                    OutlinedButton(
-                        onClick = viewModel::restoreSavedLocationsFromSheets,
-                        enabled = backupControlsEnabled,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .defaultMinSize(minHeight = 44.dp),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        if (state.isLoadingRestorePreview) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = SucculentPrimary,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = if (state.isLoadingRestorePreview) "Loading Preview..." else "Restore from Google Sheets"
-                        )
-                    }
-                }
             }
         }
 
         item {
             val timeFormat = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
-            val lastSync = if (state.sheetsLastSyncTime > 0L) {
-                timeFormat.format(Date(state.sheetsLastSyncTime))
+            val latestTime = state.latestBackupTimestamp
+            val lastBackupFormatted = if (latestTime > 0L) {
+                timeFormat.format(Date(latestTime))
             } else {
                 "Never"
             }
             var isSpreadsheetIdExpanded by remember { mutableStateOf(false) }
 
             SettingsSection(
-                title = "Google Sheets",
-                subtitle = if (state.isSheetsConnected) "Connected" else "Not connected",
+                title = "Backup & Restore",
+                subtitle = if (state.isSheetsConnected) "Google Sheets · Connected" else "Google Sheets · Not connected",
                 subtitlePositive = state.isSheetsConnected,
-                icon = Icons.Default.TableChart
+                icon = Icons.Default.CloudSync
             ) {
-                if (!state.sheetsLastError.isNullOrBlank()) {
-                    CompactError(state.sheetsLastError.orEmpty())
+                // 1. Combined Backup Status
+                CombinedBackupStatusBox(
+                    state = state,
+                    lastBackupFormatted = lastBackupFormatted
+                )
+
+                // 2. Compact Inline Buttons (equal width, minHeight 48dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val isBackingUp = state.isUnifiedBackingUp
+                    val isRestoring = state.isLoadingRestorePreview || state.isApplyingRestore
+
+                    Button(
+                        onClick = viewModel::backupAllNow,
+                        enabled = !isBackingUp && !isRestoring && state.isSheetsConnected,
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                    ) {
+                        if (isBackingUp) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = SucculentPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Backing Up...", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.CloudUpload,
+                                contentDescription = null,
+                                tint = SucculentPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Back Up", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
+
+                    Button(
+                        onClick = viewModel::restoreSavedLocationsFromSheets,
+                        enabled = !isBackingUp && !isRestoring && state.isSheetsConnected,
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        ),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+                    ) {
+                        if (isRestoring) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = SucculentPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Loading...", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.CloudDownload,
+                                contentDescription = null,
+                                tint = SucculentPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Restore", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        }
+                    }
                 }
-                if (!state.sheetsSyncMessage.isNullOrBlank()) {
-                    CompactSuccess(state.sheetsSyncMessage.orEmpty())
-                }
+
+                Text(
+                    text = "Google account and spreadsheet configuration remain available below.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 AccountRow(
                     connected = state.hasOAuthCredential,
@@ -938,30 +944,15 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    MetaText("Last sync", lastSync)
-                    MetaText("Pending", state.pendingTripsCount.toString(), Alignment.End)
-                }
-
-                Button(
-                    onClick = viewModel::syncSheetsNow,
-                    enabled = !state.isSyncing,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-                ) {
-                    if (state.isSyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(Icons.Default.Sync, contentDescription = null)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (state.isSyncing) "Syncing" else "Sync now")
+                    MetaText(
+                        "Last sync",
+                        if (state.sheetsLastSyncTime > 0L) timeFormat.format(Date(state.sheetsLastSyncTime)) else "Never"
+                    )
+                    MetaText(
+                        "Pending",
+                        "${state.pendingTripsCount} trips · ${state.savedLocationsPendingBackupCount} places",
+                        Alignment.End
+                    )
                 }
             }
         }
@@ -993,6 +984,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.83 (Build 84)" to "Unified compact Backup & Restore card with combined status and inline controls.",
                 "Version 1.0.82 (Build 83)" to "Added automatic & manual Google Sheets backup and preview-confirmed restore for Saved Locations.",
                 "Version 1.0.78 (Build 79)" to "Matching Origin GPS Radar & Destination Finish Flag icons on Google Map and trip cards; tighter map zoom; updated version history.",
                 "Version 1.0.77 (Build 78)" to "Compacted wheel time picker dialog by 20%, tightened button spacing, and removed subtitle description text.",
@@ -1604,4 +1596,156 @@ private fun MetaText(
 @Composable
 private fun SectionDivider() {
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+@Composable
+private fun CombinedBackupStatusBox(
+    state: SettingsUiState,
+    lastBackupFormatted: String
+) {
+    val isAllBackedUp = state.isAllDataBackedUp
+    val hasPending = state.totalPendingCount > 0
+    val hasError = !state.unifiedBackupError.isNullOrBlank() ||
+        !state.sheetsLastError.isNullOrBlank() ||
+        !state.savedLocationsLastBackupError.isNullOrBlank()
+    val isConnected = state.isSheetsConnected
+
+    val boxBg = when {
+        hasError -> SpeedRed.copy(alpha = 0.08f)
+        isAllBackedUp -> SucculentPrimary.copy(alpha = 0.08f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    }
+
+    val boxBorder = when {
+        hasError -> BorderStroke(1.dp, SpeedRed.copy(alpha = 0.3f))
+        isAllBackedUp -> BorderStroke(1.dp, SucculentPrimary.copy(alpha = 0.25f))
+        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+    }
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = boxBg,
+        border = boxBorder,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (hasError) {
+                    Icon(
+                        imageVector = Icons.Default.Error,
+                        contentDescription = null,
+                        tint = SpeedRed,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = if (!state.sheetsLastError.isNullOrBlank() && !state.savedLocationsLastBackupError.isNullOrBlank()) {
+                            "Backup failed"
+                        } else {
+                            "Partial backup completed"
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = SpeedRed
+                    )
+                } else if (isAllBackedUp) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = SucculentPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "All data backed up",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                } else if (!isConnected) {
+                    Icon(
+                        imageVector = Icons.Default.CloudOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Google Sheets not connected",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else if (hasPending) {
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = null,
+                        tint = SucculentPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Pending backup changes",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Cloud,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Text(
+                        text = "Ready to back up",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            // Subtext 1: Trips and locations status
+            val tripsStatusText = if (state.pendingTripsCount > 0) {
+                "${state.pendingTripsCount} trip${if (state.pendingTripsCount == 1) "" else "s"} pending"
+            } else {
+                "Trips up to date"
+            }
+            val locCount = state.savedLocations.size
+            val locsStatusText = if (state.savedLocationsPendingBackupCount > 0) {
+                "${state.savedLocationsPendingBackupCount} place${if (state.savedLocationsPendingBackupCount == 1) "" else "s"} pending"
+            } else {
+                "$locCount saved location${if (locCount == 1) "" else "s"}"
+            }
+
+            Text(
+                text = "$tripsStatusText · $locsStatusText",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Subtext 2: Latest backup timestamp
+            Text(
+                text = "Last backup: $lastBackupFormatted",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            // Error message if present
+            val errorMsg = state.unifiedBackupError ?: state.sheetsLastError ?: state.savedLocationsLastBackupError
+            if (!errorMsg.isNullOrBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = errorMsg,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SpeedRed
+                )
+            }
+        }
+    }
 }

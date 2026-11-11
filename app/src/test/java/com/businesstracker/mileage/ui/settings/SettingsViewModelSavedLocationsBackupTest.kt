@@ -113,9 +113,12 @@ class SettingsViewModelSavedLocationsBackupTest {
         Dispatchers.resetMain()
     }
 
-    private fun createViewModel(fakeLocationsService: SavedLocationsSheetsService): SettingsViewModel {
+    private fun createViewModel(
+        fakeLocationsService: SavedLocationsSheetsService,
+        fakeTripsService: GoogleSheetsSyncService? = null
+    ): SettingsViewModel {
         val authManager = GoogleAuthManager(context, secureStorageManager, preferencesManager)
-        val tripsSyncService = GoogleSheetsSyncService(preferencesManager, emptyTripRepo, secureStorageManager, authManager, Gson())
+        val tripsSyncService = fakeTripsService ?: GoogleSheetsSyncService(preferencesManager, emptyTripRepo, secureStorageManager, authManager, Gson())
         return SettingsViewModel(
             preferencesManager = preferencesManager,
             activityTransitionManager = ActivityTransitionManager(context),
@@ -237,5 +240,121 @@ class SettingsViewModelSavedLocationsBackupTest {
         assertEquals(setOf("local-conflict"), appliedApprovedConflicts)
         assertFalse(viewModel.uiState.value.isApplyingRestore)
         assertTrue(viewModel.uiState.value.savedLocationsBackupMessage!!.contains("Restored 1 new, 1 overwritten"))
+    }
+
+    @Test
+    fun backupAllNow_bothSucceed_setsUnifiedSuccessMessage() = runTest {
+        var tripsSynced = false
+        var locationsBackedUp = false
+
+        val fakeTripsService = object : GoogleSheetsSyncService(
+            preferencesManager, emptyTripRepo, secureStorageManager, Gson()
+        ) {
+            override suspend fun syncPendingTrips(): com.businesstracker.mileage.data.remote.SheetsSyncResult {
+                tripsSynced = true
+                return com.businesstracker.mileage.data.remote.SheetsSyncResult.Success(1, 0)
+            }
+        }
+
+        val fakeLocsService = object : SavedLocationsSheetsService(
+            preferencesManager, repository, database.savedLocationSyncQueueDao(), secureStorageManager, null, Gson(), testDispatcher
+        ) {
+            override suspend fun backupSavedLocations(fullSnapshot: Boolean): SavedLocationsSyncResult {
+                locationsBackedUp = true
+                return SavedLocationsSyncResult.Success(1, 0, 1731350000000L)
+            }
+        }
+
+        val viewModel = createViewModel(fakeLocsService, fakeTripsService)
+        advanceUntilIdle()
+
+        viewModel.backupAllNow()
+        withContext(Dispatchers.Default) {
+            withTimeout(5000) {
+                while (viewModel.uiState.value.unifiedBackupMessage == null) {
+                    advanceUntilIdle()
+                    delay(10)
+                }
+            }
+        }
+        advanceUntilIdle()
+
+        assertTrue(tripsSynced)
+        assertTrue(locationsBackedUp)
+        assertEquals("All data backed up", viewModel.uiState.value.unifiedBackupMessage)
+        assertNull(viewModel.uiState.value.unifiedBackupError)
+        assertFalse(viewModel.uiState.value.isBackingUpAll)
+    }
+
+    @Test
+    fun backupAllNow_tripsFail_reportsPartialFailureAccurately() = runTest {
+        val fakeTripsService = object : GoogleSheetsSyncService(
+            preferencesManager, emptyTripRepo, secureStorageManager, Gson()
+        ) {
+            override suspend fun syncPendingTrips(): com.businesstracker.mileage.data.remote.SheetsSyncResult {
+                return com.businesstracker.mileage.data.remote.SheetsSyncResult.NetworkError("No connection", java.io.IOException("No connection"))
+            }
+        }
+
+        val fakeLocsService = object : SavedLocationsSheetsService(
+            preferencesManager, repository, database.savedLocationSyncQueueDao(), secureStorageManager, null, Gson(), testDispatcher
+        ) {
+            override suspend fun backupSavedLocations(fullSnapshot: Boolean): SavedLocationsSyncResult {
+                return SavedLocationsSyncResult.Success(1, 0, 1731350000000L)
+            }
+        }
+
+        val viewModel = createViewModel(fakeLocsService, fakeTripsService)
+        advanceUntilIdle()
+
+        viewModel.backupAllNow()
+        withContext(Dispatchers.Default) {
+            withTimeout(5000) {
+                while (viewModel.uiState.value.unifiedBackupError == null) {
+                    advanceUntilIdle()
+                    delay(10)
+                }
+            }
+        }
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.unifiedBackupMessage)
+        assertTrue(viewModel.uiState.value.unifiedBackupError!!.contains("Saved Locations backed up, but trips failed"))
+    }
+
+    @Test
+    fun backupAllNow_locationsFail_reportsPartialFailureAccurately() = runTest {
+        val fakeTripsService = object : GoogleSheetsSyncService(
+            preferencesManager, emptyTripRepo, secureStorageManager, Gson()
+        ) {
+            override suspend fun syncPendingTrips(): com.businesstracker.mileage.data.remote.SheetsSyncResult {
+                return com.businesstracker.mileage.data.remote.SheetsSyncResult.Success(2, 0)
+            }
+        }
+
+        val fakeLocsService = object : SavedLocationsSheetsService(
+            preferencesManager, repository, database.savedLocationSyncQueueDao(), secureStorageManager, null, Gson(), testDispatcher
+        ) {
+            override suspend fun backupSavedLocations(fullSnapshot: Boolean): SavedLocationsSyncResult {
+                return SavedLocationsSyncResult.NetworkError("Failed to reach Sheets")
+            }
+        }
+
+        val viewModel = createViewModel(fakeLocsService, fakeTripsService)
+        advanceUntilIdle()
+
+        viewModel.backupAllNow()
+        withContext(Dispatchers.Default) {
+            withTimeout(5000) {
+                while (viewModel.uiState.value.unifiedBackupError == null) {
+                    advanceUntilIdle()
+                    delay(10)
+                }
+            }
+        }
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.unifiedBackupMessage)
+        assertTrue(viewModel.uiState.value.unifiedBackupError!!.contains("Trips up to date, but Saved Locations backup failed"))
     }
 }
