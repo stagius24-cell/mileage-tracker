@@ -2,6 +2,7 @@ package com.businesstracker.mileage.ui.settings
 
 import android.Manifest
 import android.content.pm.PackageManager
+import kotlin.math.roundToInt
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -183,8 +184,9 @@ fun SavedLocationItem(
                         shape = RoundedCornerShape(6.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
+                        val radiusFeet = (location.radiusMeters * 3.28084).roundToInt()
                         Text(
-                            text = "${location.radiusMeters}m",
+                            text = "${radiusFeet} ft",
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -329,8 +331,8 @@ fun SavedLocationDialog(
     ) {
         Surface(
             modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .heightIn(max = 680.dp),
+                .fillMaxWidth(0.94f)
+                .heightIn(max = 720.dp),
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
@@ -338,7 +340,7 @@ fun SavedLocationDialog(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(20.dp)
+                    .padding(horizontal = 18.dp, vertical = 14.dp)
             ) {
                 // Header
                 Row(
@@ -355,29 +357,88 @@ fun SavedLocationDialog(
                         onClick = onDismiss,
                         enabled = !isSaving,
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(40.dp)
                             .semantics {
                                 role = Role.Button
                                 contentDescription = "Close dialog"
                             }
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(24.dp))
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(22.dp))
                     }
                 }
 
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(8.dp))
 
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Quick Action Buttons: Search Address & Current Location
+                    // Search Address + Inline GPS button
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = {
+                                searchJob?.cancel()
+                                isSearching = false
+                                searchQuery = it
+                                searchResults = emptyList()
+                                searchError = null
+                            },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Search Address", style = MaterialTheme.typography.labelMedium) },
+                            placeholder = { Text("Search address", style = MaterialTheme.typography.bodySmall) },
+                            textStyle = MaterialTheme.typography.bodyMedium,
+                            trailingIcon = {
+                                if (isSearching) {
+                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                } else {
+                                    IconButton(
+                                        onClick = {
+                                            if (searchQuery.isNotBlank()) {
+                                                searchJob?.cancel()
+                                                val requestedQuery = searchQuery.trim()
+                                                searchJob = coroutineScope.launch {
+                                                    isSearching = true
+                                                    try {
+                                                        val results = onSearchAddress(requestedQuery)
+                                                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                                                        if (searchQuery.trim() != requestedQuery) return@launch
+                                                        searchResults = results
+                                                        if (results.isEmpty()) {
+                                                            searchError = "No locations found"
+                                                        }
+                                                    } catch (e: kotlinx.coroutines.CancellationException) {
+                                                        throw e
+                                                    } catch (e: Exception) {
+                                                        searchError = "Search unavailable: ${e.localizedMessage ?: "network error"}"
+                                                    } finally {
+                                                        isSearching = false
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .semantics {
+                                                role = Role.Button
+                                                contentDescription = "Search address query"
+                                            }
+                                    ) {
+                                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp)
+                        )
+
+                        // Inline Use GPS button on the right
                         OutlinedButton(
                             onClick = {
                                 if (hasLocationPermission(context)) {
@@ -405,76 +466,19 @@ fun SavedLocationDialog(
                             },
                             enabled = !isLocating && !isSaving,
                             modifier = Modifier
-                                .weight(1f)
                                 .defaultMinSize(minHeight = 48.dp),
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             if (isLocating) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             } else {
-                                Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Use GPS", style = MaterialTheme.typography.labelMedium)
+                                Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text("GPS", style = MaterialTheme.typography.labelMedium)
                             }
                         }
                     }
-
-                    // Search address bar
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = {
-                            searchJob?.cancel()
-                            isSearching = false
-                            searchQuery = it
-                            searchResults = emptyList()
-                            searchError = null
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Search Address") },
-                        placeholder = { Text("e.g. 123 Main St, San Jose, CA") },
-                        trailingIcon = {
-                            if (isSearching) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else {
-                                IconButton(
-                                    onClick = {
-                                        if (searchQuery.isNotBlank()) {
-                                            searchJob?.cancel()
-                                            val requestedQuery = searchQuery.trim()
-                                            searchJob = coroutineScope.launch {
-                                                isSearching = true
-                                                try {
-                                                    val results = onSearchAddress(requestedQuery)
-                                                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                                                    if (searchQuery.trim() != requestedQuery) return@launch
-                                                    searchResults = results
-                                                    if (results.isEmpty()) {
-                                                        searchError = "No locations found"
-                                                    }
-                                                } catch (e: kotlinx.coroutines.CancellationException) {
-                                                    throw e
-                                                } catch (e: Exception) {
-                                                    searchError = "Search unavailable: ${e.localizedMessage ?: "network error"}"
-                                                } finally {
-                                                    isSearching = false
-                                                }
-                                            }
-                                        }
-                                    },
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .semantics {
-                                            role = Role.Button
-                                            contentDescription = "Search address query"
-                                        }
-                                ) {
-                                    Icon(Icons.Default.Search, contentDescription = null)
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
-                    )
 
                     if (searchError != null) {
                         Text(
@@ -496,7 +500,7 @@ fun SavedLocationDialog(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .defaultMinSize(minHeight = 48.dp)
+                                            .defaultMinSize(minHeight = 44.dp)
                                             .clickable {
                                                 address = result.formattedAddress
                                                 latitude = result.latitude
@@ -507,7 +511,7 @@ fun SavedLocationDialog(
                                                 searchResults = emptyList()
                                                 searchQuery = ""
                                             }
-                                            .padding(vertical = 8.dp, horizontal = 6.dp)
+                                            .padding(vertical = 6.dp, horizontal = 6.dp)
                                             .semantics {
                                                 role = Role.Button
                                                 contentDescription = "Select address ${result.formattedAddress}"
@@ -527,7 +531,7 @@ fun SavedLocationDialog(
                         }
                     }
 
-                    // Name Field
+                    // Compact Name Field
                     OutlinedTextField(
                         value = name,
                         onValueChange = {
@@ -535,21 +539,24 @@ fun SavedLocationDialog(
                             formError = null
                         },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Location Name *") },
-                        placeholder = { Text("e.g. Home, Succulent Nursery, Warehouse") },
+                        label = { Text("Location Name *", style = MaterialTheme.typography.labelMedium) },
+                        placeholder = { Text("e.g. Home, Succulent Nursery, Warehouse", style = MaterialTheme.typography.bodySmall) },
+                        textStyle = MaterialTheme.typography.bodyMedium,
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(10.dp)
                     )
 
-                    // Address Field (resolved)
+                    // Compact Address Field (resolved)
                     OutlinedTextField(
                         value = address,
                         onValueChange = { address = it },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Address *") },
-                        placeholder = { Text("123 Example Street, San Jose, CA") },
-                        minLines = 2,
-                        shape = RoundedCornerShape(12.dp)
+                        label = { Text("Address *", style = MaterialTheme.typography.labelMedium) },
+                        placeholder = { Text("123 Example Street, San Jose, CA", style = MaterialTheme.typography.bodySmall) },
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        singleLine = false,
+                        maxLines = 2,
+                        shape = RoundedCornerShape(10.dp)
                     )
 
                     if (latitude != 0.0 || longitude != 0.0) {
@@ -561,20 +568,20 @@ fun SavedLocationDialog(
                     }
 
                     // Icon Picker
-                    Text("Location Icon", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text("Location Icon", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                     LazyRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(AVAILABLE_LOCATION_ICONS) { (key, label) ->
                             FilterChip(
                                 selected = selectedIcon.equals(key, ignoreCase = true),
                                 onClick = { selectedIcon = key },
-                                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                                modifier = Modifier.defaultMinSize(minHeight = 40.dp),
                                 leadingIcon = {
                                     Icon(getIconForLocation(key), contentDescription = null, modifier = Modifier.size(16.dp))
                                 },
-                                label = { Text(label) },
+                                label = { Text(label, style = MaterialTheme.typography.labelMedium) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = SucculentPrimary,
                                     selectedLabelColor = Color.White,
@@ -584,15 +591,16 @@ fun SavedLocationDialog(
                         }
                     }
 
-                    // Matching Radius Slider (50m - 500m)
-                    Column {
+                    // Matching Radius Slider in Imperial units (feet)
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        val feetValue = (radiusMeters * 3.28084).roundToInt()
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Matching Radius", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                            Text("${radiusMeters.toInt()} meters", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = SucculentPrimary)
+                            Text("Matching Radius", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                            Text("$feetValue ft", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = SucculentPrimary)
                         }
                         Slider(
                             value = radiusMeters,
@@ -607,17 +615,17 @@ fun SavedLocationDialog(
                     }
 
                     // Classification Preference
-                    Text("Classification Preference", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text("Classification Preference", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         listOf("NONE" to "None", "BUSINESS" to "Business", "PERSONAL" to "Personal").forEach { (pref, label) ->
                             FilterChip(
                                 selected = classificationPref == pref,
                                 onClick = { classificationPref = pref },
-                                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                                label = { Text(label) },
+                                modifier = Modifier.defaultMinSize(minHeight = 40.dp),
+                                label = { Text(label, style = MaterialTheme.typography.labelMedium) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = SucculentPrimary,
                                     selectedLabelColor = Color.White
@@ -627,17 +635,17 @@ fun SavedLocationDialog(
                     }
 
                     if (classificationPref == "BUSINESS") {
-                        Text("Business Entity", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text("Business Entity", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             BusinessEntity.entries.forEach { entity ->
                                 FilterChip(
                                     selected = businessEntity == entity.displayName,
                                     onClick = { businessEntity = entity.displayName },
-                                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                                    label = { Text(entity.displayName) },
+                                    modifier = Modifier.defaultMinSize(minHeight = 40.dp),
+                                    label = { Text(entity.displayName, style = MaterialTheme.typography.labelMedium) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = SucculentPrimary,
                                         selectedLabelColor = Color.White
@@ -657,7 +665,7 @@ fun SavedLocationDialog(
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(10.dp))
 
                 // Footer Buttons
                 Row(
