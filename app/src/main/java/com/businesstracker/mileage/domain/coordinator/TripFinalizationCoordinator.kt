@@ -13,11 +13,9 @@ import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.model.TripPurpose
 import com.businesstracker.mileage.domain.model.Waypoint
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
-import com.businesstracker.mileage.domain.repository.SavedLocationRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.domain.usecase.CalculateMileageRateUseCase
 import com.businesstracker.mileage.domain.usecase.GeocodeLocationUseCase
-import com.businesstracker.mileage.domain.usecase.ResolveSmartTripNamesUseCase
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.sync.Mutex
@@ -40,9 +38,7 @@ class TripFinalizationCoordinator @Inject constructor(
     private val rateCalculator: CalculateMileageRateUseCase,
     private val preferencesManager: TrackingPreferencesManager,
     private val gson: Gson,
-    private val ioDispatcher: CoroutineDispatcher,
-    private val savedLocationRepository: SavedLocationRepository? = null,
-    private val resolveSmartTripNamesUseCase: ResolveSmartTripNamesUseCase? = null
+    private val ioDispatcher: CoroutineDispatcher
 ) {
     private val finalizationMutex = Mutex()
 
@@ -154,50 +150,11 @@ class TripFinalizationCoordinator @Inject constructor(
             val waypointsJson = gson.toJson(waypoints)
 
             val isPersonalDrive = activeTrip.suggestedBusiness.equals("Personal", ignoreCase = true)
-
-            // Section 6: Check Saved Locations classification preferences for newly completed trips
-            val savedLocations = try {
-                savedLocationRepository.getAllLocations()
-            } catch (_: Exception) {
-                emptyList()
-            }
-            val smartNames = resolveSmartTripNamesUseCase.resolve(
-                TripEntity(
-                    id = activeTrip.id,
-                    date = dateString,
-                    startTime = startTime,
-                    endTime = endTime,
-                    startAddress = startAddress,
-                    endAddress = endAddress,
-                    startLatitude = startLat,
-                    startLongitude = startLng,
-                    endLatitude = endLat,
-                    endLongitude = endLng,
-                    totalDistanceMiles = totalDistanceMiles,
-                    businessMiles = businessMiles,
-                    businessEntity = "",
-                    purpose = "",
-                    trackingMethod = "",
-                    classification = "",
-                    applicableRate = applicableRate,
-                    calculatedDeduction = calculatedDeduction,
-                    notes = null,
-                    waypointsJson = waypointsJson,
-                    syncStatus = "PENDING",
-                    syncedAt = null
-                ),
-                savedLocations
-            )
-            val suggestion = resolveSmartTripNamesUseCase.evaluateClassificationSuggestion(
-                smartNames.startSavedLocation,
-                smartNames.endSavedLocation
-            )
-
             val businessEntity = if (isPersonalDrive) {
                 BusinessEntity.PERSONAL.displayName
             } else {
                 activeTrip.suggestedBusiness.ifEmpty {
-                    suggestion.suggestedBusinessEntity ?: BusinessEntity.MY_SUCCULENT_CORNER.displayName
+                    BusinessEntity.MY_SUCCULENT_CORNER.displayName
                 }
             }
             val classification = if (isPersonalDrive) {

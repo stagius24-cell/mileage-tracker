@@ -90,7 +90,12 @@ import com.businesstracker.mileage.domain.usecase.CurrentLocationResult
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
-import kotlinx.coroutines.launch
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.Job
 
 fun getIconForLocation(iconKey: String): ImageVector {
     return when (iconKey.lowercase()) {
@@ -207,11 +212,27 @@ fun SavedLocationItem(
 
             Spacer(Modifier.width(8.dp))
 
-            IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit", tint = SucculentPrimary, modifier = Modifier.size(18.dp))
+            IconButton(
+                onClick = onEdit,
+                modifier = Modifier
+                    .size(48.dp)
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = "Edit saved location ${location.name}"
+                    }
+            ) {
+                Icon(Icons.Default.Edit, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(20.dp))
             }
-            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete", tint = SpeedRed, modifier = Modifier.size(18.dp))
+            IconButton(
+                onClick = onDelete,
+                modifier = Modifier
+                    .size(48.dp)
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = "Delete saved location ${location.name}"
+                    }
+            ) {
+                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = SpeedRed, modifier = Modifier.size(20.dp))
             }
         }
     }
@@ -235,7 +256,8 @@ fun SavedLocationDialog(
         radiusMeters: Int,
         icon: String,
         classificationPreference: String?,
-        businessEntity: String?
+        businessEntity: String?,
+        onComplete: (error: String?) -> Unit
     ) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -254,8 +276,10 @@ fun SavedLocationDialog(
     var searchQuery by remember { mutableStateOf("") }
     var searchResults by remember { mutableStateOf<List<SearchAddressResult>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
+    var searchJob by remember { mutableStateOf<Job?>(null) }
     var searchError by remember { mutableStateOf<String?>(null) }
     var formError by remember { mutableStateOf<String?>(null) }
+    var isSaving by remember { mutableStateOf(false) }
 
     // GPS fetch state
     var isLocating by remember { mutableStateOf(false) }
@@ -266,15 +290,20 @@ fun SavedLocationDialog(
         if (granted) {
             coroutineScope.launch {
                 isLocating = true
-                val res = onGetCurrentLocation()
-                isLocating = false
-                if (res != null) {
-                    latitude = res.latitude
-                    longitude = res.longitude
-                    address = res.formattedAddress ?: address
-                    if (name.isBlank()) name = "Current Location"
-                } else {
-                    formError = "Unable to determine current location"
+                try {
+                    val res = onGetCurrentLocation()
+                    if (res != null) {
+                        latitude = res.latitude
+                        longitude = res.longitude
+                        address = res.formattedAddress ?: address
+                        if (name.isBlank()) name = "Current Location"
+                    } else {
+                        formError = "Unable to determine current location"
+                    }
+                } catch (e: Exception) {
+                    formError = e.localizedMessage ?: "Location lookup failed"
+                } finally {
+                    isLocating = false
                 }
             }
         } else {
@@ -283,7 +312,9 @@ fun SavedLocationDialog(
     }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            if (!isSaving) onDismiss()
+        },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(
@@ -310,8 +341,17 @@ fun SavedLocationDialog(
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    IconButton(
+                        onClick = onDismiss,
+                        enabled = !isSaving,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .semantics {
+                                role = Role.Button
+                                contentDescription = "Close dialog"
+                            }
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(24.dp))
                     }
                 }
 
@@ -333,28 +373,36 @@ fun SavedLocationDialog(
                                 if (hasLocationPermission(context)) {
                                     coroutineScope.launch {
                                         isLocating = true
-                                        val res = onGetCurrentLocation()
-                                        isLocating = false
-                                        if (res != null) {
-                                            latitude = res.latitude
-                                            longitude = res.longitude
-                                            address = res.formattedAddress ?: address
-                                            if (name.isBlank()) name = "Current Location"
-                                        } else {
-                                            formError = "Unable to determine current location"
+                                        try {
+                                            val res = onGetCurrentLocation()
+                                            if (res != null) {
+                                                latitude = res.latitude
+                                                longitude = res.longitude
+                                                address = res.formattedAddress ?: address
+                                                if (name.isBlank()) name = "Current Location"
+                                            } else {
+                                                formError = "Unable to determine current location"
+                                            }
+                                        } catch (e: Exception) {
+                                            formError = e.localizedMessage ?: "Location lookup failed"
+                                        } finally {
+                                            isLocating = false
                                         }
                                     }
                                 } else {
                                     permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                                 }
                             },
-                            modifier = Modifier.weight(1f),
+                            enabled = !isLocating && !isSaving,
+                            modifier = Modifier
+                                .weight(1f)
+                                .defaultMinSize(minHeight = 48.dp),
                             shape = RoundedCornerShape(10.dp)
                         ) {
                             if (isLocating) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                             } else {
-                                Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
                                 Text("Use GPS", style = MaterialTheme.typography.labelMedium)
                             }
@@ -378,19 +426,31 @@ fun SavedLocationDialog(
                                 IconButton(
                                     onClick = {
                                         if (searchQuery.isNotBlank()) {
-                                            coroutineScope.launch {
+                                            searchJob?.cancel()
+                                            searchJob = coroutineScope.launch {
                                                 isSearching = true
-                                                val results = onSearchAddress(searchQuery)
-                                                isSearching = false
-                                                searchResults = results
-                                                if (results.isEmpty()) {
-                                                    searchError = "No locations found"
+                                                try {
+                                                    val results = onSearchAddress(searchQuery.trim())
+                                                    searchResults = results
+                                                    if (results.isEmpty()) {
+                                                        searchError = "No locations found"
+                                                    }
+                                                } catch (e: Exception) {
+                                                    searchError = "Search unavailable: ${e.localizedMessage ?: "network error"}"
+                                                } finally {
+                                                    isSearching = false
                                                 }
                                             }
                                         }
-                                    }
+                                    },
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .semantics {
+                                            role = Role.Button
+                                            contentDescription = "Search address query"
+                                        }
                                 ) {
-                                    Icon(Icons.Default.Search, contentDescription = "Search")
+                                    Icon(Icons.Default.Search, contentDescription = null)
                                 }
                             }
                         },
@@ -418,6 +478,7 @@ fun SavedLocationDialog(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
+                                            .defaultMinSize(minHeight = 48.dp)
                                             .clickable {
                                                 address = result.formattedAddress
                                                 latitude = result.latitude
@@ -428,10 +489,14 @@ fun SavedLocationDialog(
                                                 searchResults = emptyList()
                                                 searchQuery = ""
                                             }
-                                            .padding(vertical = 8.dp, horizontal = 6.dp),
+                                            .padding(vertical = 8.dp, horizontal = 6.dp)
+                                            .semantics {
+                                                role = Role.Button
+                                                contentDescription = "Select address ${result.formattedAddress}"
+                                            },
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(Icons.Default.Place, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(16.dp))
+                                        Icon(Icons.Default.Place, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(18.dp))
                                         Spacer(Modifier.width(8.dp))
                                         Text(result.formattedAddress, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                     }
@@ -487,6 +552,7 @@ fun SavedLocationDialog(
                             FilterChip(
                                 selected = selectedIcon.equals(key, ignoreCase = true),
                                 onClick = { selectedIcon = key },
+                                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                                 leadingIcon = {
                                     Icon(getIconForLocation(key), contentDescription = null, modifier = Modifier.size(16.dp))
                                 },
@@ -532,6 +598,7 @@ fun SavedLocationDialog(
                             FilterChip(
                                 selected = classificationPref == pref,
                                 onClick = { classificationPref = pref },
+                                modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                                 label = { Text(label) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = SucculentPrimary,
@@ -551,6 +618,7 @@ fun SavedLocationDialog(
                                 FilterChip(
                                     selected = businessEntity == entity.displayName,
                                     onClick = { businessEntity = entity.displayName },
+                                    modifier = Modifier.defaultMinSize(minHeight = 48.dp),
                                     label = { Text(entity.displayName) },
                                     colors = FilterChipDefaults.filterChipColors(
                                         selectedContainerColor = SucculentPrimary,
@@ -579,12 +647,17 @@ fun SavedLocationDialog(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onDismiss) {
+                    TextButton(
+                        onClick = onDismiss,
+                        enabled = !isSaving,
+                        modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                    ) {
                         Text("Cancel")
                     }
                     Spacer(Modifier.width(12.dp))
                     Button(
                         onClick = {
+                            if (isSaving) return@Button
                             if (name.isBlank()) {
                                 formError = "Please enter a location name"
                                 return@Button
@@ -593,6 +666,8 @@ fun SavedLocationDialog(
                                 formError = "Please select an address or use GPS coordinates"
                                 return@Button
                             }
+                            isSaving = true
+                            formError = null
                             onSave(
                                 initialLocation?.id,
                                 name.trim(),
@@ -603,12 +678,29 @@ fun SavedLocationDialog(
                                 selectedIcon,
                                 if (classificationPref == "NONE") null else classificationPref,
                                 if (classificationPref == "BUSINESS") businessEntity else null
-                            )
+                            ) { error ->
+                                isSaving = false
+                                if (error != null) {
+                                    formError = error
+                                }
+                            }
                         },
+                        enabled = !isSaving,
                         colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                     ) {
-                        Text("Save Location", color = Color.White, fontWeight = FontWeight.Bold)
+                        if (isSaving) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Saving...", color = Color.White, fontWeight = FontWeight.Bold)
+                        } else {
+                            Text("Save Location", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             }

@@ -152,6 +152,7 @@ fun TripDetailScreen(
     val classificationColor = if (isBusiness) SucculentPrimary else SlateNeutral
 
     var outerDragOffset by remember(trip.id) { mutableFloatStateOf(0f) }
+    var suggestionDismissed by remember(trip.id) { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -214,6 +215,106 @@ fun TripDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Classification Suggestion Card for Unreviewed Trips
+            val isUnreviewed = trip.classification == TripClassification.UNREVIEWED.value
+            val suggestedClassification = smartNames?.suggestedClassification
+            if (isUnreviewed && suggestedClassification != null && !suggestionDismissed) {
+                val isBizSuggestion = suggestedClassification.equals("BUSINESS", ignoreCase = true)
+                val targetEntity = if (isBizSuggestion) {
+                    smartNames.suggestedBusinessEntity ?: trip.businessEntity.ifEmpty { BusinessEntity.MY_SUCCULENT_CORNER.displayName }
+                } else {
+                    BusinessEntity.PERSONAL.displayName
+                }
+                val targetPurpose = if (isBizSuggestion) {
+                    trip.purpose.ifEmpty { TripPurpose.NURSERY_PICKUP }
+                } else {
+                    "Personal Drive"
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isBizSuggestion) SucculentPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    border = BorderStroke(1.dp, if (isBizSuggestion) SucculentPrimary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isBizSuggestion) Icons.Default.BusinessCenter else Icons.Default.Info,
+                                contentDescription = null,
+                                tint = if (isBizSuggestion) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Suggested Classification",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Text(
+                            text = if (isBizSuggestion) {
+                                "Based on your saved location, classify as Business ($targetEntity)?"
+                            } else {
+                                "Based on your saved location, classify as Personal?"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = { suggestionDismissed = true },
+                                modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                            ) {
+                                Text("Dismiss", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    onSaveTrip(
+                                        trip.id,
+                                        if (isBizSuggestion) TripClassification.BUSINESS.value else TripClassification.PERSONAL.value,
+                                        targetEntity,
+                                        targetPurpose,
+                                        trip.notes,
+                                        null,
+                                        null
+                                    )
+                                    suggestionDismissed = true
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isBizSuggestion) SucculentPrimary else MaterialTheme.colorScheme.primary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                            ) {
+                                Text(
+                                    text = if (isBizSuggestion) "Accept Business" else "Accept Personal",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Route and more-info tabs matching container roundness.
             Card(
                 modifier = Modifier.fillMaxWidth(),

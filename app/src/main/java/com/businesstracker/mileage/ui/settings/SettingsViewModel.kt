@@ -616,9 +616,18 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun deleteLocation(location: com.businesstracker.mileage.data.local.entity.SavedLocationEntity) {
+    fun deleteLocation(
+        location: com.businesstracker.mileage.data.local.entity.SavedLocationEntity,
+        onSuccess: (() -> Unit)? = null,
+        onError: ((String) -> Unit)? = null
+    ) {
         viewModelScope.launch {
-            savedLocationRepository.deleteSavedLocation(location)
+            try {
+                savedLocationRepository.deleteSavedLocation(location)
+                onSuccess?.invoke()
+            } catch (e: Exception) {
+                onError?.invoke(e.localizedMessage ?: "Failed to delete location")
+            }
         }
     }
 }

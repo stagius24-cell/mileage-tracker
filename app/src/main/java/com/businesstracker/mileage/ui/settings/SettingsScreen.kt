@@ -139,6 +139,7 @@ fun SettingsScreen(
     var showLocationDialog by remember { mutableStateOf(false) }
     var editingLocation by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
     var locationPendingDeletion by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
+    var locationActionError by remember { mutableStateOf<String?>(null) }
 
     LazyColumn(
         modifier = modifier
@@ -441,24 +442,50 @@ fun SettingsScreen(
                         )
                     },
                     text = {
-                        Text(
-                            text = "Are you sure you want to delete \"${loc.name}\"? Associated trips and GPS data will not be deleted.",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        Column {
+                            Text(
+                                text = "Are you sure you want to delete \"${loc.name}\"? Associated trips and GPS data will not be deleted.",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            if (locationActionError != null) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = locationActionError!!,
+                                    color = SpeedRed,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
                     },
                     confirmButton = {
                         Button(
                             onClick = {
-                                viewModel.deleteLocation(loc)
-                                locationPendingDeletion = null
+                                locationActionError = null
+                                viewModel.deleteLocation(
+                                    location = loc,
+                                    onSuccess = {
+                                        locationPendingDeletion = null
+                                    },
+                                    onError = { err ->
+                                        locationActionError = err
+                                    }
+                                )
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
+                            colors = ButtonDefaults.buttonColors(containerColor = SpeedRed),
+                            modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                         ) {
                             Text("Delete", color = Color.White)
                         }
                     },
                     dismissButton = {
-                        TextButton(onClick = { locationPendingDeletion = null }) {
+                        TextButton(
+                            onClick = {
+                                locationPendingDeletion = null
+                                locationActionError = null
+                            },
+                            modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                        ) {
                             Text("Cancel")
                         }
                     }
@@ -475,7 +502,7 @@ fun SettingsScreen(
                     },
                     onSearchAddress = { query -> viewModel.searchAddress(query) },
                     onGetCurrentLocation = { viewModel.getCurrentLocation() },
-                    onSave = { id, name, lat, lng, addr, radius, icon, pref, entity ->
+                    onSave = { id, name, lat, lng, addr, radius, icon, pref, entity, onSaveComplete ->
                         viewModel.saveLocation(
                             id = id,
                             name = name,
@@ -487,8 +514,12 @@ fun SettingsScreen(
                             classificationPreference = pref,
                             businessEntity = entity,
                             onSuccess = {
+                                onSaveComplete(null)
                                 showLocationDialog = false
                                 editingLocation = null
+                            },
+                            onError = { err ->
+                                onSaveComplete(err)
                             }
                         )
                     }
@@ -700,7 +731,9 @@ fun SettingsScreen(
                         editingLocation = null
                         showLocationDialog = true
                     },
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 48.dp),
                     shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
                 ) {
