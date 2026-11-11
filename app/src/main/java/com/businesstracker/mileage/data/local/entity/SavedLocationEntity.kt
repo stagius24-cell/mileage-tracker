@@ -15,7 +15,7 @@ import androidx.room.PrimaryKey
 data class SavedLocationEntity(
     @PrimaryKey
     @ColumnInfo(name = "id")
-    val id: String, // UUID
+    val id: String = java.util.UUID.randomUUID().toString(), // UUID
 
     @ColumnInfo(name = "name")
     val name: String, // e.g. "Home", "Succulent Nursery"
