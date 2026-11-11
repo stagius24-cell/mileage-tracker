@@ -33,6 +33,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
@@ -45,11 +47,15 @@ import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.Warehouse
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Work
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -84,6 +90,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.businesstracker.mileage.data.local.entity.SavedLocationEntity
+import com.businesstracker.mileage.data.remote.RestoreCandidate
+import com.businesstracker.mileage.data.remote.RestoreItemStatus
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.usecase.SearchAddressResult
 import com.businesstracker.mileage.domain.usecase.CurrentLocationResult
@@ -723,4 +731,271 @@ private fun hasLocationPermission(context: android.content.Context): Boolean {
         context,
         Manifest.permission.ACCESS_FINE_LOCATION
     ) == PackageManager.PERMISSION_GRANTED
+}
+
+@Composable
+fun SavedLocationsRestorePreviewDialog(
+    state: SavedLocationsRestorePreviewUi,
+    isApplying: Boolean,
+    onToggleCandidate: (String) -> Unit,
+    onSetOverwriteConflicts: (Boolean) -> Unit,
+    onConfirmApply: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    when (state) {
+        is SavedLocationsRestorePreviewUi.Empty -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text("Restore from Google Sheets", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(state.message, style = MaterialTheme.typography.bodyMedium)
+                        if (state.localCount > 0) {
+                            Text(
+                                text = "Local records (${state.localCount}) will NOT be erased.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SucculentPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                    ) {
+                        Text("OK")
+                    }
+                }
+            )
+        }
+        is SavedLocationsRestorePreviewUi.Failure -> {
+            AlertDialog(
+                onDismissRequest = onDismiss,
+                title = { Text("Restore Unavailable", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(state.message, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = "Your local Saved Locations were not modified.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                    ) {
+                        Text("Close")
+                    }
+                }
+            )
+        }
+        is SavedLocationsRestorePreviewUi.Loaded -> {
+            val preview = state.preview
+            val conflictCandidates = preview.candidates.filter { it.requiresOverwriteApproval }
+            val allConflictsApproved = conflictCandidates.isNotEmpty() &&
+                conflictCandidates.all { it.cloudLocation.id in state.approvedConflictIds }
+            val selectedCount = state.selectedIds.size
+
+            Dialog(
+                onDismissRequest = { if (!isApplying) onDismiss() },
+                properties = DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 24.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 8.dp
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp)
+                    ) {
+                        Text(
+                            text = "Preview Restore from Sheets",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = "Choose which locations to import. Existing local changes stay protected unless you check them to overwrite.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Spacer(Modifier.height(10.dp))
+
+                        if (preview.localOnlyLocations.isNotEmpty()) {
+                            Text(
+                                text = "${preview.localOnlyLocations.size} local-only location(s) will remain untouched.",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = SucculentPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
+
+                        if (conflictCandidates.isNotEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFFFF8E1),
+                                border = BorderStroke(1.dp, Color(0xFFFFD54F)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onSetOverwriteConflicts(!allConflictsApproved) }
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = allConflictsApproved,
+                                        onCheckedChange = onSetOverwriteConflicts
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Overwrite all ${conflictCandidates.size} local conflict/deleted item(s)",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF5D4037)
+                                        )
+                                        Text(
+                                            text = "Leave unchecked to preserve your local versions.",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF795548)
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                        }
+
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 320.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(preview.candidates, key = { it.cloudLocation.id }) { candidate ->
+                                RestoreCandidateRow(
+                                    candidate = candidate,
+                                    isSelected = candidate.cloudLocation.id in state.selectedIds,
+                                    onToggle = { onToggleCandidate(candidate.cloudLocation.id) }
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(onClick = onDismiss, enabled = !isApplying) {
+                                Text("Cancel")
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = onConfirmApply,
+                                enabled = !isApplying && selectedCount > 0,
+                                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                if (isApplying) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = Color.White,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                }
+                                Text("Apply ($selectedCount)", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RestoreCandidateRow(
+    candidate: RestoreCandidate,
+    isSelected: Boolean,
+    onToggle: () -> Unit
+) {
+    val loc = candidate.cloudLocation
+    val isIdentical = candidate.status == RestoreItemStatus.IDENTICAL
+    val statusLabel = when (candidate.status) {
+        RestoreItemStatus.NEW_FROM_CLOUD -> "New from cloud"
+        RestoreItemStatus.IDENTICAL -> "Already matches local"
+        RestoreItemStatus.CLOUD_NEWER -> "Cloud newer — check to overwrite local"
+        RestoreItemStatus.LOCAL_NEWER -> "Local newer — check to overwrite local"
+        RestoreItemStatus.CONFLICT_MODIFIED -> "Modified — check to overwrite local"
+        RestoreItemStatus.PREVIOUSLY_DELETED_LOCALLY -> "Deleted locally — check to restore"
+    }
+    val statusColor = when (candidate.status) {
+        RestoreItemStatus.NEW_FROM_CLOUD -> SucculentPrimary
+        RestoreItemStatus.IDENTICAL -> SlateNeutral
+        RestoreItemStatus.CLOUD_NEWER,
+        RestoreItemStatus.LOCAL_NEWER,
+        RestoreItemStatus.CONFLICT_MODIFIED,
+        RestoreItemStatus.PREVIOUSLY_DELETED_LOCALLY -> Color(0xFFE65100)
+    }
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (!isIdentical) Modifier.clickable(onClick = onToggle) else Modifier)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Checkbox(
+                checked = if (isIdentical) false else isSelected,
+                enabled = !isIdentical,
+                onCheckedChange = { if (!isIdentical) onToggle() },
+                colors = CheckboxDefaults.colors(checkedColor = SucculentPrimary)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = loc.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (loc.address.isNotBlank()) {
+                    Text(
+                        text = loc.address,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = statusLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = statusColor,
+                    fontWeight = FontWeight.Medium
+                )
+            }
+        }
+    }
 }

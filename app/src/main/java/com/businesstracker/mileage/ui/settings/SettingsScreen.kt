@@ -45,6 +45,8 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatterySaver
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.LocationOn
@@ -543,6 +545,18 @@ fun SettingsScreen(
                 )
             }
 
+            // Saved Locations Restore Preview Dialog
+            state.restorePreviewState?.let { previewUi ->
+                SavedLocationsRestorePreviewDialog(
+                    state = previewUi,
+                    isApplying = state.isApplyingRestore,
+                    onToggleCandidate = viewModel::toggleRestoreCandidateSelection,
+                    onSetOverwriteConflicts = viewModel::setOverwriteConflictsApproved,
+                    onConfirmApply = viewModel::confirmApplySavedLocationsRestore,
+                    onDismiss = viewModel::dismissRestorePreview
+                )
+            }
+
             SettingsSection(
                 title = "Business Trip Purposes",
                 icon = Icons.Default.BusinessCenter
@@ -758,6 +772,85 @@ fun SettingsScreen(
                     Spacer(Modifier.width(8.dp))
                     Text("Add Saved Location", fontWeight = FontWeight.Bold)
                 }
+
+                SectionDivider()
+
+                val locTimeFormat = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
+                val lastLocationBackup = if (state.savedLocationsLastBackupTime > 0L) {
+                    locTimeFormat.format(Date(state.savedLocationsLastBackupTime))
+                } else {
+                    "Never"
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    MetaText("Last backup", lastLocationBackup)
+                    MetaText("Pending changes", state.savedLocationsPendingBackupCount.toString(), Alignment.End)
+                }
+
+                if (!state.savedLocationsLastBackupError.isNullOrBlank()) {
+                    CompactError(state.savedLocationsLastBackupError.orEmpty())
+                }
+                if (!state.savedLocationsBackupMessage.isNullOrBlank()) {
+                    CompactSuccess(state.savedLocationsBackupMessage.orEmpty())
+                }
+
+                val backupControlsEnabled = !state.isBackingUpSavedLocations &&
+                    !state.isLoadingRestorePreview &&
+                    !state.isApplyingRestore
+
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = viewModel::backUpSavedLocationsNow,
+                        enabled = backupControlsEnabled,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = 44.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (state.isBackingUpSavedLocations) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = SucculentPrimary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(16.dp))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = if (state.isBackingUpSavedLocations) "Backing Up..." else "Back Up Now"
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = viewModel::restoreSavedLocationsFromSheets,
+                        enabled = backupControlsEnabled,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .defaultMinSize(minHeight = 44.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        if (state.isLoadingRestorePreview) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = SucculentPrimary,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = if (state.isLoadingRestorePreview) "Loading Preview..." else "Restore from Google Sheets"
+                        )
+                    }
+                }
             }
         }
 
@@ -900,6 +993,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.82 (Build 83)" to "Added automatic & manual Google Sheets backup and preview-confirmed restore for Saved Locations.",
                 "Version 1.0.78 (Build 79)" to "Matching Origin GPS Radar & Destination Finish Flag icons on Google Map and trip cards; tighter map zoom; updated version history.",
                 "Version 1.0.77 (Build 78)" to "Compacted wheel time picker dialog by 20%, tightened button spacing, and removed subtitle description text.",
                 "Version 1.0.76 (Build 77)" to "Option 1 interactive vertical swipe up/down wheel time picker for Work Schedule start & end times with AM/PM support.",

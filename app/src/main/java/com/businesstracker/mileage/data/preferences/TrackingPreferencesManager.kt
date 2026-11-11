@@ -83,6 +83,8 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_SHEETS_LAST_SYNC_TIME = longPreferencesKey("sheets_last_sync_time")
         private val KEY_SHEETS_LAST_ERROR = stringPreferencesKey("sheets_last_error")
         private val KEY_SHEETS_AUTO_SYNC_ENABLED = booleanPreferencesKey("sheets_auto_sync_enabled")
+        private val KEY_SAVED_LOCATIONS_LAST_BACKUP_TIME = longPreferencesKey("saved_locations_last_backup_time")
+        private val KEY_SAVED_LOCATIONS_LAST_BACKUP_ERROR = stringPreferencesKey("saved_locations_last_backup_error")
 
         // Work Schedule & Auto-Classification Keys
         private val KEY_SCHEDULE_FILTERING_ENABLED = booleanPreferencesKey("schedule_filtering_enabled")
@@ -633,6 +635,30 @@ class TrackingPreferencesManager @Inject constructor(
     suspend fun setSheetsAutoSyncEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[KEY_SHEETS_AUTO_SYNC_ENABLED] = enabled
+        }
+    }
+
+    val savedLocationsLastBackupTime: Flow<Long> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SAVED_LOCATIONS_LAST_BACKUP_TIME] ?: 0L
+    }
+
+    suspend fun setSavedLocationsLastBackupTime(time: Long) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SAVED_LOCATIONS_LAST_BACKUP_TIME] = time
+        }
+    }
+
+    val savedLocationsLastBackupError: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SAVED_LOCATIONS_LAST_BACKUP_ERROR]
+    }
+
+    suspend fun setSavedLocationsLastBackupError(error: String?) {
+        context.dataStore.edit { prefs ->
+            if (error != null) {
+                prefs[KEY_SAVED_LOCATIONS_LAST_BACKUP_ERROR] = error
+            } else {
+                prefs.remove(KEY_SAVED_LOCATIONS_LAST_BACKUP_ERROR)
+            }
         }
     }
 }

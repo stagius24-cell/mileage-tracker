@@ -6,6 +6,7 @@ import com.businesstracker.mileage.data.local.ActiveTripDao
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.GpsInboxDao
 import com.businesstracker.mileage.data.local.SavedLocationDao
+import com.businesstracker.mileage.data.local.SavedLocationSyncQueueDao
 import com.businesstracker.mileage.data.local.TripDao
 import com.businesstracker.mileage.data.local.TripLifecycleDao
 import com.businesstracker.mileage.data.local.TripSequenceDao
@@ -45,7 +46,13 @@ object DatabaseModule {
             ExpenseTrackerDatabase.MIGRATION_4_6,
             ExpenseTrackerDatabase.MIGRATION_3_6,
             ExpenseTrackerDatabase.MIGRATION_2_6,
-            ExpenseTrackerDatabase.MIGRATION_1_6
+            ExpenseTrackerDatabase.MIGRATION_1_6,
+            ExpenseTrackerDatabase.MIGRATION_6_7,
+            ExpenseTrackerDatabase.MIGRATION_5_7,
+            ExpenseTrackerDatabase.MIGRATION_4_7,
+            ExpenseTrackerDatabase.MIGRATION_3_7,
+            ExpenseTrackerDatabase.MIGRATION_2_7,
+            ExpenseTrackerDatabase.MIGRATION_1_7
         )
         .build()
     }
@@ -84,5 +91,11 @@ object DatabaseModule {
     @Singleton
     fun provideSavedLocationDao(database: ExpenseTrackerDatabase): SavedLocationDao {
         return database.savedLocationDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideSavedLocationSyncQueueDao(database: ExpenseTrackerDatabase): SavedLocationSyncQueueDao {
+        return database.savedLocationSyncQueueDao()
     }
 }
