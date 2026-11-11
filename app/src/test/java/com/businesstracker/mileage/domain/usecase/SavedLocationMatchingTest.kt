@@ -316,6 +316,13 @@ class SavedLocationMatchingTest {
         val names = resolveSmartTripNamesUseCase.resolve(tripAlreadyReviewed, listOf(nursery, home))
         assertEquals("Succulent Nursery", names.startDisplayName)
         assertEquals("Home", names.endDisplayName)
+        assertNull(names.suggestedClassification)
+        assertNull(names.suggestedBusinessEntity)
+        val renamed = resolveSmartTripNamesUseCase.resolve(tripAlreadyReviewed, listOf(nursery.copy(name = "New nursery"), home))
+        assertEquals("New nursery", renamed.startDisplayName)
+        val deleted = resolveSmartTripNamesUseCase.resolve(tripAlreadyReviewed, listOf(home))
+        assertEquals(tripAlreadyReviewed.startAddress, deleted.startDisplayName)
+        assertEquals("Home", deleted.endDisplayName)
         assertEquals("BUSINESS", tripAlreadyReviewed.classification)
         assertEquals(3.35, tripAlreadyReviewed.calculatedDeduction, 0.001)
     }
