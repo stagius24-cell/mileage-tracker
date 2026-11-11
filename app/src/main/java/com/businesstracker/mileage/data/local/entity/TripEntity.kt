@@ -71,7 +71,7 @@ data class TripEntity(
     val calculatedDeduction: Double, // businessMiles * applicableRate
 
     @ColumnInfo(name = "notes")
-    val notes: String?,
+    val notes: String? = null,
 
     @ColumnInfo(name = "waypointsJson")
     val waypointsJson: String, // JSON list of Waypoint objects
@@ -80,5 +80,5 @@ data class TripEntity(
     val syncStatus: String, // "PENDING", "SYNCED", "FAILED"
 
     @ColumnInfo(name = "syncedAt")
-    val syncedAt: Long?
+    val syncedAt: Long? = null
 )

@@ -20,6 +20,12 @@ class MatchLocationUseCase @Inject constructor() {
         private const val EARTH_RADIUS_METERS = 6371000.0
     }
 
+    operator fun invoke(
+        latitude: Double,
+        longitude: Double,
+        savedLocations: List<SavedLocationEntity>
+    ): SavedLocationEntity? = findMatch(latitude, longitude, savedLocations)?.location
+
     /**
      * Finds the closest saved location within its configured radius.
      * Returns null if coordinates are invalid or no saved location is within its radius.
