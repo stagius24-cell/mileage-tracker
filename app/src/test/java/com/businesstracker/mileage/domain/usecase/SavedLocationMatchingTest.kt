@@ -222,7 +222,11 @@ class SavedLocationMatchingTest {
             applicableRate = 0.67,
             calculatedDeduction = 0.0,
             waypointsJson = "[]",
-            syncStatus = "PENDING"
+            syncStatus = "PENDING",
+            startAddress = "100 Blossom Hill Rd, San Jose, CA",
+            endAddress = "77 Main St",
+            notes = null,
+            syncedAt = null
         )
 
         val names = resolveSmartTripNamesUseCase.resolve(trip, listOf(nursery, neutralLocation))
@@ -252,7 +256,11 @@ class SavedLocationMatchingTest {
             applicableRate = 0.67,
             calculatedDeduction = 0.0,
             waypointsJson = "[]",
-            syncStatus = "PENDING"
+            syncStatus = "PENDING",
+            startAddress = "100 Blossom Hill Rd, San Jose, CA",
+            endAddress = "500 Home Way, San Jose, CA",
+            notes = null,
+            syncedAt = null
         )
 
         val names = resolveSmartTripNamesUseCase.resolve(trip, listOf(nursery, home))
@@ -282,7 +290,11 @@ class SavedLocationMatchingTest {
             applicableRate = 0.67,
             calculatedDeduction = 3.35,
             waypointsJson = "[]",
-            syncStatus = "SYNCED"
+            syncStatus = "SYNCED",
+            startAddress = "100 Blossom Hill Rd, San Jose, CA",
+            endAddress = "500 Home Way, San Jose, CA",
+            notes = null,
+            syncedAt = 123456L
         )
 
         // Matching locations should resolve smart names for display, but classification remains unchanged

@@ -36,13 +36,13 @@ class TripFinalizationCoordinator @Inject constructor(
     private val database: ExpenseTrackerDatabase,
     private val activeTripRepository: ActiveTripRepository,
     private val tripRepository: TripRepository,
-    private val savedLocationRepository: SavedLocationRepository,
-    private val resolveSmartTripNamesUseCase: ResolveSmartTripNamesUseCase,
     private val geocodeUseCase: GeocodeLocationUseCase,
     private val rateCalculator: CalculateMileageRateUseCase,
     private val preferencesManager: TrackingPreferencesManager,
     private val gson: Gson,
-    private val ioDispatcher: CoroutineDispatcher
+    private val ioDispatcher: CoroutineDispatcher,
+    private val savedLocationRepository: SavedLocationRepository? = null,
+    private val resolveSmartTripNamesUseCase: ResolveSmartTripNamesUseCase? = null
 ) {
     private val finalizationMutex = Mutex()
 
