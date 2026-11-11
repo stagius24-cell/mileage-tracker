@@ -12,6 +12,15 @@ class SavedLocationMatchingTest {
     private val matchLocationUseCase = MatchLocationUseCase()
     private val resolveSmartTripNamesUseCase = ResolveSmartTripNamesUseCase(matchLocationUseCase)
 
+    @Test
+    fun conflictingBusinessEntitiesDoNotSuggestClassification() {
+        val suggestion = resolveSmartTripNamesUseCase.evaluateClassificationSuggestion(
+            nursery, nursery.copy(id = "other", businessEntity = "Other business")
+        )
+        assertNull(suggestion.suggestedClassification)
+        assertNull(suggestion.suggestedBusinessEntity)
+    }
+
     // Base location: San Jose Succulent Nursery (37.3382, -121.8863)
     private val nursery = SavedLocationEntity(
         id = "loc-nursery",

@@ -46,7 +46,9 @@ class ResolveSmartTripNamesUseCase @Inject constructor(
 
         val defaultStart = trip.startAddress ?: "Recorded start location"
         val defaultEnd = trip.endAddress ?: "Recorded destination"
-        val suggestion = evaluateClassificationSuggestion(startMatch?.location, endMatch?.location)
+        val suggestion = if (trip.classification == "UNREVIEWED") {
+            evaluateClassificationSuggestion(startMatch?.location, endMatch?.location)
+        } else ClassificationSuggestion(null, null)
 
         return SmartTripNames(
             startDisplayName = startMatch?.location?.name ?: defaultStart,
@@ -84,6 +86,12 @@ class ResolveSmartTripNamesUseCase @Inject constructor(
             val entity = if (endPref == "BUSINESS") endMatch.businessEntity else null
             return ClassificationSuggestion(endPref, entity)
         }
+
+        // Conflicting business preferences are ambiguous even when both say Business.
+        if (startPref == "BUSINESS" && endPref == "BUSINESS" &&
+            startMatch?.businessEntity != null && endMatch?.businessEntity != null &&
+            startMatch.businessEntity != endMatch.businessEntity
+        ) return ClassificationSuggestion(null, null)
 
         // Both endpoints have preferences
         return if (startPref.equals(endPref, ignoreCase = true)) {

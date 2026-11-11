@@ -97,6 +97,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
 
 fun getIconForLocation(iconKey: String): ImageVector {
     return when (iconKey.lowercase()) {
@@ -414,7 +415,10 @@ fun SavedLocationDialog(
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = {
+                            searchJob?.cancel()
+                            isSearching = false
                             searchQuery = it
+                            searchResults = emptyList()
                             searchError = null
                         },
                         modifier = Modifier.fillMaxWidth(),
@@ -428,14 +432,19 @@ fun SavedLocationDialog(
                                     onClick = {
                                         if (searchQuery.isNotBlank()) {
                                             searchJob?.cancel()
+                                            val requestedQuery = searchQuery.trim()
                                             searchJob = coroutineScope.launch {
                                                 isSearching = true
                                                 try {
-                                                    val results = onSearchAddress(searchQuery.trim())
+                                                    val results = onSearchAddress(requestedQuery)
+                                                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                                                    if (searchQuery.trim() != requestedQuery) return@launch
                                                     searchResults = results
                                                     if (results.isEmpty()) {
                                                         searchError = "No locations found"
                                                     }
+                                                } catch (e: kotlinx.coroutines.CancellationException) {
+                                                    throw e
                                                 } catch (e: Exception) {
                                                     searchError = "Search unavailable: ${e.localizedMessage ?: "network error"}"
                                                 } finally {
