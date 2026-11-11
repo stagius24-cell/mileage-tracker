@@ -729,7 +729,7 @@ fun SettingsScreen(
         item {
             SettingsSection(
                 title = "Saved Locations",
-                subtitle = "Manage your frequent places",
+                subtitle = "Custom place names for trip history",
                 icon = Icons.Default.LocationOn,
                 trailing = {
                     Icon(

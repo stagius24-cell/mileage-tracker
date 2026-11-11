@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 86
-        versionName = "1.0.85"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Saved Locations: Compact dialog with inline GPS search, shortened text inputs, and imperial radius units.\"")
+        versionCode = 87
+        versionName = "1.0.86"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Saved Locations: Inline action buttons, full address display, radius badge removed from list, and compact header description.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

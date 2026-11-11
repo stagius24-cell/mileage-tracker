@@ -148,11 +148,13 @@ fun SavedLocationItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.Top
         ) {
             Surface(
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier
+                    .padding(top = 2.dp)
+                    .size(40.dp),
                 shape = CircleShape,
                 color = SucculentPrimary.copy(alpha = 0.12f)
             ) {
@@ -169,39 +171,51 @@ fun SavedLocationItem(
             Spacer(Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                // Top Row: Title of saved location + Edit & Delete action buttons inline
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = location.name,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
                     )
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
+
+                    IconButton(
+                        onClick = onEdit,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .semantics {
+                                role = Role.Button
+                                contentDescription = "Edit saved location ${location.name}"
+                            }
                     ) {
-                        val radiusFeet = (location.radiusMeters * 3.28084).roundToInt()
-                        Text(
-                            text = "${radiusFeet} ft",
-                            style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(19.dp))
+                    }
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .semantics {
+                                role = Role.Button
+                                contentDescription = "Delete saved location ${location.name}"
+                            }
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = SpeedRed, modifier = Modifier.size(19.dp))
                     }
                 }
 
                 Spacer(Modifier.height(2.dp))
 
+                // Full address displayed at the bottom
                 Text(
                     text = location.address,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 if (!location.classificationPreference.isNullOrBlank()) {
@@ -220,31 +234,6 @@ fun SavedLocationItem(
                         fontWeight = FontWeight.SemiBold
                     )
                 }
-            }
-
-            Spacer(Modifier.width(8.dp))
-
-            IconButton(
-                onClick = onEdit,
-                modifier = Modifier
-                    .size(48.dp)
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = "Edit saved location ${location.name}"
-                    }
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(20.dp))
-            }
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier
-                    .size(48.dp)
-                    .semantics {
-                        role = Role.Button
-                        contentDescription = "Delete saved location ${location.name}"
-                    }
-            ) {
-                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = SpeedRed, modifier = Modifier.size(20.dp))
             }
         }
     }
