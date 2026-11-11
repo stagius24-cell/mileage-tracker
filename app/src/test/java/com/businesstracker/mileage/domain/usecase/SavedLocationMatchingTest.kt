@@ -111,7 +111,9 @@ class SavedLocationMatchingTest {
             waypointsJson = "[]",
             syncStatus = "PENDING",
             startAddress = "500 Home Way, San Jose, CA",
-            endAddress = "100 Blossom Hill Rd, San Jose, CA"
+            endAddress = "100 Blossom Hill Rd, San Jose, CA",
+            notes = null,
+            syncedAt = null
         )
 
         val names = resolveSmartTripNamesUseCase.resolve(trip, listOf(home, nursery))
@@ -143,7 +145,9 @@ class SavedLocationMatchingTest {
             waypointsJson = "[]",
             syncStatus = "PENDING",
             startAddress = "500 Home Way, San Jose, CA",
-            endAddress = "999 Remote Blvd, Oakland, CA"
+            endAddress = "999 Remote Blvd, Oakland, CA",
+            notes = null,
+            syncedAt = null
         )
 
         val names = resolveSmartTripNamesUseCase.resolve(tripOnlyStartMatched, listOf(home, nursery))
@@ -177,7 +181,9 @@ class SavedLocationMatchingTest {
             waypointsJson = "[]",
             syncStatus = "PENDING",
             startAddress = rawStart,
-            endAddress = rawEnd
+            endAddress = rawEnd,
+            notes = null,
+            syncedAt = null
         )
 
         val names = resolveSmartTripNamesUseCase.resolve(trip, listOf(home, nursery))
