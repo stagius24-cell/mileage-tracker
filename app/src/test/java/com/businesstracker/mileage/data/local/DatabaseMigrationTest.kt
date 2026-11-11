@@ -325,4 +325,60 @@ class DatabaseMigrationTest {
         cursor.close()
         db.close()
     }
+
+    @Test
+    fun migrate5To6_preservesExistingData_andCreatesSavedLocationsTable() {
+        var db = helper.createDatabase(TEST_DB, 5).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v5-to-v6', '2026-11-06', 1000, 2000, 37.3382, -121.8863, 37.3521, -121.8901, 8.4, 8.4, 'MySucculentCorner', 'Delivery', 'AUTO_DETECTED', 'BUSINESS', 0.67, 5.628, '[]', 'PENDING')
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 6, true, ExpenseTrackerDatabase.MIGRATION_5_6)
+
+        // Verify existing trip preserved
+        val tripCursor = db.query("SELECT id, totalDistanceMiles FROM trips WHERE id = 'trip-v5-to-v6'")
+        assertTrue(tripCursor.moveToFirst())
+        assertEquals("trip-v5-to-v6", tripCursor.getString(0))
+        assertEquals(8.4, tripCursor.getDouble(1), 0.001)
+        tripCursor.close()
+
+        // Verify saved_locations table created and writable
+        db.execSQL("""
+            INSERT INTO saved_locations (id, name, latitude, longitude, address, radiusMeters, icon, classificationPreference, businessEntity, createdAt, updatedAt)
+            VALUES ('loc-1', 'Succulent Nursery', 37.3382, -121.8863, '123 Plant Way, San Jose, CA', 150, 'nursery', 'BUSINESS', 'MySucculentCorner', 1000, 1000)
+        """.trimIndent())
+
+        val locCursor = db.query("SELECT id, name, radiusMeters, classificationPreference, businessEntity FROM saved_locations WHERE id = 'loc-1'")
+        assertTrue(locCursor.moveToFirst())
+        assertEquals("loc-1", locCursor.getString(0))
+        assertEquals("Succulent Nursery", locCursor.getString(1))
+        assertEquals(150, locCursor.getInt(2))
+        assertEquals("BUSINESS", locCursor.getString(3))
+        assertEquals("MySucculentCorner", locCursor.getString(4))
+        locCursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate1To6_compositeMigration_preservesAllData() {
+        var db = helper.createDatabase(TEST_DB, 1).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v1-to-v6', '2026-11-06', 1000, 2000, 37.33, -121.88, 37.35, -121.89, 22.0, 22.0, 'MySucculentCorner', 'Delivery', 'AUTO_DETECTED', 'BUSINESS', 0.67, 14.74, '[]', 'PENDING')
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 6, true, ExpenseTrackerDatabase.MIGRATION_1_6)
+
+        val cursor = db.query("SELECT id, totalDistanceMiles FROM trips WHERE id = 'trip-v1-to-v6'")
+        assertTrue(cursor.moveToFirst())
+        assertEquals("trip-v1-to-v6", cursor.getString(0))
+        assertEquals(22.0, cursor.getDouble(1), 0.001)
+        cursor.close()
+        db.close()
+    }
 }

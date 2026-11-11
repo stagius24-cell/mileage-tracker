@@ -7,6 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.businesstracker.mileage.data.local.entity.ActiveTripEntity
 import com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity
 import com.businesstracker.mileage.data.local.entity.GpsInboxEntity
+import com.businesstracker.mileage.data.local.entity.SavedLocationEntity
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.data.local.entity.TripLifecycleEntity
 import com.businesstracker.mileage.data.local.entity.TripSequenceEntity
@@ -18,9 +19,10 @@ import com.businesstracker.mileage.data.local.entity.TripSequenceEntity
         ActiveWaypointEntity::class,
         GpsInboxEntity::class,
         TripLifecycleEntity::class,
-        TripSequenceEntity::class
+        TripSequenceEntity::class,
+        SavedLocationEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class ExpenseTrackerDatabase : RoomDatabase() {
@@ -30,6 +32,7 @@ abstract class ExpenseTrackerDatabase : RoomDatabase() {
     abstract fun gpsInboxDao(): GpsInboxDao
     abstract fun tripLifecycleDao(): TripLifecycleDao
     abstract fun tripSequenceDao(): TripSequenceDao
+    abstract fun savedLocationDao(): SavedLocationDao
 
     companion object {
         const val DATABASE_NAME = "EXPENSE_TRACKER_DB"
@@ -146,6 +149,63 @@ abstract class ExpenseTrackerDatabase : RoomDatabase() {
                 MIGRATION_2_3.migrate(db)
                 MIGRATION_3_4.migrate(db)
                 MIGRATION_4_5.migrate(db)
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `saved_locations` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `latitude` REAL NOT NULL,
+                        `longitude` REAL NOT NULL,
+                        `address` TEXT NOT NULL,
+                        `radiusMeters` INTEGER NOT NULL DEFAULT 150,
+                        `icon` TEXT NOT NULL DEFAULT 'location',
+                        `classificationPreference` TEXT,
+                        `businessEntity` TEXT,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_saved_locations_name` ON `saved_locations` (`name`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_saved_locations_latitude_longitude` ON `saved_locations` (`latitude`, `longitude`)")
+            }
+        }
+
+        val MIGRATION_4_6 = object : Migration(4, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_4_5.migrate(db)
+                MIGRATION_5_6.migrate(db)
+            }
+        }
+
+        val MIGRATION_3_6 = object : Migration(3, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_3_4.migrate(db)
+                MIGRATION_4_5.migrate(db)
+                MIGRATION_5_6.migrate(db)
+            }
+        }
+
+        val MIGRATION_2_6 = object : Migration(2, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_2_3.migrate(db)
+                MIGRATION_3_4.migrate(db)
+                MIGRATION_4_5.migrate(db)
+                MIGRATION_5_6.migrate(db)
+            }
+        }
+
+        val MIGRATION_1_6 = object : Migration(1, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_1_2.migrate(db)
+                MIGRATION_2_3.migrate(db)
+                MIGRATION_3_4.migrate(db)
+                MIGRATION_4_5.migrate(db)
+                MIGRATION_5_6.migrate(db)
             }
         }
     }

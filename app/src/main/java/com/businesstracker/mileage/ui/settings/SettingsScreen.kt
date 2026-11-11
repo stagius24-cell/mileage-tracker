@@ -135,6 +135,11 @@ fun SettingsScreen(
 
     var showVersionHistoryDialog by rememberSaveable { mutableStateOf(false) }
 
+    // Saved Locations State
+    var showLocationDialog by remember { mutableStateOf(false) }
+    var editingLocation by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
+    var locationPendingDeletion by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
@@ -423,6 +428,73 @@ fun SettingsScreen(
                 )
             }
 
+            // Saved Location Delete Dialog
+            if (locationPendingDeletion != null) {
+                val loc = locationPendingDeletion!!
+                AlertDialog(
+                    onDismissRequest = { locationPendingDeletion = null },
+                    title = {
+                        Text(
+                            text = "Delete Saved Location",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Are you sure you want to delete \"${loc.name}\"? Associated trips and GPS data will not be deleted.",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                viewModel.deleteLocation(loc)
+                                locationPendingDeletion = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
+                        ) {
+                            Text("Delete", color = Color.White)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { locationPendingDeletion = null }) {
+                            Text("Cancel")
+                        }
+                    }
+                )
+            }
+
+            // Saved Location Add/Edit Dialog
+            if (showLocationDialog) {
+                SavedLocationDialog(
+                    initialLocation = editingLocation,
+                    onDismiss = {
+                        showLocationDialog = false
+                        editingLocation = null
+                    },
+                    onSearchAddress = { query -> viewModel.searchAddress(query) },
+                    onGetCurrentLocation = { viewModel.getCurrentLocation() },
+                    onSave = { id, name, lat, lng, addr, radius, icon, pref, entity ->
+                        viewModel.saveLocation(
+                            id = id,
+                            name = name,
+                            latitude = lat,
+                            longitude = lng,
+                            address = addr,
+                            radiusMeters = radius,
+                            icon = icon,
+                            classificationPreference = pref,
+                            businessEntity = entity,
+                            onSuccess = {
+                                showLocationDialog = false
+                                editingLocation = null
+                            }
+                        )
+                    }
+                )
+            }
+
             SettingsSection(
                 title = "Business Trip Purposes",
                 icon = Icons.Default.BusinessCenter
@@ -574,6 +646,67 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        item {
+            SettingsSection(
+                title = "Saved Locations",
+                subtitle = "${state.savedLocations.size} saved",
+                icon = Icons.Default.LocationOn
+            ) {
+                Text(
+                    text = "Frequently visited places will automatically display custom names (e.g. Home, Nursery) in your Trip History.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (state.savedLocations.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "No saved locations yet.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        state.savedLocations.forEach { loc ->
+                            SavedLocationItem(
+                                location = loc,
+                                onEdit = {
+                                    editingLocation = loc
+                                    showLocationDialog = true
+                                },
+                                onDelete = {
+                                    locationPendingDeletion = loc
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        editingLocation = null
+                        showLocationDialog = true
+                    },
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add Saved Location", fontWeight = FontWeight.Bold)
                 }
             }
         }

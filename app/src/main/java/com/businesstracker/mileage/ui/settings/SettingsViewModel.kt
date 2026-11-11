@@ -48,6 +48,7 @@ data class SettingsUiState(
     val vehicleBluetoothName: String = "",
     val pairedBluetoothDevices: List<VehicleBluetoothDevice> = emptyList(),
     val customPurposes: List<String> = emptyList(),
+    val savedLocations: List<com.businesstracker.mileage.data.local.entity.SavedLocationEntity> = emptyList(),
     // Google Sheets Sync State - No raw tokens exposed in UI state
     val isSheetsConnected: Boolean = false,
     val hasOAuthCredential: Boolean = false,
@@ -111,6 +112,9 @@ class SettingsViewModel @Inject constructor(
     private val sheetsSyncService: GoogleSheetsSyncService,
     private val secureStorageManager: SecureStorageManager,
     private val googleAuthManager: com.businesstracker.mileage.data.security.GoogleAuthManager,
+    private val savedLocationRepository: com.businesstracker.mileage.domain.repository.SavedLocationRepository,
+    private val searchAddressUseCase: com.businesstracker.mileage.domain.usecase.SearchAddressUseCase,
+    private val getCurrentLocationUseCase: com.businesstracker.mileage.domain.usecase.GetCurrentLocationUseCase,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -220,51 +224,56 @@ class SettingsViewModel @Inject constructor(
     }
 
     val uiState: StateFlow<SettingsUiState> = combine(
-        configFlow,
-        sheetsFlow,
-        pendingCountFlow,
-        syncStatusFlow,
-        _pairedBluetoothDevices
-    ) { config, sheets, pendingCount, syncStatus, pairedDevices ->
-        val hasBg = hasBackgroundLocationPermission()
-        val isReady = config.general.autoTrackingEnabled && hasRequiredPermissions()
+        combine(
+            configFlow,
+            sheetsFlow,
+            pendingCountFlow,
+            syncStatusFlow,
+            _pairedBluetoothDevices
+        ) { config, sheets, pendingCount, syncStatus, pairedDevices ->
+            val hasBg = hasBackgroundLocationPermission()
+            val isReady = config.general.autoTrackingEnabled && hasRequiredPermissions()
 
-        val hasOAuth = secureStorageManager.hasOAuthToken()
-        val accountEmail = secureStorageManager.getAccountEmail()
-        val isConnected = (hasOAuth && sheets.spreadsheetId.isNotBlank()) || sheets.webhookUrl.isNotBlank()
+            val hasOAuth = secureStorageManager.hasOAuthToken()
+            val accountEmail = secureStorageManager.getAccountEmail()
+            val isConnected = (hasOAuth && sheets.spreadsheetId.isNotBlank()) || sheets.webhookUrl.isNotBlank()
 
-        SettingsUiState(
-            themeMode = config.general.themeMode,
-            autoTrackingEnabled = config.general.autoTrackingEnabled,
-            hasBackgroundLocationPermission = hasBg,
-            isAutoTrackingReady = isReady,
-            scheduleFilteringEnabled = config.schedule.filteringEnabled,
-            workDays = config.schedule.workDays,
-            workHoursStart = config.schedule.startTime,
-            workHoursEnd = config.schedule.endTime,
-            outsideScheduleBehavior = config.schedule.behavior,
-            defaultVehicle = config.general.defaultVehicle,
-            bluetoothAutoStopEnabled = config.bluetooth.enabled,
-            vehicleBluetoothAddress = config.bluetooth.address,
-            vehicleBluetoothName = config.bluetooth.name,
-            pairedBluetoothDevices = pairedDevices,
-            customPurposes = config.general.customPurposes,
-            cfEndpoint = config.cloudflare.endpoint,
-            cfClientId = config.cloudflare.clientId,
-            cfClientSecret = config.cloudflare.clientSecret,
-            cfBearerToken = config.cloudflare.bearerToken,
-            isSheetsConnected = isConnected,
-            hasOAuthCredential = hasOAuth,
-            connectedAccountEmail = accountEmail,
-            sheetsSpreadsheetId = sheets.spreadsheetId,
-            sheetsSpreadsheetName = sheets.spreadsheetName,
-            sheetsWebhookUrl = sheets.webhookUrl,
-            sheetsLastSyncTime = sheets.lastSyncTime,
-            sheetsLastError = sheets.lastError,
-            sheetsSyncMessage = syncStatus.syncMessage,
-            pendingTripsCount = pendingCount,
-            isSyncing = syncStatus.isSyncing
-        )
+            SettingsUiState(
+                themeMode = config.general.themeMode,
+                autoTrackingEnabled = config.general.autoTrackingEnabled,
+                hasBackgroundLocationPermission = hasBg,
+                isAutoTrackingReady = isReady,
+                scheduleFilteringEnabled = config.schedule.filteringEnabled,
+                workDays = config.schedule.workDays,
+                workHoursStart = config.schedule.startTime,
+                workHoursEnd = config.schedule.endTime,
+                outsideScheduleBehavior = config.schedule.behavior,
+                defaultVehicle = config.general.defaultVehicle,
+                bluetoothAutoStopEnabled = config.bluetooth.enabled,
+                vehicleBluetoothAddress = config.bluetooth.address,
+                vehicleBluetoothName = config.bluetooth.name,
+                pairedBluetoothDevices = pairedDevices,
+                customPurposes = config.general.customPurposes,
+                cfEndpoint = config.cloudflare.endpoint,
+                cfClientId = config.cloudflare.clientId,
+                cfClientSecret = config.cloudflare.clientSecret,
+                cfBearerToken = config.cloudflare.bearerToken,
+                isSheetsConnected = isConnected,
+                hasOAuthCredential = hasOAuth,
+                connectedAccountEmail = accountEmail,
+                sheetsSpreadsheetId = sheets.spreadsheetId,
+                sheetsSpreadsheetName = sheets.spreadsheetName,
+                sheetsWebhookUrl = sheets.webhookUrl,
+                sheetsLastSyncTime = sheets.lastSyncTime,
+                sheetsLastError = sheets.lastError,
+                sheetsSyncMessage = syncStatus.syncMessage,
+                pendingTripsCount = pendingCount,
+                isSyncing = syncStatus.isSyncing
+            )
+        },
+        savedLocationRepository.getAllSavedLocations()
+    ) { baseState, savedLocations ->
+        baseState.copy(savedLocations = savedLocations)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
@@ -543,5 +552,73 @@ class SettingsViewModel @Inject constructor(
     fun triggerSyncNow() {
         com.businesstracker.mileage.worker.MileageSyncWorker.enqueueOneTimeSync(context)
         syncSheetsNow()
+    }
+
+    // Saved Locations
+    suspend fun searchAddress(query: String) = searchAddressUseCase(query)
+
+    suspend fun getCurrentLocation() = getCurrentLocationUseCase()
+
+    fun saveLocation(
+        id: String? = null,
+        name: String,
+        latitude: Double,
+        longitude: Double,
+        address: String,
+        radiusMeters: Int = 150,
+        icon: String = "location",
+        classificationPreference: String? = null,
+        businessEntity: String? = null,
+        onSuccess: (() -> Unit)? = null,
+        onError: ((String) -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                if (name.isBlank()) {
+                    onError?.invoke("Name cannot be empty")
+                    return@launch
+                }
+                val now = System.currentTimeMillis()
+                val entity = if (id != null) {
+                    val existing = savedLocationRepository.getSavedLocationById(id)
+                    com.businesstracker.mileage.data.local.entity.SavedLocationEntity(
+                        id = id,
+                        name = name.trim(),
+                        latitude = latitude,
+                        longitude = longitude,
+                        address = address.trim(),
+                        radiusMeters = radiusMeters.coerceIn(50, 500),
+                        icon = icon,
+                        classificationPreference = classificationPreference,
+                        businessEntity = if (classificationPreference == "BUSINESS") businessEntity else null,
+                        createdAt = existing?.createdAt ?: now,
+                        updatedAt = now
+                    )
+                } else {
+                    com.businesstracker.mileage.data.local.entity.SavedLocationEntity(
+                        name = name.trim(),
+                        latitude = latitude,
+                        longitude = longitude,
+                        address = address.trim(),
+                        radiusMeters = radiusMeters.coerceIn(50, 500),
+                        icon = icon,
+                        classificationPreference = classificationPreference,
+                        businessEntity = if (classificationPreference == "BUSINESS") businessEntity else null,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                }
+                savedLocationRepository.insertSavedLocation(entity)
+                onSuccess?.invoke()
+            } catch (e: Exception) {
+                onError?.invoke(e.localizedMessage ?: "Failed to save location")
+            }
+        }
+    }
+
+    fun deleteLocation(location: com.businesstracker.mileage.data.local.entity.SavedLocationEntity) {
+        viewModelScope.launch {
+            savedLocationRepository.deleteSavedLocation(location)
+        }
     }
 }

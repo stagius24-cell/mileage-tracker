@@ -118,10 +118,14 @@ fun TripDetailScreen(
     onPreviousTrip: (() -> Unit)? = null,
     onNextTrip: (() -> Unit)? = null,
     addressViewModel: TripAddressViewModel = hiltViewModel(),
-    customPurposes: List<String> = emptyList()
+    customPurposes: List<String> = emptyList(),
+    smartNames: com.businesstracker.mileage.domain.usecase.SmartTripNames? = null,
+    onSaveLocation: ((name: String, lat: Double, lng: Double, address: String, radius: Int, icon: String, pref: String?, entity: String?) -> Unit)? = null,
+    onNavigateToSavedLocations: (() -> Unit)? = null
 ) {
     var showEditSheet by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var saveLocationTarget by remember { mutableStateOf<Pair<Boolean, String>?>(null) } // Pair(isStart, address)
     val coroutineScope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     val addressState by addressViewModel.state.collectAsStateWithLifecycle()
@@ -254,17 +258,36 @@ fun TripDetailScreen(
                     verticalAlignment = Alignment.Top
                 ) { page ->
                     if (page == 0) {
+                        val finalStartAddress = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                            ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
+                            else "Approximate start location unavailable"
+                        val finalEndAddress = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                            ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
+                            else "Approximate destination unavailable"
+
                         RouteDetailsTab(
                             trip = trip,
                             date = dateFormatted,
-                            startAddress = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
-                                ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
-                                else "Approximate start location unavailable",
-                            endAddress = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
-                                ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
-                                else "Approximate destination unavailable",
+                            startAddress = finalStartAddress,
+                            endAddress = finalEndAddress,
+                            smartStartName = smartNames?.startLocation?.name,
+                            smartEndName = smartNames?.endLocation?.name,
                             startTime = startTimeStr,
-                            endTime = endTimeStr
+                            endTime = endTimeStr,
+                            onSaveStartLocation = if (smartNames?.startLocation == null && onSaveLocation != null) {
+                                {
+                                    val lat = trip.startLatitude ?: 0.0
+                                    val lng = trip.startLongitude ?: 0.0
+                                    onSaveLocation("Start Location", lat, lng, finalStartAddress, 150, "place", null, null)
+                                }
+                            } else null,
+                            onSaveEndLocation = if (smartNames?.endLocation == null && onSaveLocation != null) {
+                                {
+                                    val lat = trip.endLatitude ?: 0.0
+                                    val lng = trip.endLongitude ?: 0.0
+                                    onSaveLocation("Destination", lat, lng, finalEndAddress, 150, "place", null, null)
+                                }
+                            } else null
                         )
                     } else {
                         TripStatusTab(
@@ -545,8 +568,12 @@ private fun RouteDetailsTab(
     date: String,
     startAddress: String,
     endAddress: String,
+    smartStartName: String? = null,
+    smartEndName: String? = null,
     startTime: String,
-    endTime: String
+    endTime: String,
+    onSaveStartLocation: (() -> Unit)? = null,
+    onSaveEndLocation: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
@@ -601,27 +628,33 @@ private fun RouteDetailsTab(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         DestinationRow(
+            primaryName = smartStartName,
             address = startAddress,
             time = startTime,
             color = SucculentPrimary,
-            isStart = true
+            isStart = true,
+            onSaveLocation = onSaveStartLocation
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         DestinationRow(
+            primaryName = smartEndName,
             address = endAddress,
             time = endTime,
             color = SpeedRed,
-            isStart = false
+            isStart = false,
+            onSaveLocation = onSaveEndLocation
         )
     }
 }
 
 @Composable
 private fun DestinationRow(
+    primaryName: String? = null,
     address: String,
     time: String,
     color: Color,
-    isStart: Boolean
+    isStart: Boolean,
+    onSaveLocation: (() -> Unit)? = null
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
@@ -637,15 +670,47 @@ private fun DestinationRow(
             }
         }
         Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = address,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            if (!primaryName.isNullOrBlank()) {
+                Text(
+                    text = primaryName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = address,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            } else {
+                Text(
+                    text = address,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+        if (primaryName == null && onSaveLocation != null) {
+            TextButton(
+                onClick = onSaveLocation,
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "+ Save",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = SucculentPrimary
+                )
+            }
+        }
+        Spacer(modifier = Modifier.width(4.dp))
         Text(
             text = time,
             style = MaterialTheme.typography.labelMedium,

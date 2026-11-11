@@ -1,8 +1,10 @@
 package com.businesstracker.mileage.di
 
 import com.businesstracker.mileage.data.repository.ActiveTripRepositoryImpl
+import com.businesstracker.mileage.data.repository.SavedLocationRepositoryImpl
 import com.businesstracker.mileage.data.repository.TripRepositoryImpl
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
+import com.businesstracker.mileage.domain.repository.SavedLocationRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
 import dagger.Binds
 import dagger.Module
@@ -25,4 +27,10 @@ abstract class RepositoryModule {
     abstract fun bindActiveTripRepository(
         activeTripRepositoryImpl: ActiveTripRepositoryImpl
     ): ActiveTripRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSavedLocationRepository(
+        savedLocationRepositoryImpl: SavedLocationRepositoryImpl
+    ): SavedLocationRepository
 }
