@@ -9,8 +9,14 @@ data class SmartTripNames(
     val startDisplayName: String,
     val endDisplayName: String,
     val startSavedLocation: SavedLocationEntity? = null,
-    val endSavedLocation: SavedLocationEntity? = null
-)
+    val endSavedLocation: SavedLocationEntity? = null,
+    val suggestedClassification: String? = null,
+    val suggestedBusinessEntity: String? = null
+) {
+    val startLocation: SavedLocationEntity? get() = startSavedLocation
+    val endLocation: SavedLocationEntity? get() = endSavedLocation
+    val formattedDisplayRoute: String get() = "$startDisplayName → $endDisplayName"
+}
 
 data class ClassificationSuggestion(
     val suggestedClassification: String?, // "BUSINESS", "PERSONAL", or null
@@ -40,12 +46,15 @@ class ResolveSmartTripNamesUseCase @Inject constructor(
 
         val defaultStart = trip.startAddress ?: "Recorded start location"
         val defaultEnd = trip.endAddress ?: "Recorded destination"
+        val suggestion = evaluateClassificationSuggestion(startMatch?.location, endMatch?.location)
 
         return SmartTripNames(
             startDisplayName = startMatch?.location?.name ?: defaultStart,
             endDisplayName = endMatch?.location?.name ?: defaultEnd,
             startSavedLocation = startMatch?.location,
-            endSavedLocation = endMatch?.location
+            endSavedLocation = endMatch?.location,
+            suggestedClassification = suggestion.suggestedClassification,
+            suggestedBusinessEntity = suggestion.suggestedBusinessEntity
         )
     }
 
