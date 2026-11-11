@@ -333,17 +333,43 @@ class DatabaseMigrationTest {
                 INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
                 VALUES ('trip-v5-to-v6', '2026-11-06', 1000, 2000, 37.3382, -121.8863, 37.3521, -121.8901, 8.4, 8.4, 'MySucculentCorner', 'Delivery', 'AUTO_DETECTED', 'BUSINESS', 0.67, 5.628, '[]', 'PENDING')
             """.trimIndent())
+            execSQL("""
+                INSERT INTO active_trip (id, startTime, startLatitude, startLongitude, lastLatitude, lastLongitude, lastTimestamp, totalDistanceMeters, trackingMethod, isPaused, pausedDurationMillis, suggestedBusiness)
+                VALUES ('active-v5-to-v6', 1000, 37.3382, -121.8863, 37.3521, -121.8901, 2000, 3200.0, 'AUTO_DETECTED', 0, 0, 'MySucculentCorner')
+            """.trimIndent())
+            execSQL("""
+                INSERT INTO active_waypoints (id, tripId, latitude, longitude, altitude, accuracy, speed, timestamp, bootCount)
+                VALUES (901, 'active-v5-to-v6', 37.3382, -121.8863, 10.0, 5.0, 15.0, 1000, 7)
+            """.trimIndent())
             close()
         }
 
         db = helper.runMigrationsAndValidate(TEST_DB, 6, true, ExpenseTrackerDatabase.MIGRATION_5_6)
 
         // Verify existing trip preserved
-        val tripCursor = db.query("SELECT id, totalDistanceMiles FROM trips WHERE id = 'trip-v5-to-v6'")
+        val tripCursor = db.query("SELECT id, totalDistanceMiles, businessMiles, classification, businessEntity, syncStatus, calculatedDeduction FROM trips WHERE id = 'trip-v5-to-v6'")
         assertTrue(tripCursor.moveToFirst())
         assertEquals("trip-v5-to-v6", tripCursor.getString(0))
         assertEquals(8.4, tripCursor.getDouble(1), 0.001)
+        assertEquals(8.4, tripCursor.getDouble(2), 0.001)
+        assertEquals("BUSINESS", tripCursor.getString(3))
+        assertEquals("MySucculentCorner", tripCursor.getString(4))
+        assertEquals("PENDING", tripCursor.getString(5))
+        assertEquals(5.628, tripCursor.getDouble(6), 0.001)
         tripCursor.close()
+
+        val activeCursor = db.query("SELECT totalDistanceMeters, trackingMethod FROM active_trip WHERE id = 'active-v5-to-v6'")
+        assertTrue(activeCursor.moveToFirst())
+        assertEquals(3200.0, activeCursor.getDouble(0), 0.001)
+        assertEquals("AUTO_DETECTED", activeCursor.getString(1))
+        activeCursor.close()
+
+        val waypointCursor = db.query("SELECT latitude, longitude, bootCount FROM active_waypoints WHERE id = 901")
+        assertTrue(waypointCursor.moveToFirst())
+        assertEquals(37.3382, waypointCursor.getDouble(0), 0.000001)
+        assertEquals(-121.8863, waypointCursor.getDouble(1), 0.000001)
+        assertEquals(7, waypointCursor.getInt(2))
+        waypointCursor.close()
 
         // Verify saved_locations table created and writable
         db.execSQL("""
