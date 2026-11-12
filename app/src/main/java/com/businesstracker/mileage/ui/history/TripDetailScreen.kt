@@ -801,7 +801,7 @@ private fun DestinationRow(
             .padding(top = 3.dp, bottom = 3.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isStart) {
@@ -837,12 +837,18 @@ private fun DestinationRow(
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Column(
+            // Keep the timestamp and action together, centered as a single group.
+            // A fixed-height wrapper prevents either control from being pinned to a row edge.
+            Box(
                 modifier = Modifier
-                    .widthIn(min = 84.dp),
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically)
+                    .widthIn(min = 84.dp)
+                    .height(64.dp),
+                contentAlignment = Alignment.CenterEnd
             ) {
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(0.dp)
+                ) {
                 Text(
                     text = time,
                     style = MaterialTheme.typography.labelMedium,
@@ -865,6 +871,7 @@ private fun DestinationRow(
                             modifier = Modifier.size(18.dp)
                         )
                     }
+                }
                 }
             }
         }
