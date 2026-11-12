@@ -328,7 +328,7 @@ fun SavedLocationDialog(
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .fillMaxWidth()
                     .padding(horizontal = 18.dp, vertical = 14.dp)
             ) {
                 // Header
@@ -360,7 +360,7 @@ fun SavedLocationDialog(
 
                 Column(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1f, fill = false)
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
