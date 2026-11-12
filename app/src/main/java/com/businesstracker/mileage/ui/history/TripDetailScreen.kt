@@ -796,7 +796,7 @@ private fun DestinationRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp)
+            .padding(top = 6.9.dp, bottom = 5.1.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             if (isStart) {
