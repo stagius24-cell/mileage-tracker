@@ -933,28 +933,28 @@ private fun TripStatusTab(
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             StatusValue("Trip type", trip.classification, Modifier.weight(1f), classificationColor)
             StatusValue("Sync status", trip.syncStatus, Modifier.weight(1f), if (trip.syncStatus == "SYNCED") SucculentPrimary else SlateNeutral)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             StatusValue("Duration", "$durationMinutes min", Modifier.weight(1f))
             StatusValue("Tracking", trip.trackingMethod, Modifier.weight(1f))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             StatusValue("Average speed", avgSpeedStr, Modifier.weight(1f))
             StatusValue("Max speed", maxSpeedStr, Modifier.weight(1f))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             StatusValue("Purpose", trip.purpose, Modifier.weight(1f))
             StatusValue("IRS rate", "\$${trip.applicableRate} / mi", Modifier.weight(1f))
         }
         if (!trip.notes.isNullOrBlank()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-            StatusValue("Notes", trip.notes, Modifier.fillMaxWidth())
+            StatusValue("Notes", trip.notes, Modifier.fillMaxWidth().padding(vertical = 8.dp))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         Row(
