@@ -663,14 +663,14 @@ private fun TripDetailTabButton(
                 .height(44.dp)
                 .background(
                     color = SucculentPrimary.copy(alpha = if (selected) 0.16f else 0f),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(20.dp)
                 )
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .defaultMinSize(minHeight = 48.dp)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(20.dp))
                 .semantics {
                     role = Role.Tab
                     this.selected = selected
