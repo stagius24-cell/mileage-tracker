@@ -712,7 +712,7 @@ private fun RouteDetailsTab(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, end = 12.dp, top = 11.5.dp, bottom = 8.5.dp),
+            .padding(start = 12.dp, end = 12.dp, top = 12.5.dp, bottom = 7.5.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Row(
