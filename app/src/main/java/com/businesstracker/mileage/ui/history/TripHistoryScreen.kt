@@ -104,6 +104,7 @@ fun TripHistoryScreen(
     viewModel: TripHistoryViewModel = hiltViewModel(),
     initialMonthIso: String = "",
     onBackToReports: (() -> Unit)? = null,
+    onNavigateToSavedLocations: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -181,9 +182,11 @@ fun TripHistoryScreen(
             onDeleteTrip = { id -> viewModel.deleteTrip(id) },
             customPurposes = state.customPurposes,
             smartNames = state.smartNamesMap[selectedTrip.id],
-            onSaveLocation = { name, lat, lng, address, radius, icon, pref, entity ->
-                viewModel.saveLocationFromTrip(name, lat, lng, address, radius, icon, pref, entity)
-            }
+            onSaveLocation = { name, lat, lng, address, radius, icon, pref, entity, onSuccess, onError ->
+                viewModel.saveLocationFromTrip(name, lat, lng, address, radius, icon, pref, entity,
+                    onSuccess = onSuccess, onError = onError)
+            },
+            onNavigateToSavedLocations = onNavigateToSavedLocations
         )
         return
     }

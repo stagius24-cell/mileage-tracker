@@ -1,5 +1,6 @@
 package com.businesstracker.mileage.ui.navigation
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
@@ -51,6 +52,11 @@ fun MileageNavHost(
             val monthIso = backStackEntry.arguments?.getString("month").orEmpty()
             TripHistoryScreen(
                 initialMonthIso = monthIso,
+                onNavigateToSavedLocations = { locationId ->
+                    navController.navigate("${Screen.Settings.route}?editLocationId=${Uri.encode(locationId)}") {
+                        launchSingleTop = true
+                    }
+                },
                 onBackToReports = if (monthIso.isNotBlank()) {
                     { navController.popBackStack() }
                 } else {
@@ -67,8 +73,14 @@ fun MileageNavHost(
                 }
             )
         }
-        composable(Screen.Settings.route) {
-            SettingsScreen()
+        composable(
+            route = "${Screen.Settings.route}?editLocationId={editLocationId}",
+            arguments = listOf(navArgument("editLocationId") {
+                type = NavType.StringType
+                defaultValue = ""
+            })
+        ) { backStackEntry ->
+            SettingsScreen(initialEditLocationId = backStackEntry.arguments?.getString("editLocationId").orEmpty())
         }
     }
 }

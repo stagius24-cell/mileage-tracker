@@ -122,6 +122,7 @@ import java.util.Locale
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
+    initialEditLocationId: String = "",
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -151,6 +152,18 @@ fun SettingsScreen(
     var editingLocation by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
     var locationPendingDeletion by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
     var locationActionError by remember { mutableStateOf<String?>(null) }
+    var openedInitialEdit by remember(initialEditLocationId) { mutableStateOf(false) }
+
+    LaunchedEffect(initialEditLocationId, state.savedLocations) {
+        if (initialEditLocationId.isNotBlank() && !openedInitialEdit) {
+            state.savedLocations.firstOrNull { it.id == initialEditLocationId }?.let { location ->
+                openedInitialEdit = true
+                listState.animateScrollToItem(4)
+                editingLocation = location
+                showLocationDialog = true
+            }
+        }
+    }
 
     LazyColumn(
         state = listState,
@@ -442,103 +455,6 @@ fun SettingsScreen(
                         TextButton(onClick = { deleteConfirmationPurpose = null }) {
                             Text("Cancel")
                         }
-                    }
-                )
-            }
-
-            // Saved Location Delete Dialog
-            if (locationPendingDeletion != null) {
-                val loc = locationPendingDeletion!!
-                AlertDialog(
-                    onDismissRequest = { locationPendingDeletion = null },
-                    title = {
-                        Text(
-                            text = "Delete Saved Location",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                    },
-                    text = {
-                        Column {
-                            Text(
-                                text = "Are you sure you want to delete \"${loc.name}\"? Associated trips and GPS data will not be deleted.",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            if (locationActionError != null) {
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    text = locationActionError!!,
-                                    color = SpeedRed,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                locationActionError = null
-                                viewModel.deleteLocation(
-                                    location = loc,
-                                    onSuccess = {
-                                        locationPendingDeletion = null
-                                    },
-                                    onError = { err ->
-                                        locationActionError = err
-                                    }
-                                )
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SpeedRed),
-                            modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                        ) {
-                            Text("Delete", color = Color.White)
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = {
-                                locationPendingDeletion = null
-                                locationActionError = null
-                            },
-                            modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                        ) {
-                            Text("Cancel")
-                        }
-                    }
-                )
-            }
-
-            // Saved Location Add/Edit Dialog
-            if (showLocationDialog) {
-                SavedLocationDialog(
-                    initialLocation = editingLocation,
-                    onDismiss = {
-                        showLocationDialog = false
-                        editingLocation = null
-                    },
-                    onSearchAddress = { query -> viewModel.searchAddress(query) },
-                    onGetCurrentLocation = { viewModel.getCurrentLocation() },
-                    onSave = { id, name, lat, lng, addr, radius, icon, pref, entity, onSaveComplete ->
-                        viewModel.saveLocation(
-                            id = id,
-                            name = name,
-                            latitude = lat,
-                            longitude = lng,
-                            address = addr,
-                            radiusMeters = radius,
-                            icon = icon,
-                            classificationPreference = pref,
-                            businessEntity = entity,
-                            onSuccess = {
-                                onSaveComplete(null)
-                                showLocationDialog = false
-                                editingLocation = null
-                            },
-                            onError = { err ->
-                                onSaveComplete(err)
-                            }
-                        )
                     }
                 )
             }
@@ -895,6 +811,103 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    // Saved Location Delete Dialog
+    if (locationPendingDeletion != null) {
+        val loc = locationPendingDeletion!!
+        AlertDialog(
+            onDismissRequest = { locationPendingDeletion = null },
+            title = {
+                Text(
+                    text = "Delete Saved Location",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Are you sure you want to delete \"${loc.name}\"? Associated trips and GPS data will not be deleted.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    if (locationActionError != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = locationActionError!!,
+                            color = SpeedRed,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        locationActionError = null
+                        viewModel.deleteLocation(
+                            location = loc,
+                            onSuccess = {
+                                locationPendingDeletion = null
+                            },
+                            onError = { err ->
+                                locationActionError = err
+                            }
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SpeedRed),
+                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                ) {
+                    Text("Delete", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        locationPendingDeletion = null
+                        locationActionError = null
+                    },
+                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                ) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Saved Location Add/Edit Dialog
+    if (showLocationDialog) {
+        SavedLocationDialog(
+            initialLocation = editingLocation,
+            onDismiss = {
+                showLocationDialog = false
+                editingLocation = null
+            },
+            onSearchAddress = { query -> viewModel.searchAddress(query) },
+            onGetCurrentLocation = { viewModel.getCurrentLocation() },
+            onSave = { id, name, lat, lng, addr, radius, icon, pref, entity, onSaveComplete ->
+                viewModel.saveLocation(
+                    id = id,
+                    name = name,
+                    latitude = lat,
+                    longitude = lng,
+                    address = addr,
+                    radiusMeters = radius,
+                    icon = icon,
+                    classificationPreference = pref,
+                    businessEntity = entity,
+                    onSuccess = {
+                        onSaveComplete(null)
+                        showLocationDialog = false
+                        editingLocation = null
+                    },
+                    onError = { err ->
+                        onSaveComplete(err)
+                    }
+                )
+            }
+        )
     }
 
     if (showVersionHistoryDialog) {

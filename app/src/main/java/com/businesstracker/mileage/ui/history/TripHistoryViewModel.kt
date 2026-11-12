@@ -365,7 +365,7 @@ class TripHistoryViewModel @Inject constructor(
         icon: String = "location",
         classificationPreference: String? = null,
         businessEntity: String? = null,
-        onSuccess: (() -> Unit)? = null,
+        onSuccess: ((String) -> Unit)? = null,
         onError: ((String) -> Unit)? = null
     ) {
         viewModelScope.launch {
@@ -388,7 +388,7 @@ class TripHistoryViewModel @Inject constructor(
                     updatedAt = now
                 )
                 savedLocationRepository.insertSavedLocation(entity)
-                onSuccess?.invoke()
+                onSuccess?.invoke(entity.id)
             } catch (e: Exception) {
                 onError?.invoke(e.localizedMessage ?: "Failed to save location")
             }
