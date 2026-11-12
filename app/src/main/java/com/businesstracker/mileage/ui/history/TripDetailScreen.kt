@@ -813,22 +813,21 @@ private fun DestinationRow(
                     Text(
                         text = address,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
                     Text(
                         text = address,
                         style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Column(horizontalAlignment = Alignment.End) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
                 Text(
                     text = time,
                     style = MaterialTheme.typography.labelMedium,
@@ -839,7 +838,7 @@ private fun DestinationRow(
                     IconButton(
                         onClick = onSaveLocation,
                         modifier = Modifier
-                            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                            .size(36.dp)
                             .semantics {
                                 contentDescription = "$locationActionLabel ${if (isStart) "start" else "destination"} location"
                             }
