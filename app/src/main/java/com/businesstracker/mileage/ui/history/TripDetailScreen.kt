@@ -796,16 +796,22 @@ private fun DestinationRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.9.dp, bottom = 5.1.dp)
+            .padding(top = 6.dp, bottom = 6.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             if (isStart) {
                 com.businesstracker.mileage.ui.components.StartBeaconIcon(tint = color)
             } else {
                 com.businesstracker.mileage.ui.components.EndFlagIcon(tint = color)
             }
             Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.Center
+            ) {
                 if (!primaryName.isNullOrBlank()) {
                     Text(
                         text = primaryName,
@@ -831,7 +837,7 @@ private fun DestinationRow(
             Spacer(modifier = Modifier.width(8.dp))
             Column(
                 horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(0.dp)
+                verticalArrangement = Arrangement.Center
             ) {
                 Text(
                     text = time,
@@ -844,6 +850,7 @@ private fun DestinationRow(
                         onClick = onSaveLocation,
                         modifier = Modifier
                             .size(32.dp)
+                            .offset(y = (-8).dp)
                             .semantics {
                                 contentDescription = "$locationActionLabel ${if (isStart) "start" else "destination"} location"
                             }
