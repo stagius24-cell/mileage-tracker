@@ -801,7 +801,7 @@ private fun DestinationRow(
             .padding(top = 6.dp, bottom = 6.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isStart) {
@@ -840,7 +840,7 @@ private fun DestinationRow(
             Box(
                 modifier = Modifier
                     .widthIn(min = 84.dp)
-                    .height(96.dp)
+                    .height(64.dp)
             ) {
                 Text(
                     text = time,
@@ -854,7 +854,6 @@ private fun DestinationRow(
                         onClick = onSaveLocation,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(bottom = 8.dp)
                             .size(32.dp)
                             .semantics {
                                 contentDescription = "$locationActionLabel ${if (isStart) "start" else "destination"} location"
