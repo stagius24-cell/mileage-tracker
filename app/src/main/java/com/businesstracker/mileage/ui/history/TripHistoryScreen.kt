@@ -186,7 +186,10 @@ fun TripHistoryScreen(
                 viewModel.saveLocationFromTrip(name, lat, lng, address, radius, icon, pref, entity,
                     onSuccess = onSuccess, onError = onError)
             },
-            onNavigateToSavedLocations = onNavigateToSavedLocations
+            onNavigateToSavedLocations = { locationId ->
+                viewModel.selectTripForDetails(null)
+                onNavigateToSavedLocations?.invoke(locationId)
+            }
         )
         return
     }

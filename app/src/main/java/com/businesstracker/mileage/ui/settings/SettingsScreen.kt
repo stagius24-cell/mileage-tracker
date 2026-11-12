@@ -168,16 +168,9 @@ fun SettingsScreen(
     var editingLocation by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
     var locationPendingDeletion by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
     var locationActionError by remember { mutableStateOf<String?>(null) }
-    var openedInitialEdit by remember(initialEditLocationId) { mutableStateOf(false) }
-
-    LaunchedEffect(initialEditLocationId, state.savedLocations) {
-        if (initialEditLocationId.isNotBlank() && !openedInitialEdit) {
-            state.savedLocations.firstOrNull { it.id == initialEditLocationId }?.let { location ->
-                openedInitialEdit = true
-                listState.animateScrollToItem(4)
-                editingLocation = location
-                showLocationDialog = true
-            }
+    LaunchedEffect(initialEditLocationId) {
+        if (initialEditLocationId.isNotBlank()) {
+            listState.animateScrollToItem(5)
         }
     }
 

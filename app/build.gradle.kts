@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 88
-        versionName = "1.0.87"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Saved Locations: full trip addresses and direct editing from Trip Details.\"")
+        versionCode = 89
+        versionName = "1.0.88"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip Details: compact addresses and return to history after saving a location.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
