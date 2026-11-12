@@ -837,14 +837,15 @@ private fun DestinationRow(
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Box(
+            Column(
                 modifier = Modifier
                     .widthIn(min = 84.dp)
-                    .height(52.dp)
+                    .height(60.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.SpaceEvenly
             ) {
                 Text(
                     text = time,
-                    modifier = Modifier.align(Alignment.TopEnd),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -853,7 +854,6 @@ private fun DestinationRow(
                     IconButton(
                         onClick = onSaveLocation,
                         modifier = Modifier
-                            .align(Alignment.BottomEnd)
                             .size(32.dp)
                             .semantics {
                                 contentDescription = "$locationActionLabel ${if (isStart) "start" else "destination"} location"
