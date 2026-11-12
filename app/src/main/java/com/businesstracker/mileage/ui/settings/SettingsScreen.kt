@@ -45,13 +45,29 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatterySaver
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import android.widget.Toast
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -617,15 +633,17 @@ fun SettingsScreen(
         item {
             SettingsSection(
                 title = "Saved Locations",
-                subtitle = "${state.savedLocations.size} saved",
-                icon = Icons.Default.LocationOn
+                subtitle = "Custom place names for trip history",
+                icon = Icons.Default.LocationOn,
+                trailing = {
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = "Saved Locations options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
             ) {
-                Text(
-                    text = "Frequently visited places will automatically display custom names (e.g. Home, Nursery) in your Trip History.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
                 if (state.savedLocations.isEmpty()) {
                     Box(
                         modifier = Modifier
@@ -679,112 +697,332 @@ fun SettingsScreen(
 
         item {
             val timeFormat = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
-            val lastSync = if (state.sheetsLastSyncTime > 0L) {
-                timeFormat.format(Date(state.sheetsLastSyncTime))
+            val latestTime = state.latestBackupTimestamp
+            val lastBackupFormatted = if (latestTime > 0L) {
+                timeFormat.format(Date(latestTime))
             } else {
                 "Never"
             }
-            var isSpreadsheetIdExpanded by remember { mutableStateOf(false) }
+            var isAdvancedExpanded by remember { mutableStateOf(false) }
+            val clipboardManager = LocalClipboardManager.current
 
             SettingsSection(
-                title = "Google Sheets",
-                subtitle = if (state.isSheetsConnected) "Connected" else "Not connected",
+                title = "Backup & Restore",
+                subtitle = if (state.isSheetsConnected) "Google Sheets · Connected" else "Google Sheets · Not connected",
                 subtitlePositive = state.isSheetsConnected,
-                icon = Icons.Default.TableChart
+                icon = Icons.Default.CloudSync,
+                trailing = {
+                    IconButton(
+                        onClick = { showVersionHistoryDialog = true },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = "Backup info & version history",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
             ) {
-                if (!state.sheetsLastError.isNullOrBlank()) {
-                    CompactError(state.sheetsLastError.orEmpty())
-                }
-                if (!state.sheetsSyncMessage.isNullOrBlank()) {
-                    CompactSuccess(state.sheetsSyncMessage.orEmpty())
-                }
-
-                AccountRow(
-                    connected = state.hasOAuthCredential,
-                    email = state.connectedAccountEmail,
-                    onConnect = {
-                        googleSignInLauncher.launch(viewModel.getGoogleSignInClient().signInIntent)
-                    },
-                    onDisconnect = viewModel::disconnectSheets
+                // 1. Combined Backup Status
+                CombinedBackupStatusBox(
+                    state = state,
+                    lastBackupFormatted = lastBackupFormatted
                 )
 
-                // Collapsible Spreadsheet ID configuration
+                // 2. Compact Inline Pill Action Buttons (Back Up & Restore)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    val isBackingUp = state.isUnifiedBackingUp
+                    val isRestoring = state.isLoadingRestorePreview || state.isApplyingRestore
+
+                    // Left Button: Back Up (Solid SucculentPrimary container, white text/icon)
+                    Button(
+                        onClick = viewModel::backupAllNow,
+                        enabled = !isBackingUp && !isRestoring && state.isSheetsConnected,
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SucculentPrimary,
+                            contentColor = Color.White,
+                            disabledContainerColor = SucculentPrimary.copy(alpha = 0.4f),
+                            disabledContentColor = Color.White.copy(alpha = 0.7f)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        if (isBackingUp) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Backing Up...",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = Color.White
+                            )
+                        } else {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudUpload,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "Back Up",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
+                                    )
+                                }
+                                Text(
+                                    text = "Trips + Locations",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = Color.White.copy(alpha = 0.9f)
+                                )
+                            }
+                        }
+                    }
+
+                    // Right Button: Restore (Outlined/Soft Container, SucculentPrimary border & text)
+                    Button(
+                        onClick = viewModel::restoreSavedLocationsFromSheets,
+                        enabled = !isBackingUp && !isRestoring && state.isSheetsConnected,
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 48.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
+                            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        ),
+                        border = BorderStroke(1.dp, SucculentPrimary.copy(alpha = 0.35f)),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        if (isRestoring) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = SucculentPrimary,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Loading...",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = SucculentPrimary
+                            )
+                        } else {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudDownload,
+                                        contentDescription = null,
+                                        tint = SucculentPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = "Restore",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Text(
+                                    text = "From Google Sheets",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+
+                // 3. Collapsible Google Sheets (Advanced) Section
                 Column(modifier = Modifier.fillMaxWidth()) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { isSpreadsheetIdExpanded = !isSpreadsheetIdExpanded }
+                            .clickable { isAdvancedExpanded = !isAdvancedExpanded }
                             .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Icon(
+                            imageVector = Icons.Default.TableChart,
+                            contentDescription = null,
+                            tint = SucculentPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "Spreadsheet ID configuration",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = "Google Sheets (Advanced)",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
                         )
                         Icon(
-                            imageVector = if (isSpreadsheetIdExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                            contentDescription = if (isSpreadsheetIdExpanded) "Collapse" else "Expand",
+                            imageVector = if (isAdvancedExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isAdvancedExpanded) "Collapse" else "Expand",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
                     }
 
-                    if (isSpreadsheetIdExpanded) {
+                    if (isAdvancedExpanded) {
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = state.sheetsSpreadsheetId,
-                            onValueChange = viewModel::setSheetsSpreadsheetId,
-                            label = { Text("Spreadsheet ID") },
-                            trailingIcon = {
-                                if (state.sheetsSpreadsheetId.isNotEmpty()) {
-                                    IconButton(onClick = { viewModel.setSheetsSpreadsheetId("") }) {
-                                        Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = "Clear Spreadsheet ID",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+
+                        // AccountRow (Connected account, switch, disconnect)
+                        AccountRow(
+                            connected = state.hasOAuthCredential,
+                            email = state.connectedAccountEmail,
+                            onConnect = {
+                                googleSignInLauncher.launch(viewModel.getGoogleSignInClient().signInIntent)
+                            },
+                            onDisconnect = viewModel::disconnectSheets
+                        )
+
+                        Spacer(Modifier.height(10.dp))
+
+                        // Spreadsheet ID with Copy icon
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = "Spreadsheet ID",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = state.sheetsSpreadsheetId.ifBlank { "No spreadsheet ID set" },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = if (state.sheetsSpreadsheetId.isNotBlank()) {
+                                            MaterialTheme.colorScheme.onSurface
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    if (state.sheetsSpreadsheetId.isNotBlank()) {
+                                        Spacer(Modifier.width(8.dp))
+                                        IconButton(
+                                            onClick = {
+                                                clipboardManager.setText(AnnotatedString(state.sheetsSpreadsheetId))
+                                                Toast.makeText(context, "Spreadsheet ID copied", Toast.LENGTH_SHORT).show()
+                                            },
+                                            modifier = Modifier.size(24.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.ContentCopy,
+                                                contentDescription = "Copy Spreadsheet ID",
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
                                     }
                                 }
-                            },
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+
+                        // Last sync & Pending metrics
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                    }
-                }
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.DateRange,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Column {
+                                    Text(
+                                        text = "Last sync",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = if (state.sheetsLastSyncTime > 0L) timeFormat.format(Date(state.sheetsLastSyncTime)) else "Never",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    MetaText("Last sync", lastSync)
-                    MetaText("Pending", state.pendingTripsCount.toString(), Alignment.End)
-                }
-
-                Button(
-                    onClick = viewModel::syncSheetsNow,
-                    enabled = !state.isSyncing,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-                ) {
-                    if (state.isSyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = Color.White,
-                            strokeWidth = 2.dp
-                        )
-                    } else {
-                        Icon(Icons.Default.Sync, contentDescription = null)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Layers,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        text = "Pending",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = "${state.pendingTripsCount} trips · ${state.savedLocationsPendingBackupCount} places",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
                     }
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (state.isSyncing) "Syncing" else "Sync now")
                 }
             }
         }
@@ -910,9 +1148,23 @@ fun SettingsScreen(
         )
     }
 
+    state.restorePreviewState?.let { previewUi ->
+        SavedLocationsRestorePreviewDialog(
+            state = previewUi,
+            isApplying = state.isApplyingRestore,
+            onToggleCandidate = viewModel::toggleRestoreCandidateSelection,
+            onSetOverwriteConflicts = viewModel::setOverwriteConflictsApproved,
+            onConfirmApply = viewModel::confirmApplySavedLocationsRestore,
+            onDismiss = viewModel::dismissRestorePreview
+        )
+    }
+
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.84 (Build 85)" to "Simplified compact Backup & Restore UI: visual metric pills, collapsible Google Sheets card, and copyable spreadsheet ID.",
+                "Version 1.0.83 (Build 84)" to "Unified compact Backup & Restore card with combined status and inline controls.",
+                "Version 1.0.82 (Build 83)" to "Added automatic & manual Google Sheets backup and preview-confirmed restore for Saved Locations.",
                 "Version 1.0.78 (Build 79)" to "Matching Origin GPS Radar & Destination Finish Flag icons on Google Map and trip cards; tighter map zoom; updated version history.",
                 "Version 1.0.77 (Build 78)" to "Compacted wheel time picker dialog by 20%, tightened button spacing, and removed subtitle description text.",
                 "Version 1.0.76 (Build 77)" to "Option 1 interactive vertical swipe up/down wheel time picker for Work Schedule start & end times with AM/PM support.",
@@ -1523,4 +1775,219 @@ private fun MetaText(
 @Composable
 private fun SectionDivider() {
     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
+@Composable
+private fun CombinedBackupStatusBox(
+    state: SettingsUiState,
+    lastBackupFormatted: String
+) {
+    val isAllBackedUp = state.isAllDataBackedUp
+    val hasPending = state.totalPendingCount > 0
+    val hasError = !state.unifiedBackupError.isNullOrBlank() ||
+        !state.sheetsLastError.isNullOrBlank() ||
+        !state.savedLocationsLastBackupError.isNullOrBlank()
+    val isConnected = state.isSheetsConnected
+
+    val boxBg = when {
+        hasError -> SpeedRed.copy(alpha = 0.08f)
+        isAllBackedUp -> SucculentPrimary.copy(alpha = 0.08f)
+        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    }
+
+    val boxBorder = when {
+        hasError -> BorderStroke(1.dp, SpeedRed.copy(alpha = 0.3f))
+        isAllBackedUp -> BorderStroke(1.dp, SucculentPrimary.copy(alpha = 0.25f))
+        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+    }
+
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = boxBg,
+        border = boxBorder,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Row 1: Status Banner (CheckCircle / CloudOff / Error / Sync)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (hasError) {
+                    Icon(
+                        imageVector = Icons.Default.Error,
+                        contentDescription = null,
+                        tint = SpeedRed,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = if (!state.sheetsLastError.isNullOrBlank() && !state.savedLocationsLastBackupError.isNullOrBlank()) {
+                            "Backup failed"
+                        } else {
+                            "Partial backup completed"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = SpeedRed
+                    )
+                } else if (isAllBackedUp) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = SucculentPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "All data backed up",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                } else if (!isConnected) {
+                    Icon(
+                        imageVector = Icons.Default.CloudOff,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Google Sheets not connected",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else if (hasPending) {
+                    Icon(
+                        imageVector = Icons.Default.Sync,
+                        contentDescription = null,
+                        tint = SucculentPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Pending backup changes",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.Cloud,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Ready to back up",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            // Row 2: Visual Metrics Row (Car icon + "Trips: Up to date" | Divider | Location icon + "Locations: X")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Trips Metric
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DirectionsCar,
+                        contentDescription = null,
+                        tint = SucculentPrimary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = if (state.pendingTripsCount > 0) {
+                            "Trips: ${state.pendingTripsCount} pending"
+                        } else {
+                            "Trips: Up to date"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // Vertical Divider between metrics
+                Box(
+                    modifier = Modifier
+                        .height(14.dp)
+                        .width(1.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                )
+
+                Spacer(Modifier.width(12.dp))
+
+                // Locations Metric
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        tint = SucculentPrimary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    val locCount = state.savedLocations.size
+                    val locText = if (state.savedLocationsPendingBackupCount > 0) {
+                        "Locations: ${state.savedLocationsPendingBackupCount} pending"
+                    } else {
+                        "Locations: $locCount"
+                    }
+                    Text(
+                        text = locText,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            // Row 3: Clock icon + "Last backup: Nov 11, 5:46 PM"
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(15.dp)
+                )
+                Text(
+                    text = "Last backup: $lastBackupFormatted",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Error message banner if present
+            val errorMsg = state.unifiedBackupError ?: state.sheetsLastError ?: state.savedLocationsLastBackupError
+            if (!errorMsg.isNullOrBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = errorMsg,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SpeedRed
+                )
+            }
+        }
+    }
 }
