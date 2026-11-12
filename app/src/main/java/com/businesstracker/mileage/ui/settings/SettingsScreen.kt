@@ -170,9 +170,11 @@ fun SettingsScreen(
     var locationActionError by remember { mutableStateOf<String?>(null) }
     // Open the requested saved location editor as soon as its Room record is loaded.
     // Navigation from a trip's bookmark must not stop at the Settings list.
+    var handledEditLocationId by rememberSaveable { mutableStateOf("") }
     LaunchedEffect(initialEditLocationId, state.savedLocations) {
-        if (initialEditLocationId.isNotBlank()) {
+        if (initialEditLocationId.isNotBlank() && initialEditLocationId != handledEditLocationId) {
             state.savedLocations.firstOrNull { it.id == initialEditLocationId }?.let { location ->
+                handledEditLocationId = initialEditLocationId
                 editingLocation = location
                 showLocationDialog = true
             }
