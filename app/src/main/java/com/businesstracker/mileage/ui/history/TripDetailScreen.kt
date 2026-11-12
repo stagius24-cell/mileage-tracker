@@ -37,6 +37,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.AlertDialog
@@ -710,8 +711,8 @@ private fun RouteDetailsTab(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -835,7 +836,7 @@ private fun DestinationRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 if (onSaveLocation != null) {
-                    TextButton(
+                    IconButton(
                         onClick = onSaveLocation,
                         modifier = Modifier
                             .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
@@ -843,11 +844,11 @@ private fun DestinationRow(
                                 contentDescription = "$locationActionLabel ${if (isStart) "start" else "destination"} location"
                             }
                     ) {
-                        Text(
-                            text = if (locationActionLabel == "Save") "+ Save" else "Edit",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = SucculentPrimary
+                        Icon(
+                            imageVector = if (locationActionLabel == "Save") Icons.Default.Add else Icons.Default.Edit,
+                            contentDescription = null,
+                            tint = SucculentPrimary,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -908,8 +909,8 @@ private fun TripStatusTab(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             StatusValue("Trip type", trip.classification, Modifier.weight(1f), classificationColor)

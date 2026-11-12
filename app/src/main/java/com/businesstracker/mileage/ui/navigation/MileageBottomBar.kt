@@ -129,7 +129,8 @@ fun MileageBottomBar(
                                                 saveState = true
                                             }
                                             launchSingleTop = true
-                                            restoreState = true
+                                            // A saved History stack can include Settings opened from a trip.
+                                            restoreState = screen != Screen.History
                                         }
                                     }
                                 },
