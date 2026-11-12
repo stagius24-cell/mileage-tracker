@@ -168,9 +168,14 @@ fun SettingsScreen(
     var editingLocation by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
     var locationPendingDeletion by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
     var locationActionError by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(initialEditLocationId) {
+    // Open the requested saved location editor as soon as its Room record is loaded.
+    // Navigation from a trip's bookmark must not stop at the Settings list.
+    LaunchedEffect(initialEditLocationId, state.savedLocations) {
         if (initialEditLocationId.isNotBlank()) {
-            listState.animateScrollToItem(5)
+            state.savedLocations.firstOrNull { it.id == initialEditLocationId }?.let { location ->
+                editingLocation = location
+                showLocationDialog = true
+            }
         }
     }
 
