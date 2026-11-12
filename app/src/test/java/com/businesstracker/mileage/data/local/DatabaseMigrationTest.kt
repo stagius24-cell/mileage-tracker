@@ -325,4 +325,153 @@ class DatabaseMigrationTest {
         cursor.close()
         db.close()
     }
+
+    @Test
+    fun migrate5To6_preservesExistingData_andCreatesSavedLocationsTable() {
+        var db = helper.createDatabase(TEST_DB, 5).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v5-to-v6', '2026-11-06', 1000, 2000, 37.3382, -121.8863, 37.3521, -121.8901, 8.4, 8.4, 'MySucculentCorner', 'Delivery', 'AUTO_DETECTED', 'BUSINESS', 0.67, 5.628, '[]', 'PENDING')
+            """.trimIndent())
+            execSQL("""
+                INSERT INTO active_trip (id, startTime, startLatitude, startLongitude, lastLatitude, lastLongitude, lastTimestamp, totalDistanceMeters, trackingMethod, isPaused, pausedDurationMillis, suggestedBusiness)
+                VALUES ('active-v5-to-v6', 1000, 37.3382, -121.8863, 37.3521, -121.8901, 2000, 3200.0, 'AUTO_DETECTED', 0, 0, 'MySucculentCorner')
+            """.trimIndent())
+            execSQL("""
+                INSERT INTO active_waypoints (id, tripId, latitude, longitude, altitude, accuracy, speed, timestamp, bootCount)
+                VALUES (901, 'active-v5-to-v6', 37.3382, -121.8863, 10.0, 5.0, 15.0, 1000, 7)
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 6, true, ExpenseTrackerDatabase.MIGRATION_5_6)
+
+        // Verify existing trip preserved
+        val tripCursor = db.query("SELECT id, totalDistanceMiles, businessMiles, classification, businessEntity, syncStatus, calculatedDeduction FROM trips WHERE id = 'trip-v5-to-v6'")
+        assertTrue(tripCursor.moveToFirst())
+        assertEquals("trip-v5-to-v6", tripCursor.getString(0))
+        assertEquals(8.4, tripCursor.getDouble(1), 0.001)
+        assertEquals(8.4, tripCursor.getDouble(2), 0.001)
+        assertEquals("BUSINESS", tripCursor.getString(3))
+        assertEquals("MySucculentCorner", tripCursor.getString(4))
+        assertEquals("PENDING", tripCursor.getString(5))
+        assertEquals(5.628, tripCursor.getDouble(6), 0.001)
+        tripCursor.close()
+
+        val activeCursor = db.query("SELECT totalDistanceMeters, trackingMethod FROM active_trip WHERE id = 'active-v5-to-v6'")
+        assertTrue(activeCursor.moveToFirst())
+        assertEquals(3200.0, activeCursor.getDouble(0), 0.001)
+        assertEquals("AUTO_DETECTED", activeCursor.getString(1))
+        activeCursor.close()
+
+        val waypointCursor = db.query("SELECT latitude, longitude, bootCount FROM active_waypoints WHERE id = 901")
+        assertTrue(waypointCursor.moveToFirst())
+        assertEquals(37.3382, waypointCursor.getDouble(0), 0.000001)
+        assertEquals(-121.8863, waypointCursor.getDouble(1), 0.000001)
+        assertEquals(7, waypointCursor.getInt(2))
+        waypointCursor.close()
+
+        // Verify saved_locations table created and writable
+        db.execSQL("""
+            INSERT INTO saved_locations (id, name, latitude, longitude, address, radiusMeters, icon, classificationPreference, businessEntity, createdAt, updatedAt)
+            VALUES ('loc-1', 'Succulent Nursery', 37.3382, -121.8863, '123 Plant Way, San Jose, CA', 150, 'nursery', 'BUSINESS', 'MySucculentCorner', 1000, 1000)
+        """.trimIndent())
+
+        val locCursor = db.query("SELECT id, name, radiusMeters, classificationPreference, businessEntity FROM saved_locations WHERE id = 'loc-1'")
+        assertTrue(locCursor.moveToFirst())
+        assertEquals("loc-1", locCursor.getString(0))
+        assertEquals("Succulent Nursery", locCursor.getString(1))
+        assertEquals(150, locCursor.getInt(2))
+        assertEquals("BUSINESS", locCursor.getString(3))
+        assertEquals("MySucculentCorner", locCursor.getString(4))
+        locCursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate1To6_compositeMigration_preservesAllData() {
+        var db = helper.createDatabase(TEST_DB, 1).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v1-to-v6', '2026-11-06', 1000, 2000, 37.33, -121.88, 37.35, -121.89, 22.0, 22.0, 'MySucculentCorner', 'Delivery', 'AUTO_DETECTED', 'BUSINESS', 0.67, 14.74, '[]', 'PENDING')
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 6, true, ExpenseTrackerDatabase.MIGRATION_1_6)
+
+        val cursor = db.query("SELECT id, totalDistanceMiles FROM trips WHERE id = 'trip-v1-to-v6'")
+        assertTrue(cursor.moveToFirst())
+        assertEquals("trip-v1-to-v6", cursor.getString(0))
+        assertEquals(22.0, cursor.getDouble(1), 0.001)
+        cursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate6To7_preservesExistingData_andCreatesSavedLocationSyncQueue() {
+        var db = helper.createDatabase(TEST_DB, 6).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v6-to-v7', '2026-11-08', 1000, 2000, 37.3382, -121.8863, 37.3521, -121.8901, 12.5, 12.5, 'MySucculentCorner', 'Delivery', 'AUTO_DETECTED', 'BUSINESS', 0.67, 8.375, '[]', 'PENDING')
+            """.trimIndent())
+            execSQL("""
+                INSERT INTO saved_locations (id, name, latitude, longitude, address, radiusMeters, icon, classificationPreference, businessEntity, createdAt, updatedAt)
+                VALUES ('loc-v6', 'Greenhouse', 37.3382, -121.8863, '100 Nursery Ln', 200, 'store', 'BUSINESS', 'MySucculentCorner', 1000, 1500)
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 7, true, ExpenseTrackerDatabase.MIGRATION_6_7)
+
+        val tripCursor = db.query("SELECT id, totalDistanceMiles, syncStatus FROM trips WHERE id = 'trip-v6-to-v7'")
+        assertTrue(tripCursor.moveToFirst())
+        assertEquals("trip-v6-to-v7", tripCursor.getString(0))
+        assertEquals(12.5, tripCursor.getDouble(1), 0.001)
+        assertEquals("PENDING", tripCursor.getString(2))
+        tripCursor.close()
+
+        val locCursor = db.query("SELECT id, name, address, radiusMeters, classificationPreference, businessEntity FROM saved_locations WHERE id = 'loc-v6'")
+        assertTrue(locCursor.moveToFirst())
+        assertEquals("loc-v6", locCursor.getString(0))
+        assertEquals("Greenhouse", locCursor.getString(1))
+        assertEquals("100 Nursery Ln", locCursor.getString(2))
+        assertEquals(200, locCursor.getInt(3))
+        assertEquals("BUSINESS", locCursor.getString(4))
+        assertEquals("MySucculentCorner", locCursor.getString(5))
+        locCursor.close()
+
+        db.execSQL("""
+            INSERT INTO saved_location_sync_queue (locationId, operation, updatedAt)
+            VALUES ('loc-v6', 'UPSERT', 1600)
+        """.trimIndent())
+
+        val queueCursor = db.query("SELECT locationId, operation, updatedAt FROM saved_location_sync_queue WHERE locationId = 'loc-v6'")
+        assertTrue(queueCursor.moveToFirst())
+        assertEquals("loc-v6", queueCursor.getString(0))
+        assertEquals("UPSERT", queueCursor.getString(1))
+        assertEquals(1600L, queueCursor.getLong(2))
+        queueCursor.close()
+        db.close()
+    }
+
+    @Test
+    fun migrate1To7_compositeMigration_preservesAllData() {
+        var db = helper.createDatabase(TEST_DB, 1).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v1-to-v7', '2026-11-08', 1000, 2000, 37.33, -121.88, 37.35, -121.89, 18.0, 18.0, 'MySucculentCorner', 'Pickup', 'AUTO_DETECTED', 'BUSINESS', 0.67, 12.06, '[]', 'PENDING')
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 7, true, ExpenseTrackerDatabase.MIGRATION_1_7)
+
+        val cursor = db.query("SELECT id, totalDistanceMiles FROM trips WHERE id = 'trip-v1-to-v7'")
+        assertTrue(cursor.moveToFirst())
+        assertEquals("trip-v1-to-v7", cursor.getString(0))
+        assertEquals(18.0, cursor.getDouble(1), 0.001)
+        cursor.close()
+        db.close()
+    }
 }

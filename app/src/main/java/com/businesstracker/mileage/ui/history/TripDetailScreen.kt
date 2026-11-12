@@ -5,6 +5,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -36,7 +37,9 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -75,6 +78,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -118,10 +122,15 @@ fun TripDetailScreen(
     onPreviousTrip: (() -> Unit)? = null,
     onNextTrip: (() -> Unit)? = null,
     addressViewModel: TripAddressViewModel = hiltViewModel(),
-    customPurposes: List<String> = emptyList()
+    customPurposes: List<String> = emptyList(),
+    smartNames: com.businesstracker.mileage.domain.usecase.SmartTripNames? = null,
+    onSaveLocation: ((name: String, lat: Double, lng: Double, address: String, radius: Int, icon: String, pref: String?, entity: String?, onSuccess: (String) -> Unit, onError: (String) -> Unit) -> Unit)? = null,
+    onNavigateToSavedLocations: ((String) -> Unit)? = null
 ) {
     var showEditSheet by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
+    var locationSaveError by remember { mutableStateOf<String?>(null) }
+    var locationSaving by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     val addressState by addressViewModel.state.collectAsStateWithLifecycle()
@@ -148,6 +157,7 @@ fun TripDetailScreen(
     val classificationColor = if (isBusiness) SucculentPrimary else SlateNeutral
 
     var outerDragOffset by remember(trip.id) { mutableFloatStateOf(0f) }
+    var suggestionDismissed by remember(trip.id) { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -210,6 +220,105 @@ fun TripDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Classification Suggestion Card for Unreviewed Trips
+            val isUnreviewed = trip.classification == TripClassification.UNREVIEWED.value
+            val suggestedClassification = smartNames?.suggestedClassification
+            if (isUnreviewed && suggestedClassification != null && !suggestionDismissed) {
+                val isBizSuggestion = suggestedClassification.equals("BUSINESS", ignoreCase = true)
+                val targetEntity = if (isBizSuggestion) {
+                    smartNames.suggestedBusinessEntity ?: trip.businessEntity.ifEmpty { BusinessEntity.MY_SUCCULENT_CORNER.displayName }
+                } else {
+                    BusinessEntity.PERSONAL.displayName
+                }
+                val targetPurpose = if (isBizSuggestion) {
+                    trip.purpose.ifEmpty { TripPurpose.NURSERY_PICKUP }
+                } else {
+                    "Personal Drive"
+                }
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isBizSuggestion) SucculentPrimary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surfaceVariant
+                    ),
+                    border = BorderStroke(1.dp, if (isBizSuggestion) SucculentPrimary.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isBizSuggestion) Icons.Default.BusinessCenter else Icons.Default.Info,
+                                contentDescription = null,
+                                tint = if (isBizSuggestion) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Suggested Classification",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Text(
+                            text = if (isBizSuggestion) {
+                                "Based on your saved location, classify as Business ($targetEntity)?"
+                            } else {
+                                "Based on your saved location, classify as Personal?"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            TextButton(
+                                onClick = { suggestionDismissed = true },
+                                modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                            ) {
+                                Text("Dismiss", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = {
+                                    onSaveTrip(
+                                        trip.id,
+                                        if (isBizSuggestion) TripClassification.BUSINESS.value else TripClassification.PERSONAL.value,
+                                        targetEntity,
+                                        targetPurpose,
+                                        trip.notes,
+                                        { /* Keep the suggestion visible so the user can retry. */ },
+                                        { suggestionDismissed = true }
+                                    )
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isBizSuggestion) SucculentPrimary else MaterialTheme.colorScheme.primary
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                            ) {
+                                Text(
+                                    text = if (isBizSuggestion) "Accept Business" else "Accept Personal",
+                                    color = Color.White,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Route and more-info tabs matching container roundness.
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -254,17 +363,54 @@ fun TripDetailScreen(
                     verticalAlignment = Alignment.Top
                 ) { page ->
                     if (page == 0) {
+                        val finalStartAddress = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                            ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
+                            else "Approximate start location unavailable"
+                        val finalEndAddress = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                            ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
+                            else "Approximate destination unavailable"
+                        val savedStartId = smartNames?.startLocation?.id
+                        val savedEndId = smartNames?.endLocation?.id
+
                         RouteDetailsTab(
                             trip = trip,
                             date = dateFormatted,
-                            startAddress = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
-                                ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
-                                else "Approximate start location unavailable",
-                            endAddress = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
-                                ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
-                                else "Approximate destination unavailable",
+                            startAddress = finalStartAddress,
+                            endAddress = finalEndAddress,
+                            smartStartName = smartNames?.startLocation?.name,
+                            smartEndName = smartNames?.endLocation?.name,
                             startTime = startTimeStr,
-                            endTime = endTimeStr
+                            endTime = endTimeStr,
+                            startLocationActionLabel = if (smartNames?.startLocation == null) "Save" else "Edit",
+                            endLocationActionLabel = if (smartNames?.endLocation == null) "Save" else "Edit",
+                            onSaveStartLocation = if (savedStartId != null && onNavigateToSavedLocations != null) {
+                                { onNavigateToSavedLocations(savedStartId) }
+                            } else if (onSaveLocation != null && onNavigateToSavedLocations != null) {
+                                {
+                                    val lat = trip.startLatitude ?: 0.0
+                                    val lng = trip.startLongitude ?: 0.0
+                                    if (!locationSaving) {
+                                        locationSaving = true
+                                        onSaveLocation("Start Location", lat, lng, finalStartAddress, 150, "place", null, null,
+                                            { id -> locationSaving = false; onNavigateToSavedLocations(id) },
+                                            { error -> locationSaving = false; locationSaveError = error })
+                                    }
+                                }
+                            } else null,
+                            onSaveEndLocation = if (savedEndId != null && onNavigateToSavedLocations != null) {
+                                { onNavigateToSavedLocations(savedEndId) }
+                            } else if (onSaveLocation != null && onNavigateToSavedLocations != null) {
+                                {
+                                    val lat = trip.endLatitude ?: 0.0
+                                    val lng = trip.endLongitude ?: 0.0
+                                    if (!locationSaving) {
+                                        locationSaving = true
+                                        onSaveLocation("Destination", lat, lng, finalEndAddress, 150, "place", null, null,
+                                            { id -> locationSaving = false; onNavigateToSavedLocations(id) },
+                                            { error -> locationSaving = false; locationSaveError = error })
+                                    }
+                                }
+                            } else null
                         )
                     } else {
                         TripStatusTab(
@@ -302,6 +448,15 @@ fun TripDetailScreen(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    locationSaveError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { locationSaveError = null },
+            title = { Text("Could not save location") },
+            text = { Text(error) },
+            confirmButton = { TextButton(onClick = { locationSaveError = null }) { Text("OK") } }
         )
     }
 
@@ -545,14 +700,20 @@ private fun RouteDetailsTab(
     date: String,
     startAddress: String,
     endAddress: String,
+    smartStartName: String? = null,
+    smartEndName: String? = null,
     startTime: String,
-    endTime: String
+    endTime: String,
+    startLocationActionLabel: String = "Save",
+    endLocationActionLabel: String = "Save",
+    onSaveStartLocation: (() -> Unit)? = null,
+    onSaveEndLocation: (() -> Unit)? = null
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -601,50 +762,102 @@ private fun RouteDetailsTab(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         DestinationRow(
+            primaryName = smartStartName,
             address = startAddress,
             time = startTime,
             color = SucculentPrimary,
-            isStart = true
+            isStart = true,
+            locationActionLabel = startLocationActionLabel,
+            onSaveLocation = onSaveStartLocation
         )
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         DestinationRow(
+            primaryName = smartEndName,
             address = endAddress,
             time = endTime,
             color = SpeedRed,
-            isStart = false
+            isStart = false,
+            locationActionLabel = endLocationActionLabel,
+            onSaveLocation = onSaveEndLocation
         )
     }
 }
 
 @Composable
 private fun DestinationRow(
+    primaryName: String? = null,
     address: String,
     time: String,
     color: Color,
-    isStart: Boolean
+    isStart: Boolean,
+    locationActionLabel: String,
+    onSaveLocation: (() -> Unit)? = null
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        if (isStart) {
-            com.businesstracker.mileage.ui.components.StartBeaconIcon(tint = color)
-        } else {
-            com.businesstracker.mileage.ui.components.EndFlagIcon(tint = color)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+    ) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            if (isStart) {
+                com.businesstracker.mileage.ui.components.StartBeaconIcon(tint = color)
+            } else {
+                com.businesstracker.mileage.ui.components.EndFlagIcon(tint = color)
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                if (!primaryName.isNullOrBlank()) {
+                    Text(
+                        text = primaryName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = address,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    Text(
+                        text = address,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
+                Text(
+                    text = time,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (onSaveLocation != null) {
+                    IconButton(
+                        onClick = onSaveLocation,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .semantics {
+                                contentDescription = "$locationActionLabel ${if (isStart) "start" else "destination"} location"
+                            }
+                    ) {
+                        Icon(
+                            imageVector = if (locationActionLabel == "Save") Icons.Outlined.BookmarkBorder else Icons.Default.Edit,
+                            contentDescription = null,
+                            tint = SucculentPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
         }
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = address,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = time,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
     }
 }
 
@@ -700,8 +913,8 @@ private fun TripStatusTab(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             StatusValue("Trip type", trip.classification, Modifier.weight(1f), classificationColor)

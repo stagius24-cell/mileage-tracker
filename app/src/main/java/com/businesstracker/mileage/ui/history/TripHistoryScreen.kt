@@ -104,6 +104,7 @@ fun TripHistoryScreen(
     viewModel: TripHistoryViewModel = hiltViewModel(),
     initialMonthIso: String = "",
     onBackToReports: (() -> Unit)? = null,
+    onNavigateToSavedLocations: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -179,7 +180,16 @@ fun TripHistoryScreen(
                 viewModel.updateTripDetails(id, classification, entity, purpose, notes, onError, onSuccess)
             },
             onDeleteTrip = { id -> viewModel.deleteTrip(id) },
-            customPurposes = state.customPurposes
+            customPurposes = state.customPurposes,
+            smartNames = state.smartNamesMap[selectedTrip.id],
+            onSaveLocation = { name, lat, lng, address, radius, icon, pref, entity, onSuccess, onError ->
+                viewModel.saveLocationFromTrip(name, lat, lng, address, radius, icon, pref, entity,
+                    onSuccess = onSuccess, onError = onError)
+            },
+            onNavigateToSavedLocations = { locationId ->
+                viewModel.selectTripForDetails(null)
+                onNavigateToSavedLocations?.invoke(locationId)
+            }
         )
         return
     }
@@ -225,6 +235,7 @@ fun TripHistoryScreen(
                             items(trips, key = { it.id }) { trip ->
                                 TripHistoryItem(
                                     trip = trip,
+                                    smartNames = state.smartNamesMap[trip.id],
                                     showDate = false,
                                     onClick = { viewModel.selectTripForDetails(trip) },
                                     onDelete = { tripPendingDeletion = trip }
@@ -235,6 +246,7 @@ fun TripHistoryScreen(
                         items(state.trips, key = { it.id }) { trip ->
                             TripHistoryItem(
                                 trip = trip,
+                                smartNames = state.smartNamesMap[trip.id],
                                 showDate = true,
                                 onClick = { viewModel.selectTripForDetails(trip) },
                                 onDelete = { tripPendingDeletion = trip }
@@ -753,6 +765,7 @@ private fun EmptyHistory(
 @Composable
 private fun TripHistoryItem(
     trip: TripEntity,
+    smartNames: com.businesstracker.mileage.domain.usecase.SmartTripNames? = null,
     showDate: Boolean,
     onClick: () -> Unit,
     onDelete: () -> Unit
@@ -764,8 +777,8 @@ private fun TripHistoryItem(
     val isBusiness = trip.classification == "BUSINESS"
     val badgeIcon = if (isBusiness) Icons.Default.BusinessCenter else Icons.Default.Person
     val badgeColor = if (isBusiness) SucculentPrimary else Color(0xFF2563EB)
-    val start = trip.startAddress ?: "Recorded start location"
-    val end = trip.endAddress ?: "Recorded destination"
+    val start = smartNames?.startDisplayName ?: (trip.startAddress ?: "Recorded start location")
+    val end = smartNames?.endDisplayName ?: (trip.endAddress ?: "Recorded destination")
 
     Card(
         modifier = Modifier

@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 80
-        versionName = "1.0.79"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix crash by safely initializing MapsInitializer and guarding BitmapDescriptor creation with fallback.\"")
+        versionCode = 92
+        versionName = "1.0.91"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip Details: more row padding, bookmark save icon below timestamp.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

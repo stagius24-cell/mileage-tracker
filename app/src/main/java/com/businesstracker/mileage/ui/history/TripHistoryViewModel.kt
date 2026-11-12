@@ -2,6 +2,7 @@ package com.businesstracker.mileage.ui.history
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.businesstracker.mileage.data.local.entity.SavedLocationEntity
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.SortOrder
@@ -9,11 +10,15 @@ import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import com.businesstracker.mileage.domain.repository.SavedLocationRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
+import com.businesstracker.mileage.domain.usecase.ResolveSmartTripNamesUseCase
+import com.businesstracker.mileage.domain.usecase.SmartTripNames
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -24,6 +29,8 @@ import javax.inject.Inject
 
 data class TripHistoryUiState(
     val trips: List<TripEntity> = emptyList(),
+    val smartNamesMap: Map<String, SmartTripNames> = emptyMap(),
+    val savedLocations: List<SavedLocationEntity> = emptyList(),
     val totalFilteredMiles: Double = 0.0,
     val totalFilteredDeduction: Double = 0.0,
     val totalRecordedTripsCount: Int = 0,
@@ -45,6 +52,8 @@ data class TripHistoryUiState(
 @HiltViewModel
 class TripHistoryViewModel @Inject constructor(
     private val tripRepository: TripRepository,
+    private val savedLocationRepository: SavedLocationRepository? = null,
+    private val resolveSmartTripNamesUseCase: ResolveSmartTripNamesUseCase? = null,
     private val preferencesManager: TrackingPreferencesManager? = null
 ) : ViewModel() {
 
@@ -66,24 +75,35 @@ class TripHistoryViewModel @Inject constructor(
 
     val uiState: StateFlow<TripHistoryUiState> = combine(
         tripRepository.getAllTrips(),
+        (savedLocationRepository?.getAllLocationsFlow() ?: flowOf(emptyList())).catch { emit(emptyList()) },
         _searchQuery,
         _classificationFilter,
-        _businessEntityFilter,
-        _syncStatusFilter
-    ) { allTrips, query, classification, entity, syncStatus ->
-        FilterStatePart1(allTrips, query, classification, entity, syncStatus)
+        _businessEntityFilter
+    ) { allTrips, savedLocations, query, classification, entity ->
+        FilterStatePart1(allTrips, savedLocations, query, classification, entity)
     }.combine(
         combine(
+            _syncStatusFilter,
             _startDateFilter,
             _endDateFilter,
             _sortOrder,
-            _selectedTripForDetails,
-            preferencesManager?.customPurposes ?: flowOf(emptyList())
-        ) { start, end, sort, selectedTrip, customPurposes ->
-            FilterStatePart2(start, end, sort, selectedTrip, customPurposes)
+            _selectedTripForDetails
+        ) { syncStatus, start, end, sort, selectedTrip ->
+            FilterStatePart2(
+                syncStatus = syncStatus,
+                startDate = start,
+                endDate = end,
+                sortOrder = sort,
+                selectedTrip = selectedTrip,
+                customPurposes = emptyList()
+            )
         }
     ) { part1, part2 ->
         Pair(part1, part2)
+    }.combine(
+        preferencesManager?.customPurposes ?: flowOf(emptyList())
+    ) { (part1, part2), customPurposes ->
+        Triple(part1, part2.copy(customPurposes = customPurposes), Unit)
     }.combine(
         combine(
             _recentlyDeletedTrips,
@@ -93,11 +113,26 @@ class TripHistoryViewModel @Inject constructor(
         ) { deletedTrips, restoreFailed, isRestoring, actionError ->
             UndoState(deletedTrips.lastOrNull(), restoreFailed, isRestoring, actionError)
         }
-    ) { (part1, part2), undoState ->
+    ) { (part1, part2, _), undoState ->
+        // Compute smart names map
+        val namesMap = if (resolveSmartTripNamesUseCase != null && part1.savedLocations.isNotEmpty()) {
+            part1.allTrips.associate { trip ->
+                trip.id to resolveSmartTripNamesUseCase.resolve(trip, part1.savedLocations)
+            }
+        } else {
+            emptyMap()
+        }
+
         val filtered = part1.allTrips.filter { trip ->
-            // Search filter: address, business entity, purpose, notes, date
+            val smartNames = namesMap[trip.id]
+            val startDisplay = smartNames?.startDisplayName ?: trip.startAddress.orEmpty()
+            val endDisplay = smartNames?.endDisplayName ?: trip.endAddress.orEmpty()
+
+            // Search filter: address, smart name, business entity, purpose, notes, date
             val matchesQuery = part1.query.isBlank() ||
                     trip.purpose.contains(part1.query, ignoreCase = true) ||
+                    startDisplay.contains(part1.query, ignoreCase = true) ||
+                    endDisplay.contains(part1.query, ignoreCase = true) ||
                     (trip.startAddress?.contains(part1.query, ignoreCase = true) == true) ||
                     (trip.endAddress?.contains(part1.query, ignoreCase = true) == true) ||
                     trip.businessEntity.contains(part1.query, ignoreCase = true) ||
@@ -113,8 +148,8 @@ class TripHistoryViewModel @Inject constructor(
                     trip.businessEntity.equals(part1.entity, ignoreCase = true)
 
             // Sync status filter
-            val matchesSync = part1.syncStatus == "ALL" ||
-                    trip.syncStatus.equals(part1.syncStatus, ignoreCase = true)
+            val matchesSync = part2.syncStatus == "ALL" ||
+                    trip.syncStatus.equals(part2.syncStatus, ignoreCase = true)
 
             // Date range filter
             val matchesStartDate = part2.startDate.isBlank() || trip.date >= part2.startDate
@@ -137,13 +172,15 @@ class TripHistoryViewModel @Inject constructor(
 
         TripHistoryUiState(
             trips = sorted,
+            smartNamesMap = namesMap,
+            savedLocations = part1.savedLocations,
             totalFilteredMiles = kotlin.math.round(totalMiles * 100.0) / 100.0,
             totalFilteredDeduction = kotlin.math.round(totalDeduction * 100.0) / 100.0,
             totalRecordedTripsCount = part1.allTrips.size,
             searchQuery = part1.query,
             selectedClassificationFilter = part1.classification,
             selectedBusinessEntityFilter = part1.entity,
-            selectedSyncStatusFilter = part1.syncStatus,
+            selectedSyncStatusFilter = part2.syncStatus,
             startDateFilter = part2.startDate,
             endDateFilter = part2.endDate,
             sortOrder = part2.sortOrder,
@@ -319,6 +356,45 @@ class TripHistoryViewModel @Inject constructor(
         _actionErrorMessage.value = null
     }
 
+    fun saveLocationFromTrip(
+        name: String,
+        latitude: Double,
+        longitude: Double,
+        address: String,
+        radiusMeters: Int = 150,
+        icon: String = "location",
+        classificationPreference: String? = null,
+        businessEntity: String? = null,
+        onSuccess: ((String) -> Unit)? = null,
+        onError: ((String) -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            try {
+                if (savedLocationRepository == null) {
+                    onError?.invoke("Saved location repository unavailable")
+                    return@launch
+                }
+                val now = System.currentTimeMillis()
+                val entity = SavedLocationEntity(
+                    name = name.trim(),
+                    latitude = latitude,
+                    longitude = longitude,
+                    address = address.trim(),
+                    radiusMeters = radiusMeters.coerceIn(50, 500),
+                    icon = icon,
+                    classificationPreference = classificationPreference,
+                    businessEntity = if (classificationPreference == "BUSINESS") businessEntity else null,
+                    createdAt = now,
+                    updatedAt = now
+                )
+                savedLocationRepository.insertSavedLocation(entity)
+                onSuccess?.invoke(entity.id)
+            } catch (e: Exception) {
+                onError?.invoke(e.localizedMessage ?: "Failed to save location")
+            }
+        }
+    }
+
     private data class UndoState(
         val recentlyDeleted: TripEntity?,
         val restoreFailed: TripEntity?,
@@ -328,13 +404,14 @@ class TripHistoryViewModel @Inject constructor(
 
     private data class FilterStatePart1(
         val allTrips: List<TripEntity>,
+        val savedLocations: List<com.businesstracker.mileage.data.local.entity.SavedLocationEntity>,
         val query: String,
         val classification: String,
-        val entity: String,
-        val syncStatus: String
+        val entity: String
     )
 
     private data class FilterStatePart2(
+        val syncStatus: String,
         val startDate: String,
         val endDate: String,
         val sortOrder: SortOrder,

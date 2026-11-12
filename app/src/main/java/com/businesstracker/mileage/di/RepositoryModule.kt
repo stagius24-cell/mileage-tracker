@@ -1,9 +1,13 @@
 package com.businesstracker.mileage.di
 
 import com.businesstracker.mileage.data.repository.ActiveTripRepositoryImpl
+import com.businesstracker.mileage.data.repository.SavedLocationRepositoryImpl
 import com.businesstracker.mileage.data.repository.TripRepositoryImpl
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
+import com.businesstracker.mileage.domain.repository.SavedLocationBackupScheduler
+import com.businesstracker.mileage.domain.repository.SavedLocationRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
+import com.businesstracker.mileage.worker.WorkManagerSavedLocationBackupScheduler
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
@@ -25,4 +29,16 @@ abstract class RepositoryModule {
     abstract fun bindActiveTripRepository(
         activeTripRepositoryImpl: ActiveTripRepositoryImpl
     ): ActiveTripRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSavedLocationRepository(
+        savedLocationRepositoryImpl: SavedLocationRepositoryImpl
+    ): SavedLocationRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindSavedLocationBackupScheduler(
+        scheduler: WorkManagerSavedLocationBackupScheduler
+    ): SavedLocationBackupScheduler
 }
