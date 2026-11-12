@@ -25,16 +25,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatterySaver
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -89,6 +96,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -134,8 +142,11 @@ fun SettingsScreen(
     LaunchedEffect(Unit) { viewModel.refreshPairedBluetoothDevices() }
 
     var showVersionHistoryDialog by rememberSaveable { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
 
     LazyColumn(
+        state = listState,
         modifier = modifier
             .fillMaxSize()
             .then(if (showVersionHistoryDialog) Modifier.blur(8.dp) else Modifier)
@@ -149,84 +160,6 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
-        }
-
-        item {
-            SettingsSection(title = "Appearance", icon = Icons.Default.Palette) {
-                SettingsSwitchRow(
-                    title = "Dark Mode",
-                    description = if (state.themeMode == AppThemeMode.DARK) "Dark theme enabled" else "Light theme enabled",
-                    checked = state.themeMode == AppThemeMode.DARK,
-                    onCheckedChange = { isDark ->
-                        viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
-                    }
-                )
-            }
-        }
-
-        item {
-            SettingsSection(title = "Drive tracking", icon = Icons.Default.LocationOn) {
-                SettingsSwitchRow(
-                    title = "Automatic detection",
-                    description = "Detect drives in the background",
-                    checked = state.autoTrackingEnabled,
-                    onCheckedChange = viewModel::setAutoTrackingEnabled
-                )
-
-                if (state.autoTrackingEnabled && !state.hasBackgroundLocationPermission) {
-                    CompactAlert(
-                        text = "Allow location all the time for automatic tracking.",
-                        actionLabel = "Open settings",
-                        onAction = {
-                            context.startActivity(
-                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = Uri.fromParts("package", context.packageName, null)
-                                }
-                            )
-                        }
-                    )
-                }
-
-                SectionDivider()
-                SettingsSwitchRow(
-                    title = "Work schedule",
-                    description = "Apply work days and hours",
-                    checked = state.scheduleFilteringEnabled,
-                    enabled = state.autoTrackingEnabled,
-                    onCheckedChange = viewModel::setScheduleFilteringEnabled
-                )
-
-                if (state.autoTrackingEnabled && state.scheduleFilteringEnabled) {
-                    ScheduleControls(
-                        state = state,
-                        onToggleDay = viewModel::toggleWorkDay,
-                        onStartChange = viewModel::setWorkHoursStart,
-                        onEndChange = viewModel::setWorkHoursEnd,
-                        onBehaviorChange = viewModel::setOutsideScheduleBehavior
-                    )
-                }
-
-                SectionDivider()
-                OutlinedButton(
-                    onClick = {
-                        try {
-                            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                        } catch (_: Exception) {
-                            context.startActivity(
-                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = Uri.fromParts("package", context.packageName, null)
-                                }
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.BatterySaver, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Battery optimization")
-                }
-            }
         }
 
         item {
@@ -301,6 +234,89 @@ fun SettingsScreen(
                             }
                         }
                     }
+                }
+            }
+        }
+
+        item {
+            SettingsSection(title = "Appearance", icon = Icons.Default.Palette) {
+                SettingsSwitchRow(
+                    title = "Dark Mode",
+                    description = if (state.themeMode == AppThemeMode.DARK) "Dark theme enabled" else "Light theme enabled",
+                    checked = state.themeMode == AppThemeMode.DARK,
+                    onCheckedChange = { isDark ->
+                        viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
+                    }
+                )
+            }
+        }
+
+        item {
+            SettingsSection(title = "Drive tracking", icon = Icons.Default.LocationOn) {
+                SettingsSwitchRow(
+                    title = "Automatic detection",
+                    description = "Detect drives in the background",
+                    checked = state.autoTrackingEnabled,
+                    onCheckedChange = viewModel::setAutoTrackingEnabled
+                )
+
+                if (state.autoTrackingEnabled && !state.hasBackgroundLocationPermission) {
+                    CompactAlert(
+                        text = "Allow location all the time for automatic tracking.",
+                        actionLabel = "Open settings",
+                        onAction = {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                            )
+                        }
+                    )
+                }
+
+                SectionDivider()
+                SettingsSwitchRow(
+                    title = "Work schedule",
+                    description = "Apply work days and hours",
+                    checked = state.scheduleFilteringEnabled,
+                    enabled = state.autoTrackingEnabled,
+                    onCheckedChange = viewModel::setScheduleFilteringEnabled
+                )
+
+                if (state.autoTrackingEnabled && state.scheduleFilteringEnabled) {
+                    ScheduleControls(
+                        state = state,
+                        onToggleDay = viewModel::toggleWorkDay,
+                        onStartChange = viewModel::setWorkHoursStart,
+                        onEndChange = viewModel::setWorkHoursEnd,
+                        onBehaviorChange = viewModel::setOutsideScheduleBehavior,
+                        onFieldFocus = {
+                            coroutineScope.launch {
+                                listState.animateScrollToItem(index = 3, scrollOffset = 0)
+                            }
+                        }
+                    )
+                }
+
+                SectionDivider()
+                OutlinedButton(
+                    onClick = {
+                        try {
+                            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                        } catch (_: Exception) {
+                            context.startActivity(
+                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                }
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Default.BatterySaver, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Battery optimization")
                 }
             }
         }
@@ -717,9 +733,10 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
-                "Version 1.0.63 (Build 64)" to "Single-line Create Report button, 2-line PDF locations, and PDF preview zoom.",
-                "Version 1.0.62 (Build 63)" to "Direct in-app PDF preview with multi-page rendered display before sharing.",
-                "Version 1.0.61 (Build 62)" to "Create report button with 80% blurred floating dialog for tax year, drive type, & format."
+                "Version 1.0.78 (Build 79)" to "Matching Origin GPS Radar & Destination Finish Flag icons on Google Map and trip cards; tighter map zoom; updated version history.",
+                "Version 1.0.77 (Build 78)" to "Compacted wheel time picker dialog by 20%, tightened button spacing, and removed subtitle description text.",
+                "Version 1.0.76 (Build 77)" to "Option 1 interactive vertical swipe up/down wheel time picker for Work Schedule start & end times with AM/PM support.",
+                "Version 1.0.75 (Build 76)" to "Moved vehicle settings to top of settings list and restored stable bottom navigation bar."
             )
         }
 
@@ -935,18 +952,55 @@ private fun SettingsSwitchRow(
     }
 }
 
+private fun formatDisplayTime(time24: String): String {
+    return try {
+        val parts = time24.trim().split(":")
+        val h = parts[0].toInt().coerceIn(0, 23)
+        val m = if (parts.size > 1) parts[1].toInt().coerceIn(0, 59) else 0
+        val isPm = h >= 12
+        val h12 = when {
+            h == 0 -> 12
+            h > 12 -> h - 12
+            else -> h
+        }
+        val amPm = if (isPm) "PM" else "AM"
+        String.format("%02d:%02d %s", h12, m, amPm)
+    } catch (_: Exception) {
+        time24
+    }
+}
+
 @Composable
 private fun ScheduleControls(
     state: SettingsUiState,
     onToggleDay: (String) -> Unit,
     onStartChange: (String) -> Unit,
     onEndChange: (String) -> Unit,
-    onBehaviorChange: (String) -> Unit
+    onBehaviorChange: (String) -> Unit,
+    onFieldFocus: () -> Unit = {}
 ) {
     val days = listOf(
         "MON" to "M", "TUE" to "T", "WED" to "W", "THU" to "T",
         "FRI" to "F", "SAT" to "S", "SUN" to "S"
     )
+    var pickingTimeFor by remember { mutableStateOf<String?>(null) } // "START", "END", or null
+
+    if (pickingTimeFor != null) {
+        val isStart = pickingTimeFor == "START"
+        val currentTime = if (isStart) state.workHoursStart else state.workHoursEnd
+        WheelTimePickerDialog(
+            initialTime24 = currentTime,
+            onDismiss = { pickingTimeFor = null },
+            onTimeConfirm = { newTime24 ->
+                if (isStart) {
+                    onStartChange(newTime24)
+                } else {
+                    onEndChange(newTime24)
+                }
+                pickingTimeFor = null
+            }
+        )
+    }
 
     Text("Work days", style = MaterialTheme.typography.labelLarge)
     Row(
@@ -965,52 +1019,152 @@ private fun ScheduleControls(
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        OutlinedTextField(
-            value = state.workHoursStart,
-            onValueChange = onStartChange,
-            label = { Text("Start") },
-            modifier = Modifier.weight(1f),
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp)
-        )
-        OutlinedTextField(
-            value = state.workHoursEnd,
-            onValueChange = onEndChange,
-            label = { Text("End") },
-            modifier = Modifier.weight(1f),
-            singleLine = true,
-            shape = RoundedCornerShape(12.dp)
-        )
+        // Start Time Card (clickable, opens Wheel Time Picker Dialog)
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .height(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { pickingTimeFor = "START" },
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Start",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = formatDisplayTime(state.workHoursStart),
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.ExpandMore,
+                    contentDescription = "Pick start time",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
+        // End Time Card (clickable, opens Wheel Time Picker Dialog)
+        Surface(
+            modifier = Modifier
+                .weight(1f)
+                .height(44.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { pickingTimeFor = "END" },
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+            )
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "End",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = formatDisplayTime(state.workHoursEnd),
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    )
+                }
+                Icon(
+                    imageVector = Icons.Default.ExpandMore,
+                    contentDescription = "Pick end time",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
     }
 
     Text("Outside work hours", style = MaterialTheme.typography.labelLarge)
-    CompactRadioRow(
-        title = "Classify as personal",
-        selected = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
-        onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL) }
-    )
-    CompactRadioRow(
-        title = "Do not track",
-        selected = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY,
-        onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) }
-    )
-}
-
-@Composable
-private fun CompactRadioRow(title: String, selected: Boolean, onClick: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        RadioButton(selected = selected, onClick = onClick)
-        Spacer(Modifier.width(8.dp))
-        Text(title, style = MaterialTheme.typography.bodyMedium)
+        val isPersonal = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL
+        val isDoNotTrack = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY
+
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 40.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL) },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(
+                selected = isPersonal,
+                onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL) }
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = "Personal",
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .heightIn(min = 40.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .clickable { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) },
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(
+                selected = isDoNotTrack,
+                onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) }
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = "Do not track",
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

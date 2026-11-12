@@ -35,6 +35,12 @@ class MileageTrackerApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
+        try {
+            com.google.android.gms.maps.MapsInitializer.initialize(applicationContext)
+        } catch (_: Exception) {
+            // Maps will initialize when MapView or GoogleMap is created
+        }
+
         // Initialize transition recognition if enabled by user
         appScope.launch {
             val autoTrackEnabled = preferencesManager.isAutoTrackingEnabled.first()

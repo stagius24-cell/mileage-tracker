@@ -624,17 +624,10 @@ private fun DestinationRow(
     isStart: Boolean
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier = Modifier
-                .size(22.dp)
-                .background(color.copy(alpha = 0.16f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            if (isStart) {
-                Box(modifier = Modifier.size(9.dp).background(color, CircleShape))
-            } else {
-                Icon(Icons.Default.LocationOn, contentDescription = null, tint = color, modifier = Modifier.size(15.dp))
-            }
+        if (isStart) {
+            com.businesstracker.mileage.ui.components.StartBeaconIcon(tint = color)
+        } else {
+            com.businesstracker.mileage.ui.components.EndFlagIcon(tint = color)
         }
         Spacer(modifier = Modifier.width(10.dp))
         Text(

@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 73
-        versionName = "1.0.72"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Phase 5 reliability: safe confirmation before delete, multi-trip undo stack, retry on restore failure, and duplicate restore prevention.\"")
+        versionCode = 80
+        versionName = "1.0.79"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix crash by safely initializing MapsInitializer and guarding BitmapDescriptor creation with fallback.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
