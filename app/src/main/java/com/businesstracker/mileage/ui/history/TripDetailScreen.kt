@@ -322,7 +322,7 @@ fun TripDetailScreen(
             // Route and more-info tabs matching container roundness.
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Row(
@@ -660,7 +660,7 @@ private fun TripDetailTabButton(
             modifier = Modifier
                 .offset(x = indicatorOffset)
                 .fillMaxWidth()
-                .height(44.dp)
+                .height(48.dp)
                 .background(
                     color = SucculentPrimary.copy(alpha = if (selected) 0.16f else 0f),
                     shape = RoundedCornerShape(20.dp)
