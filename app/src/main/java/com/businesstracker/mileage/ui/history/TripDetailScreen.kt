@@ -799,7 +799,7 @@ private fun DestinationRow(
             .padding(top = 6.dp, bottom = 6.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 96.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isStart) {
@@ -835,12 +835,14 @@ private fun DestinationRow(
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.Center
+            Box(
+                modifier = Modifier
+                    .widthIn(min = 84.dp)
+                    .height(96.dp)
             ) {
                 Text(
                     text = time,
+                    modifier = Modifier.align(Alignment.TopEnd),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -849,8 +851,9 @@ private fun DestinationRow(
                     IconButton(
                         onClick = onSaveLocation,
                         modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(bottom = 8.dp)
                             .size(32.dp)
-                            .offset(y = (-8).dp)
                             .semantics {
                                 contentDescription = "$locationActionLabel ${if (isStart) "start" else "destination"} location"
                             }
