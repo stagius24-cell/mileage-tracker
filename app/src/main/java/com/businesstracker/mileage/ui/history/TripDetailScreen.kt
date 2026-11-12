@@ -714,8 +714,8 @@ private fun RouteDetailsTab(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, end = 12.dp, top = 12.5.dp, bottom = 7.5.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -798,10 +798,10 @@ private fun DestinationRow(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 6.dp, bottom = 6.dp)
+            .padding(top = 3.dp, bottom = 3.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (isStart) {
@@ -840,7 +840,7 @@ private fun DestinationRow(
             Box(
                 modifier = Modifier
                     .widthIn(min = 84.dp)
-                    .height(64.dp)
+                    .height(52.dp)
             ) {
                 Text(
                     text = time,
