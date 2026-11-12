@@ -839,10 +839,9 @@ private fun DestinationRow(
             Spacer(modifier = Modifier.width(8.dp))
             Column(
                 modifier = Modifier
-                    .widthIn(min = 84.dp)
-                    .height(60.dp),
+                    .widthIn(min = 84.dp),
                 horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.SpaceEvenly
+                verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically)
             ) {
                 Text(
                     text = time,
