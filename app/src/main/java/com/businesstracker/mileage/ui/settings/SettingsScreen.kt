@@ -1162,13 +1162,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
-                "Version 1.0.84 (Build 85)" to "Simplified compact Backup & Restore UI: visual metric pills, collapsible Google Sheets card, and copyable spreadsheet ID.",
-                "Version 1.0.83 (Build 84)" to "Unified compact Backup & Restore card with combined status and inline controls.",
-                "Version 1.0.82 (Build 83)" to "Added automatic & manual Google Sheets backup and preview-confirmed restore for Saved Locations.",
-                "Version 1.0.78 (Build 79)" to "Matching Origin GPS Radar & Destination Finish Flag icons on Google Map and trip cards; tighter map zoom; updated version history.",
-                "Version 1.0.77 (Build 78)" to "Compacted wheel time picker dialog by 20%, tightened button spacing, and removed subtitle description text.",
-                "Version 1.0.76 (Build 77)" to "Option 1 interactive vertical swipe up/down wheel time picker for Work Schedule start & end times with AM/PM support.",
-                "Version 1.0.75 (Build 76)" to "Moved vehicle settings to top of settings list and restored stable bottom navigation bar."
+                "Version 1.0.94 (Build 95)" to "Shows the three latest updates with brief summaries.",
+                "Version 1.0.93 (Build 94)" to "Added space below the trip summary and refined Saved Locations controls.",
+                "Version 1.0.92 (Build 93)" to "Compacted the Saved Location editor with shorter fields and less empty space."
             )
         }
 
@@ -1264,7 +1260,7 @@ fun SettingsScreen(
                                             lineHeight = 16.sp
                                         ),
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 2,
+                                        maxLines = 3,
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 }
