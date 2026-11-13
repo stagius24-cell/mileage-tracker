@@ -68,6 +68,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
@@ -431,11 +433,18 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         Canvas(modifier = Modifier.size(112.dp)) {
+                            val ring = Stroke(width = 18.dp.toPx(), cap = StrokeCap.Butt)
                             if (totalClassified <= 0) {
-                                drawCircle(color = Color.LightGray.copy(alpha = 0.4f))
+                                drawArc(Color.LightGray.copy(alpha = 0.4f), -90f, 360f, useCenter = false, style = ring)
                             } else {
-                                drawArc(SucculentPrimary, -90f, 360f * businessFraction, useCenter = true)
-                                drawArc(PersonalBlue, -90f + 360f * businessFraction, 360f * personalFraction, useCenter = true)
+                                val businessSweep = 360f * businessFraction
+                                val gap = if (businessFraction > 0f && personalFraction > 0f) minOf(3f, businessSweep / 2f, 360f * personalFraction / 2f) else 0f
+                                if (businessFraction > 0f) {
+                                    drawArc(SucculentPrimary, -90f + gap / 2f, businessSweep - gap, useCenter = false, style = ring)
+                                }
+                                if (personalFraction > 0f) {
+                                    drawArc(PersonalBlue, -90f + businessSweep + gap / 2f, 360f * personalFraction - gap, useCenter = false, style = ring)
+                                }
                             }
                         }
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
