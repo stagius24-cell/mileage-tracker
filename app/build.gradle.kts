@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 99
-        versionName = "1.0.98"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Reports: monthly bar compares business and personal miles.\"")
+        versionCode = 100
+        versionName = "1.0.99"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"History: month, category and sort pickers with deduction ordering.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

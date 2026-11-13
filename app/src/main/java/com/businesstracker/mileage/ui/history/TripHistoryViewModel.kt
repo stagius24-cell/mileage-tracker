@@ -34,6 +34,7 @@ data class TripHistoryUiState(
     val totalFilteredMiles: Double = 0.0,
     val totalFilteredDeduction: Double = 0.0,
     val totalRecordedTripsCount: Int = 0,
+    val availableMonths: List<String> = emptyList(),
     val searchQuery: String = "",
     val selectedClassificationFilter: String = "ALL", // "ALL", "BUSINESS", "PERSONAL", "UNREVIEWED"
     val selectedBusinessEntityFilter: String = "ALL", // "ALL", "MySucculentCorner", "Personal"
@@ -164,6 +165,8 @@ class TripHistoryViewModel @Inject constructor(
             SortOrder.OLDEST_FIRST -> filtered.sortedBy { it.startTime }
             SortOrder.HIGHEST_MILEAGE -> filtered.sortedByDescending { it.totalDistanceMiles }
             SortOrder.LOWEST_MILEAGE -> filtered.sortedBy { it.totalDistanceMiles }
+            SortOrder.MOST_MONEY -> filtered.sortedByDescending { it.calculatedDeduction }
+            SortOrder.LEAST_MONEY -> filtered.sortedBy { it.calculatedDeduction }
         }
 
         val totalMiles = sorted.sumOf { it.totalDistanceMiles }
@@ -177,6 +180,7 @@ class TripHistoryViewModel @Inject constructor(
             totalFilteredMiles = kotlin.math.round(totalMiles * 100.0) / 100.0,
             totalFilteredDeduction = kotlin.math.round(totalDeduction * 100.0) / 100.0,
             totalRecordedTripsCount = part1.allTrips.size,
+            availableMonths = part1.allTrips.map { it.date.take(7) }.filter { it.matches(Regex("\\d{4}-\\d{2}")) }.distinct().sortedDescending(),
             searchQuery = part1.query,
             selectedClassificationFilter = part1.classification,
             selectedBusinessEntityFilter = part1.entity,

@@ -42,6 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.LocationOn
@@ -209,6 +210,13 @@ fun TripHistoryScreen(
                 onEntityChange = viewModel::setBusinessEntityFilter,
                 onSyncChange = viewModel::setSyncStatusFilter,
                 onClearDateFilter = { viewModel.setDateRange("", "") },
+                onMonthChange = { month ->
+                    if (month.isBlank()) viewModel.setDateRange("", "")
+                    else {
+                        val selected = YearMonth.parse(month)
+                        viewModel.setDateRange(selected.atDay(1).toString(), selected.atEndOfMonth().toString())
+                    }
+                },
                 onBackToReports = onBackToReports
             )
 
@@ -349,9 +357,11 @@ private fun HistoryControls(
     onEntityChange: (String) -> Unit,
     onSyncChange: (String) -> Unit,
     onClearDateFilter: () -> Unit,
+    onMonthChange: (String) -> Unit,
     onBackToReports: (() -> Unit)?
 ) {
     var isSortExpanded by remember { mutableStateOf(false) }
+    var openPicker by remember { mutableStateOf<String?>(null) }
 
     Column(
         modifier = Modifier
@@ -506,101 +516,72 @@ private fun HistoryControls(
             }
         }
 
-        // Collapsible 2-Row Sort & Filter Section
         AnimatedVisibility(
             visible = isSortExpanded,
             enter = expandVertically() + fadeIn(),
             exit = shrinkVertically() + fadeOut()
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Row 1: Classification filters (All, Business, Personal, Unreviewed)
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(horizontal = 2.dp)
-                ) {
-                    item {
-                        SortFilterPill(
-                            label = "All",
-                            icon = Icons.Default.DirectionsCar,
-                            isSelected = state.selectedClassificationFilter == "ALL",
-                            onClick = { onClassificationChange("ALL") }
-                        )
-                    }
-                    item {
-                        SortFilterPill(
-                            label = "Business",
-                            icon = Icons.Default.BusinessCenter,
-                            isSelected = state.selectedClassificationFilter == "BUSINESS",
-                            onClick = {
-                                onClassificationChange(if (state.selectedClassificationFilter == "BUSINESS") "ALL" else "BUSINESS")
-                            }
-                        )
-                    }
-                    item {
-                        SortFilterPill(
-                            label = "Personal",
-                            icon = Icons.Default.Person,
-                            isSelected = state.selectedClassificationFilter == "PERSONAL",
-                            onClick = {
-                                onClassificationChange(if (state.selectedClassificationFilter == "PERSONAL") "ALL" else "PERSONAL")
-                            }
-                        )
-                    }
-                    item {
-                        SortFilterPill(
-                            label = "Unreviewed",
-                            icon = Icons.Default.Info,
-                            isSelected = state.selectedClassificationFilter == "UNREVIEWED",
-                            onClick = {
-                                onClassificationChange(if (state.selectedClassificationFilter == "UNREVIEWED") "ALL" else "UNREVIEWED")
-                            }
-                        )
+                listOf("Months", "Category", "Sort").forEach { picker ->
+                    Surface(
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp).clickable { openPicker = picker },
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(picker, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
+            }
+        }
 
-                // Row 2: Sort options (Newest, Oldest, Highest, Lowest)
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(horizontal = 2.dp)
-                ) {
-                    item {
-                        SortFilterPill(
-                            label = "Newest",
-                            icon = Icons.Default.DateRange,
-                            isSelected = state.sortOrder == SortOrder.NEWEST_FIRST,
-                            onClick = { onSortChange(SortOrder.NEWEST_FIRST) }
-                        )
-                    }
-                    item {
-                        SortFilterPill(
-                            label = "Oldest",
-                            icon = Icons.Default.History,
-                            isSelected = state.sortOrder == SortOrder.OLDEST_FIRST,
-                            onClick = { onSortChange(SortOrder.OLDEST_FIRST) }
-                        )
-                    }
-                    item {
-                        SortFilterPill(
-                            label = "Highest",
-                            icon = Icons.Default.KeyboardArrowUp,
-                            isSelected = state.sortOrder == SortOrder.HIGHEST_MILEAGE,
-                            onClick = { onSortChange(SortOrder.HIGHEST_MILEAGE) }
-                        )
-                    }
-                    item {
-                        SortFilterPill(
-                            label = "Lowest",
-                            icon = Icons.Default.KeyboardArrowDown,
-                            isSelected = state.sortOrder == SortOrder.LOWEST_MILEAGE,
-                            onClick = { onSortChange(SortOrder.LOWEST_MILEAGE) }
-                        )
+        if (openPicker != null) {
+            val picker = openPicker!!
+            val options: List<Pair<String, String>> = when (picker) {
+                "Months" -> listOf("All months" to "") + state.availableMonths.map { formatMonthFilter("$it-01") to it }
+                "Category" -> listOf("All" to "ALL", "Business" to "BUSINESS", "Personal" to "PERSONAL")
+                else -> listOf(
+                    "High to low" to SortOrder.HIGHEST_MILEAGE.name,
+                    "Low to high" to SortOrder.LOWEST_MILEAGE.name,
+                    "Most money" to SortOrder.MOST_MONEY.name,
+                    "Least money" to SortOrder.LEAST_MONEY.name
+                )
+            }
+            androidx.compose.material3.ModalBottomSheet(onDismissRequest = { openPicker = null }) {
+                Text(
+                    picker,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+                    items(options.size) { index ->
+                        val (label, value) = options[index]
+                        val selected = when (picker) {
+                            "Months" -> state.startDateFilter.startsWith(value) && (value.isNotEmpty() || state.startDateFilter.isBlank())
+                            "Category" -> state.selectedClassificationFilter == value
+                            else -> state.sortOrder.name == value
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                                .clickable {
+                                    when (picker) {
+                                        "Months" -> onMonthChange(value)
+                                        "Category" -> onClassificationChange(value)
+                                        else -> onSortChange(SortOrder.valueOf(value))
+                                    }
+                                    openPicker = null
+                                }
+                                .padding(horizontal = 24.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(label, modifier = Modifier.weight(1f), color = if (selected) SucculentPrimary else MaterialTheme.colorScheme.onSurface)
+                            if (selected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = SucculentPrimary)
+                        }
                     }
                 }
             }

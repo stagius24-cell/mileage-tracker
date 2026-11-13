@@ -1162,9 +1162,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.99 (Build 100)" to "Trip History adds month, category, and sort pickers.",
                 "Version 1.0.98 (Build 99)" to "Monthly reports compare business and personal miles in one color-coded bar.",
-                "Version 1.0.97 (Build 98)" to "Removed unreviewed miles from the dashboard summary.",
-                "Version 1.0.96 (Build 97)" to "Changed mileage breakdown to a ring chart matching the app colors."
+                "Version 1.0.97 (Build 98)" to "Removed unreviewed miles from the dashboard summary."
             )
         }
 

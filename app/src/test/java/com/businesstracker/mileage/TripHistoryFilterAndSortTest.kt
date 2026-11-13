@@ -147,6 +147,32 @@ class TripHistoryFilterAndSortTest {
     }
 
     @Test
+    fun sorting_byDeduction_ordersBusinessTripsAndKeepsZeroDeductionTrips() = runTest {
+        val viewModel = TripHistoryViewModel(fakeRepository)
+        advanceUntilIdle()
+
+        viewModel.setSortOrder(SortOrder.MOST_MONEY)
+        advanceUntilIdle()
+        assertEquals(listOf("2", "1", "3", "4"), viewModel.uiState.value.trips.map { it.id })
+
+        viewModel.setSortOrder(SortOrder.LEAST_MONEY)
+        advanceUntilIdle()
+        assertEquals(listOf("3", "4", "1", "2"), viewModel.uiState.value.trips.map { it.id })
+    }
+
+    @Test
+    fun monthChoicesRemainAvailableAfterSelectingOneMonth() = runTest {
+        val viewModel = TripHistoryViewModel(fakeRepository)
+        advanceUntilIdle()
+        assertEquals(listOf("2026-11"), viewModel.uiState.value.availableMonths)
+
+        viewModel.setDateRange("2026-11-03", "2026-11-03")
+        advanceUntilIdle()
+        assertEquals(listOf("2026-11"), viewModel.uiState.value.availableMonths)
+        assertEquals(listOf("2"), viewModel.uiState.value.trips.map { it.id })
+    }
+
+    @Test
     fun sorting_byOldestFirst_ordersChronologically() = runTest {
         val viewModel = TripHistoryViewModel(fakeRepository)
         advanceUntilIdle()
