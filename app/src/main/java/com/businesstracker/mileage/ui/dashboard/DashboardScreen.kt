@@ -5,6 +5,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -415,48 +416,48 @@ fun DashboardScreen(
             item {
                 val bMiles = state.summary.businessMiles
                 val pMiles = state.summary.personalMiles
-                val totalLogged = bMiles + pMiles
-                val businessFraction = if (totalLogged > 0) (bMiles / totalLogged).toFloat() else 0f
-                val personalFraction = if (totalLogged > 0) (pMiles / totalLogged).toFloat() else 0f
-                val businessPercent = businessFraction * 100f
-                val personalPercent = personalFraction * 100f
+                val totalClassified = bMiles + pMiles
+                val businessFraction = if (totalClassified > 0) (bMiles / totalClassified).toFloat().coerceIn(0f, 1f) else 0f
+                val personalFraction = if (totalClassified > 0) 1f - businessFraction else 0f
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // Business Row
-                        BreakdownRow(
-                            title = "Business",
-                            miles = bMiles,
-                            fraction = businessFraction,
-                            percent = businessPercent,
-                            deduction = 0.0,
-                            color = SucculentPrimary,
-                            icon = Icons.Default.BusinessCenter
-                        )
-
-                        HorizontalDivider(
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
-
-                        // Personal Row
-                        BreakdownRow(
-                            title = "Personal",
-                            miles = pMiles,
-                            fraction = personalFraction,
-                            percent = personalPercent,
-                            deduction = 0.0,
-                            color = PersonalBlue,
-                            icon = Icons.Default.Person
-                        )
+                        Canvas(modifier = Modifier.size(112.dp)) {
+                            if (totalClassified <= 0) {
+                                drawCircle(color = Color.LightGray.copy(alpha = 0.4f))
+                            } else {
+                                drawArc(SucculentPrimary, -90f, 360f * businessFraction, useCenter = true)
+                                drawArc(PersonalBlue, -90f + 360f * businessFraction, 360f * personalFraction, useCenter = true)
+                            }
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Business ${String.format(Locale.US, "%.0f", businessFraction * 100)}% · ${String.format(Locale.US, "%.1f", bMiles)} mi",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = SucculentPrimary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Personal ${String.format(Locale.US, "%.0f", personalFraction * 100)}% · ${String.format(Locale.US, "%.1f", pMiles)} mi",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = PersonalBlue,
+                                fontWeight = FontWeight.Bold
+                            )
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            Text(
+                                "Business deduction: $${String.format(Locale.US, "%,.2f", state.summary.estimatedDeduction)}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
             }

@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 95
-        versionName = "1.0.94"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings: version history shows the three latest updates.\"")
+        versionCode = 96
+        versionName = "1.0.95"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Dashboard: pie chart for business and personal miles with business deduction.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
