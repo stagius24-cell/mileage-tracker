@@ -1162,9 +1162,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.97 (Build 98)" to "Removed unreviewed miles from the dashboard summary.",
                 "Version 1.0.96 (Build 97)" to "Changed mileage breakdown to a ring chart matching the app colors.",
-                "Version 1.0.95 (Build 96)" to "Added a business and personal mileage chart with business deduction.",
-                "Version 1.0.94 (Build 95)" to "Shows the three latest updates with brief summaries."
+                "Version 1.0.95 (Build 96)" to "Added a business and personal mileage chart with business deduction."
             )
         }
 

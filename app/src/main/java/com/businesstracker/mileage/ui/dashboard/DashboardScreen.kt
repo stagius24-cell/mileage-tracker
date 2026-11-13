@@ -215,12 +215,12 @@ fun DashboardScreen(
                                 }
                             }
 
-                            // Secondary Summary Metrics (Total | Personal | Unreviewed)
+                            // Secondary Summary Metrics (Total | Personal)
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp, horizontal = 2.dp),
-                                horizontalArrangement = Arrangement.SpaceAround,
+                                horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
@@ -232,11 +232,6 @@ fun DashboardScreen(
                                     text = "Personal: ${String.format(Locale.US, "%.1f", state.summary.personalMiles)} mi",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = SlateNeutral
-                                )
-                                Text(
-                                    text = "Unreviewed: ${String.format(Locale.US, "%.1f", state.summary.unreviewedMiles)} mi",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = SpeedRed
                                 )
                             }
                             Spacer(modifier = Modifier.height(2.dp))
