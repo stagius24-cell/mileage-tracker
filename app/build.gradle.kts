@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 106
-        versionName = "1.0.105"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Dashboard: ring shows category miles and total drives.\"")
+        versionCode = 107
+        versionName = "1.0.106"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Dashboard: simplified mileage ring and category value cards.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

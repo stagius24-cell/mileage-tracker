@@ -73,7 +73,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -349,7 +348,7 @@ fun DashboardScreen(
                             Box(modifier = Modifier.size(144.dp), contentAlignment = Alignment.Center) {
                                 val emptyRingColor = MaterialTheme.colorScheme.outlineVariant
                                 Canvas(modifier = Modifier.size(132.dp)) {
-                                    val ring = Stroke(width = 30.dp.toPx(), cap = StrokeCap.Butt)
+                                    val ring = Stroke(width = 18.dp.toPx(), cap = StrokeCap.Butt)
                                     val inset = ring.width / 2f
                                     val arcTopLeft = Offset(inset, inset)
                                     val arcSize = Size(size.width - ring.width, size.height - ring.width)
@@ -360,21 +359,7 @@ fun DashboardScreen(
                                         val gap = if (businessFraction > 0f && personalFraction > 0f) minOf(3f, businessSweep / 2f, 360f * personalFraction / 2f) else 0f
                                         if (businessFraction > 0f) drawArc(SucculentPrimary, -90f + gap / 2f, businessSweep - gap, topLeft = arcTopLeft, size = arcSize, useCenter = false, style = ring)
                                         if (personalFraction > 0f) drawArc(PersonalBlue, -90f + businessSweep + gap / 2f, 360f * personalFraction - gap, topLeft = arcTopLeft, size = arcSize, useCenter = false, style = ring)
-                                        val labelPaint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                                            color = android.graphics.Color.WHITE
-                                            textAlign = android.graphics.Paint.Align.CENTER
-                                            typeface = android.graphics.Typeface.DEFAULT_BOLD
-                                            textSize = 11.sp.toPx()
-                                        }
-                                        fun drawValue(miles: Double, midpointDegrees: Float) {
-                                            val radians = Math.toRadians(midpointDegrees.toDouble())
-                                            val radius = size.minDimension / 2f - ring.width / 2f
-                                            val x = center.x + kotlin.math.cos(radians).toFloat() * radius
-                                            val y = center.y + kotlin.math.sin(radians).toFloat() * radius + labelPaint.textSize / 3f
-                                            drawContext.canvas.nativeCanvas.drawText(String.format(Locale.US, "%.1f", miles), x, y, labelPaint)
-                                        }
-                                        if (businessFraction > 0f) drawValue(bMiles, -90f + businessSweep / 2f)
-                                        if (personalFraction > 0f) drawValue(pMiles, -90f + businessSweep + 180f * personalFraction)
+
                                     }
                                 }
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -384,8 +369,8 @@ fun DashboardScreen(
                                 }
                             }
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                BreakdownCategoryCard("Business", SucculentPrimary, Icons.Default.BusinessCenter)
-                                BreakdownCategoryCard("Personal", PersonalBlue, Icons.Default.Home)
+                                BreakdownCategoryCard("Business", bMiles, businessFraction, SucculentPrimary, Icons.Default.BusinessCenter)
+                                BreakdownCategoryCard("Personal", pMiles, personalFraction, PersonalBlue, Icons.Default.Home)
                             }
                         }
                         Surface(
@@ -883,6 +868,8 @@ private fun OdometerMilesDisplay(
 @Composable
 private fun BreakdownCategoryCard(
     title: String,
+    miles: Double,
+    fraction: Float,
     color: Color,
     icon: ImageVector
 ) {
@@ -895,10 +882,14 @@ private fun BreakdownCategoryCard(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+            Icon(icon, contentDescription = "$title mileage", tint = color, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(8.dp))
-            Text(title, color = color, style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column {
+                Text("${String.format(Locale.US, "%.0f", fraction * 100)}%", color = color,
+                    style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text("${String.format(Locale.US, "%.1f", miles)} mi", style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
         }
     }
 }

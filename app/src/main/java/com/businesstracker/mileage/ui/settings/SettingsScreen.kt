@@ -1162,9 +1162,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.106 (Build 107)" to "Simplified mileage ring and category value cards.",
                 "Version 1.0.105 (Build 106)" to "Ring shows category miles and total drives inside the chart.",
-                "Version 1.0.104 (Build 105)" to "Moved Mileage Breakdown above Drive Tracker.",
-                "Version 1.0.103 (Build 104)" to "Dashboard mileage ring now shows total, category cards, and deduction."
+                "Version 1.0.104 (Build 105)" to "Moved Mileage Breakdown above Drive Tracker."
             )
         }
 
