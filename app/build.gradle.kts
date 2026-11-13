@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 101
-        versionName = "1.0.100"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"History: trip cards show category icons in place of delete buttons.\"")
+        versionCode = 102
+        versionName = "1.0.101"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"History: removed duplicate category badge beside trip time.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

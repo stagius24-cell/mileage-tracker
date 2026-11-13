@@ -704,23 +704,6 @@ private fun TripHistoryItem(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    shape = RoundedCornerShape(7.dp),
-                    color = badgeColor.copy(alpha = 0.15f)
-                ) {
-                    Box(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = badgeIcon,
-                            contentDescription = if (isBusiness) "Business" else "Personal",
-                            tint = badgeColor,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
                 Text(
                     text = if (showDate) "${formatHistoryDate(trip.date)}  •  $timeRange" else timeRange,
                     modifier = Modifier.weight(1f),
