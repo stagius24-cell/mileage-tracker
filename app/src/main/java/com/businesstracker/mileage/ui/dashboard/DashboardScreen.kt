@@ -77,7 +77,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -245,87 +244,8 @@ fun DashboardScreen(
 
                     Spacer(modifier = Modifier.height(4.dp))
 
-                    // 3-Stat Bar (DRIVES | BUSINESS MILES (Odometer) | DEDUCTION ($))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceAround,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // 1. DRIVES
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = state.summary.totalTripsCount.toString(),
-                                style = MaterialTheme.typography.headlineMedium.copy(
-                                    fontSize = 32.sp,
-                                    fontWeight = FontWeight.Black
-                                ),
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "DRIVES",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    letterSpacing = 1.2.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = SlateNeutral
-                            )
-                        }
 
-                        // 2. BUSINESS MILES (Odometer style)
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.weight(1.3f)
-                        ) {
-                            OdometerMilesDisplay(miles = state.summary.businessMiles)
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "BUSINESS MI",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    letterSpacing = 1.2.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = SlateNeutral
-                            )
-                        }
-
-                        // 3. LOGGED ($ in green)
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "\$${String.format(Locale.US, "%.0f", state.summary.estimatedDeduction)}",
-                                style = MaterialTheme.typography.headlineMedium.copy(
-                                    fontSize = 32.sp,
-                                    fontWeight = FontWeight.Black
-                                ),
-                                color = SucculentPrimary
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "DEDUCTION",
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    letterSpacing = 1.2.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = SlateNeutral
-                            )
-                        }
-                    }
                 }
-            }
-
-            // Section: Classification Breakdown (MySucculentCorner vs Personal)
-            item {
-                Text(
-                    text = "Mileage Breakdown",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
             }
 
             item {
@@ -827,41 +747,6 @@ private fun TableMetricCell(
                 color = SlateNeutral.copy(alpha = 0.7f)
             )
         }
-    }
-}
-
-@Composable
-private fun OdometerMilesDisplay(
-    miles: Double,
-    modifier: Modifier = Modifier
-) {
-    val totalInt = kotlin.math.round(miles).toInt().coerceAtLeast(0)
-    val formatted = String.format(Locale.US, "%06d", totalInt)
-    val firstNonZero = formatted.indexOfFirst { it != '0' }.let { if (it == -1) formatted.length - 1 else it }
-    val leadingZeros = formatted.substring(0, firstNonZero)
-    val activeDigits = formatted.substring(firstNonZero)
-
-    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
-        if (leadingZeros.isNotEmpty()) {
-            Text(
-                text = leadingZeros,
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Black,
-                    fontFamily = FontFamily.SansSerif
-                ),
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.25f)
-            )
-        }
-        Text(
-            text = activeDigits,
-            style = MaterialTheme.typography.headlineMedium.copy(
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Black,
-                fontFamily = FontFamily.SansSerif
-            ),
-            color = MaterialTheme.colorScheme.onBackground
-        )
     }
 }
 
