@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 117
-        versionName = "1.0.116"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Dashboard: whole-number mileage percentages.\"")
+        versionCode = 118
+        versionName = "1.0.117"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings: compact sections and inline actions.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

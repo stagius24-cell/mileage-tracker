@@ -54,8 +54,6 @@ import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
@@ -120,6 +118,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -187,8 +187,8 @@ fun SettingsScreen(
             .fillMaxSize()
             .then(if (showVersionHistoryDialog) Modifier.blur(8.dp) else Modifier)
             .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         item {
             Text(
@@ -215,7 +215,6 @@ fun SettingsScreen(
                 SectionDivider()
                 SettingsSwitchRow(
                     title = "Bluetooth auto-stop",
-                    description = "Stop after the selected car disconnects",
                     checked = state.bluetoothAutoStopEnabled,
                     onCheckedChange = { enabled ->
                         if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
@@ -275,23 +274,49 @@ fun SettingsScreen(
         }
 
         item {
-            SettingsSection(title = "Appearance", icon = Icons.Default.Palette) {
-                SettingsSwitchRow(
-                    title = "Dark Mode",
-                    description = if (state.themeMode == AppThemeMode.DARK) "Dark theme enabled" else "Light theme enabled",
-                    checked = state.themeMode == AppThemeMode.DARK,
-                    onCheckedChange = { isDark ->
-                        viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
-                    }
-                )
-            }
+            SettingsSection(
+                title = "Dark mode",
+                icon = Icons.Default.DarkMode,
+                trailing = {
+                    SettingsToggle(
+                        checked = state.themeMode == AppThemeMode.DARK,
+                        onCheckedChange = { isDark ->
+                            viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
+                        },
+                        label = "Dark mode"
+                    )
+                }
+            )
         }
 
         item {
-            SettingsSection(title = "Drive tracking", icon = Icons.Default.LocationOn) {
+            SettingsSection(
+                title = "Drive tracking",
+                icon = Icons.Default.LocationOn,
+                trailing = {
+                    TextButton(
+                        onClick = {
+                            try {
+                                context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                            } catch (_: Exception) {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                        data = Uri.fromParts("package", context.packageName, null)
+                                    }
+                                )
+                            }
+                        },
+                        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) {
+                        Icon(Icons.Default.BatterySaver, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Battery", style = MaterialTheme.typography.labelLarge)
+                    }
+                }
+            ) {
                 SettingsSwitchRow(
                     title = "Automatic detection",
-                    description = "Detect drives in the background",
                     checked = state.autoTrackingEnabled,
                     onCheckedChange = viewModel::setAutoTrackingEnabled
                 )
@@ -313,7 +338,6 @@ fun SettingsScreen(
                 SectionDivider()
                 SettingsSwitchRow(
                     title = "Work schedule",
-                    description = "Apply work days and hours",
                     checked = state.scheduleFilteringEnabled,
                     enabled = state.autoTrackingEnabled,
                     onCheckedChange = viewModel::setScheduleFilteringEnabled
@@ -333,31 +357,10 @@ fun SettingsScreen(
                         }
                     )
                 }
-
-                SectionDivider()
-                OutlinedButton(
-                    onClick = {
-                        try {
-                            context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                        } catch (_: Exception) {
-                            context.startActivity(
-                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = Uri.fromParts("package", context.packageName, null)
-                                }
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Icon(Icons.Default.BatterySaver, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Battery optimization")
-                }
             }
         }
 
-                item {
+        item {
             var newPurposeText by remember { mutableStateOf("") }
             var purposeError by remember { mutableStateOf<String?>(null) }
             var editingPurpose by remember { mutableStateOf<String?>(null) }
@@ -476,15 +479,9 @@ fun SettingsScreen(
             }
 
             SettingsSection(
-                title = "Business Trip Purposes",
+                title = "Business purposes",
                 icon = Icons.Default.BusinessCenter
             ) {
-                Text(
-                    text = "Add, edit, or remove custom purposes for categorizing your business drives.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
                 // Input row to add new custom purpose
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -494,7 +491,7 @@ fun SettingsScreen(
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .height(44.dp),
+                            .heightIn(min = 48.dp),
                         shape = RoundedCornerShape(12.dp),
                         color = MaterialTheme.colorScheme.surface,
                         border = BorderStroke(
@@ -528,7 +525,7 @@ fun SettingsScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 ),
                                 cursorBrush = SolidColor(SucculentPrimary),
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "New business purpose" }
                             )
                         }
                     }
@@ -546,7 +543,7 @@ fun SettingsScreen(
                                 purposeError = null
                             }
                         },
-                        modifier = Modifier.height(44.dp),
+                        modifier = Modifier.heightIn(min = 48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
@@ -585,14 +582,15 @@ fun SettingsScreen(
                                     Text(
                                         text = purpose,
                                         style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium
+                                        fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.weight(1f, fill = false)
                                     )
                                     Spacer(Modifier.width(6.dp))
                                     // Edit button
                                     Box(
                                         modifier = Modifier
-                                            .size(24.dp)
-                                            .clip(CircleShape)
+                                            .size(48.dp)
+                                            .clip(RoundedCornerShape(8.dp))
                                             .clickable {
                                                 editingPurpose = purpose
                                                 editPurposeText = purpose
@@ -610,8 +608,8 @@ fun SettingsScreen(
                                     // Delete button
                                     Box(
                                         modifier = Modifier
-                                            .size(24.dp)
-                                            .clip(CircleShape)
+                                            .size(48.dp)
+                                            .clip(RoundedCornerShape(8.dp))
                                             .clickable { deleteConfirmationPurpose = purpose },
                                         contentAlignment = Alignment.Center
                                     ) {
@@ -633,32 +631,20 @@ fun SettingsScreen(
         item {
             SettingsSection(
                 title = "Saved Locations",
-                subtitle = "Custom place names for trip history",
                 icon = Icons.Default.LocationOn,
                 trailing = {
+                    IconButton(onClick = {
+                        editingLocation = null
+                        showLocationDialog = true
+                    }) {
+                        Icon(Icons.Default.Add, contentDescription = "Add saved location", tint = SucculentPrimary)
+                    }
                     IconButton(onClick = { showSavedLocationsList = true }) {
                         Icon(Icons.Default.ChevronRight, contentDescription = "Show saved locations",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-            ) {
-
-                Button(
-                    onClick = {
-                        editingLocation = null
-                        showLocationDialog = true
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .defaultMinSize(minHeight = 48.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Add Saved Location", fontWeight = FontWeight.Bold)
-                }
-            }
+            )
         }
 
         item {
@@ -744,12 +730,6 @@ fun SettingsScreen(
                                         color = Color.White
                                     )
                                 }
-                                Text(
-                                    text = "Trips + Locations",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Normal,
-                                    color = Color.White.copy(alpha = 0.9f)
-                                )
                             }
                         }
                     }
@@ -807,12 +787,6 @@ fun SettingsScreen(
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
-                                Text(
-                                    text = "From Google Sheets",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Normal,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
                         }
                     }
@@ -827,7 +801,7 @@ fun SettingsScreen(
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(8.dp))
                             .clickable { isAdvancedExpanded = !isAdvancedExpanded }
-                            .padding(vertical = 4.dp),
+                            .heightIn(min = 48.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -838,7 +812,7 @@ fun SettingsScreen(
                         )
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "Google Sheets (Advanced)",
+                            text = "Google Sheets options",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -885,7 +859,7 @@ fun SettingsScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                        .padding(horizontal = 8.dp, vertical = 0.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
@@ -907,7 +881,7 @@ fun SettingsScreen(
                                                 clipboardManager.setText(AnnotatedString(state.sheetsSpreadsheetId))
                                                 Toast.makeText(context, "Spreadsheet ID copied", Toast.LENGTH_SHORT).show()
                                             },
-                                            modifier = Modifier.size(24.dp)
+                                            modifier = Modifier.size(48.dp)
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.ContentCopy,
@@ -984,13 +958,14 @@ fun SettingsScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 12.dp),
+                    .padding(vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Row(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
                         .clickable { showVersionHistoryDialog = true }
+                        .heightIn(min = 48.dp)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1139,9 +1114,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.117 (Build 118)" to "Compact Settings sections, simpler labels, and inline actions.",
                 "Version 1.0.116 (Build 117)" to "Mileage percentages now show whole numbers.",
-                "Version 1.0.115 (Build 116)" to "Removed the Backup & Restore info button.",
-                "Version 1.0.114 (Build 115)" to "Removed the Custom dashboard time filter button."
+                "Version 1.0.115 (Build 116)" to "Removed the Backup & Restore info button."
             )
         }
 
@@ -1260,7 +1235,7 @@ private fun SettingsSection(
     subtitle: String? = null,
     subtitlePositive: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit
+    content: (@Composable ColumnScope.() -> Unit)? = null
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1270,8 +1245,8 @@ private fun SettingsSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1283,11 +1258,11 @@ private fun SettingsSection(
                     tint = SucculentPrimary,
                     modifier = Modifier.size(22.dp)
                 )
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = title,
-                        style = MaterialTheme.typography.titleMedium,
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold
                     )
                     if (!subtitle.isNullOrBlank()) {
@@ -1301,7 +1276,7 @@ private fun SettingsSection(
                 }
                 trailing?.invoke()
             }
-            content()
+            content?.invoke(this)
         }
     }
 }
@@ -1309,7 +1284,6 @@ private fun SettingsSection(
 @Composable
 private fun SettingsSwitchRow(
     title: String,
-    description: String,
     checked: Boolean,
     enabled: Boolean = true,
     onCheckedChange: (Boolean) -> Unit
@@ -1317,7 +1291,7 @@ private fun SettingsSwitchRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 52.dp),
+            .heightIn(min = 48.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -1328,33 +1302,37 @@ private fun SettingsSwitchRow(
                 color = if (enabled) MaterialTheme.colorScheme.onSurface
                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
             )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                    alpha = if (enabled) 1f else 0.45f
-                )
-            )
         }
-        Spacer(Modifier.width(12.dp))
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            enabled = enabled,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = SucculentPrimary,
-                checkedBorderColor = SucculentPrimary,
-                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
-                uncheckedBorderColor = MaterialTheme.colorScheme.outline,
-                disabledCheckedThumbColor = Color.White.copy(alpha = 0.7f),
-                disabledCheckedTrackColor = SucculentPrimary.copy(alpha = 0.35f),
-                disabledUncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                disabledUncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-            )
-        )
+        Spacer(Modifier.width(8.dp))
+        SettingsToggle(checked = checked, enabled = enabled, onCheckedChange = onCheckedChange, label = title)
     }
+}
+
+@Composable
+private fun SettingsToggle(
+    checked: Boolean,
+    enabled: Boolean = true,
+    onCheckedChange: (Boolean) -> Unit,
+    label: String
+) {
+    Switch(
+        modifier = Modifier.semantics { contentDescription = label },
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        enabled = enabled,
+        colors = SwitchDefaults.colors(
+            checkedThumbColor = Color.White,
+            checkedTrackColor = SucculentPrimary,
+            checkedBorderColor = SucculentPrimary,
+            uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant,
+            uncheckedBorderColor = MaterialTheme.colorScheme.outline,
+            disabledCheckedThumbColor = Color.White.copy(alpha = 0.7f),
+            disabledCheckedTrackColor = SucculentPrimary.copy(alpha = 0.35f),
+            disabledUncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            disabledUncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    )
 }
 
 private fun formatDisplayTime(time24: String): String {
@@ -1431,7 +1409,7 @@ private fun ScheduleControls(
         Surface(
             modifier = Modifier
                 .weight(1f)
-                .height(44.dp)
+                .heightIn(min = 48.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .clickable { pickingTimeFor = "START" },
             shape = RoundedCornerShape(12.dp),
@@ -1477,7 +1455,7 @@ private fun ScheduleControls(
         Surface(
             modifier = Modifier
                 .weight(1f)
-                .height(44.dp)
+                .heightIn(min = 48.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .clickable { pickingTimeFor = "END" },
             shape = RoundedCornerShape(12.dp),
@@ -1575,28 +1553,21 @@ private fun ScheduleControls(
 
 @Composable
 private fun CompactAlert(text: String, actionLabel: String, onAction: () -> Unit) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.errorContainer, RoundedCornerShape(12.dp))
-            .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                Icons.Default.Security,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.size(20.dp)
-            )
-            Spacer(Modifier.width(10.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onErrorContainer
-            )
-        }
-        OutlinedButton(onClick = onAction, modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = text,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onErrorContainer
+        )
+        TextButton(onClick = onAction, modifier = Modifier.defaultMinSize(minHeight = 48.dp)) {
             Text(actionLabel)
         }
     }
@@ -1637,8 +1608,8 @@ private fun AccountRow(
                 // Switch account button
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
                         .clickable(onClick = onConnect),
                     contentAlignment = Alignment.Center
@@ -1653,8 +1624,8 @@ private fun AccountRow(
                 // Disconnect account button
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
                         .background(SpeedRed.copy(alpha = 0.12f))
                         .clickable(onClick = onDisconnect),
                     contentAlignment = Alignment.Center
@@ -1783,8 +1754,8 @@ private fun CombinedBackupStatusBox(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // Row 1: Status Banner (CheckCircle / CloudOff / Error / Sync)
             Row(
@@ -1804,8 +1775,8 @@ private fun CombinedBackupStatusBox(
                         } else {
                             "Partial backup completed"
                         },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = SpeedRed
                     )
                 } else if (isAllBackedUp) {
@@ -1817,8 +1788,8 @@ private fun CombinedBackupStatusBox(
                     )
                     Text(
                         text = "All data backed up",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 } else if (!isConnected) {
@@ -1829,9 +1800,9 @@ private fun CombinedBackupStatusBox(
                         modifier = Modifier.size(20.dp)
                     )
                     Text(
-                        text = "Google Sheets not connected",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        text = "Not connected",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else if (hasPending) {
@@ -1842,9 +1813,9 @@ private fun CombinedBackupStatusBox(
                         modifier = Modifier.size(20.dp)
                     )
                     Text(
-                        text = "Pending backup changes",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        text = "Backup pending",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 } else {
@@ -1856,8 +1827,8 @@ private fun CombinedBackupStatusBox(
                     )
                     Text(
                         text = "Ready to back up",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
