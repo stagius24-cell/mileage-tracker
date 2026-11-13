@@ -32,6 +32,7 @@ data class MonthSummary(
     val totalMiles: Double,
     val businessDrives: Int,
     val businessMiles: Double,
+    val personalMiles: Double,
     val loggedDeduction: Double,   // actual business deduction logged
     val potentialDeduction: Double,// potential deduction (business + unreviewed)
     val percentComplete: Int,      // % of total miles classified as business
@@ -186,6 +187,7 @@ class ReportsExportViewModel @Inject constructor(
             val totalDrives = mTrips.size
             val mTotalMiles = mTrips.sumOf { it.totalDistanceMiles }
             val mBMiles = mBusiness.sumOf { it.businessMiles }
+            val mPersonalMiles = mTrips.filter { it.classification == "PERSONAL" }.sumOf { it.totalDistanceMiles }
             val logged = mBusiness.sumOf { it.calculatedDeduction }
             val unreviewedPotential = mUnreviewed.sumOf { trip ->
                 val rate = if (trip.applicableRate > 0.0) trip.applicableRate else rateUseCase.getApplicableRate(trip.date)
@@ -218,6 +220,7 @@ class ReportsExportViewModel @Inject constructor(
                     totalMiles = mTotalMiles,
                     businessDrives = mBusiness.size,
                     businessMiles = mBMiles,
+                    personalMiles = mPersonalMiles,
                     loggedDeduction = logged,
                     potentialDeduction = potential,
                     percentComplete = percent,

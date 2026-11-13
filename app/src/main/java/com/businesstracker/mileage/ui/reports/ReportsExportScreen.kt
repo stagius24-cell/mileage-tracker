@@ -82,6 +82,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
+import com.businesstracker.mileage.ui.theme.PersonalBlue
 import com.businesstracker.mileage.ui.theme.SucculentSecondary
 import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
@@ -1025,31 +1026,25 @@ private fun CompactMonthRow(
                     .padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                val loggedFraction = if (summary.potentialDeduction > 0.0) {
-                    (summary.loggedDeduction / summary.potentialDeduction).toFloat().coerceIn(0f, 1f)
-                } else 1f
-                Box(
+                val classifiedMiles = summary.businessMiles + summary.personalMiles
+                val businessFraction = if (classifiedMiles > 0.0) (summary.businessMiles / classifiedMiles).toFloat().coerceIn(0f, 1f) else 0f
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(8.dp)
                         .clip(RoundedCornerShape(4.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth(loggedFraction)
-                            .height(8.dp)
-                            .background(SucculentPrimary)
-                    )
+                    if (summary.businessMiles > 0.0) Box(Modifier.weight(businessFraction).fillMaxHeight().background(SucculentPrimary))
+                    if (summary.personalMiles > 0.0) Box(Modifier.weight(1f - businessFraction).fillMaxHeight().background(PersonalBlue))
                 }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    MonthMetric("Potential", "\$${String.format(Locale.US, "%.2f", summary.potentialDeduction)}")
-                    MonthMetric("Complete", "${summary.percentComplete}%", Alignment.CenterHorizontally)
-                    MonthMetric("Unreviewed", summary.unreviewedDrives.toString(), Alignment.End)
+                    Text("● Business ${String.format(Locale.US, "%.1f", summary.businessMiles)} mi", color = SucculentPrimary, style = MaterialTheme.typography.bodySmall)
+                    Text("● Personal ${String.format(Locale.US, "%.1f", summary.personalMiles)} mi", color = PersonalBlue, style = MaterialTheme.typography.bodySmall)
                 }
 
                 Row(

@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 98
-        versionName = "1.0.97"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Dashboard: removed unreviewed miles from summary.\"")
+        versionCode = 99
+        versionName = "1.0.98"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Reports: monthly bar compares business and personal miles.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
