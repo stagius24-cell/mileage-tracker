@@ -249,6 +249,14 @@ fun DashboardScreen(
             }
 
             item {
+                Text(
+                    text = "Mileage Breakdown",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            item {
                 val bMiles = state.summary.businessMiles
                 val pMiles = state.summary.personalMiles
                 val totalClassified = bMiles + pMiles
@@ -265,9 +273,9 @@ fun DashboardScreen(
                         verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Box(modifier = Modifier.size(144.dp), contentAlignment = Alignment.Center) {
+                            Box(modifier = Modifier.size(128.dp), contentAlignment = Alignment.Center) {
                                 val emptyRingColor = MaterialTheme.colorScheme.outlineVariant
-                                Canvas(modifier = Modifier.size(132.dp)) {
+                                Canvas(modifier = Modifier.size(120.dp)) {
                                     val ring = Stroke(width = 18.dp.toPx(), cap = StrokeCap.Butt)
                                     val inset = ring.width / 2f
                                     val arcTopLeft = Offset(inset, inset)
@@ -770,8 +778,9 @@ private fun BreakdownCategoryCard(
             Icon(icon, contentDescription = "$title mileage", tint = color, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(8.dp))
             Column {
-                Text("${String.format(Locale.US, "%.0f", fraction * 100)}%", color = color,
-                    style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                Text("$title · ${String.format(Locale.US, "%.0f", fraction * 100)}%", color = color,
+                    style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("${String.format(Locale.US, "%.1f", miles)} mi", style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
