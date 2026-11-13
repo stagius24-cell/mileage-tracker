@@ -190,12 +190,12 @@ fun DashboardScreen(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Spacer(modifier = Modifier.height(2.dp))
-                            // Time Filter Chips (Today | This Week | This Month | This Year | Custom)
+                            // Dashboard presets; custom ranges remain available to other flows.
                             LazyRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                items(TimeFilter.entries.toTypedArray()) { filter ->
+                                items(TimeFilter.entries.filter { it != TimeFilter.CUSTOM }) { filter ->
                                     FilterChip(
                                         selected = state.timeFilter == filter,
                                         onClick = { viewModel.setTimeFilter(filter) },

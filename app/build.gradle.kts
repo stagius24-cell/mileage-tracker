@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 114
-        versionName = "1.0.113"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Dashboard: inline category cards and more compact spacing.\"")
+        versionCode = 115
+        versionName = "1.0.114"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Dashboard: removed the Custom time filter button.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
