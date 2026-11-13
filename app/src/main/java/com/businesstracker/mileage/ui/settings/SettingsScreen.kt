@@ -79,6 +79,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.RadioButton
@@ -116,6 +117,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.contentDescription
@@ -516,7 +518,12 @@ fun SettingsScreen(
                                 isError = purposeError != null,
                                 supportingText = purposeError?.let { error -> { Text(error) } },
                                 modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(10.dp)
+                                shape = RoundedCornerShape(10.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.surfaceVariant else Color.White,
+                                    unfocusedContainerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.surfaceVariant else Color.White,
+                                    errorContainerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.surfaceVariant else Color.White
+                                )
                             )
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
                                 verticalAlignment = Alignment.CenterVertically) {
@@ -1080,9 +1087,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.123 (Build 124)" to "Business purpose input is brighter and easier to read.",
                 "Version 1.0.122 (Build 123)" to "Floating dialogs use 90% opacity and 80% outside dimming.",
-                "Version 1.0.121 (Build 122)" to "Matching editor backgrounds, dimming, and button corners.",
-                "Version 1.0.120 (Build 121)" to "Compact Add dialogs for saved locations and business purposes."
+                "Version 1.0.121 (Build 122)" to "Matching editor backgrounds, dimming, and button corners."
             )
         }
 
