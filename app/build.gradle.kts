@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 113
-        versionName = "1.0.112"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Dashboard: compact finance-style mileage distribution and deduction card.\"")
+        versionCode = 114
+        versionName = "1.0.113"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Dashboard: inline category cards and more compact spacing.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
