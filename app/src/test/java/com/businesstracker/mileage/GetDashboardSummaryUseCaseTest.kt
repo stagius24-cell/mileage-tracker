@@ -14,6 +14,25 @@ class GetDashboardSummaryUseCaseTest {
     private lateinit var useCase: GetDashboardSummaryUseCase
     private val fixedReferenceDate = LocalDate.of(2026, 11, 6) // Friday
 
+    @Test
+    fun rawClassifiedMiles_preservePrecisionWithoutChangingExistingRoundedTotals() {
+        val summary = GetDashboardSummaryUseCase().execute(
+            listOf(
+                createTrip("b", "2026-11-06", 0.004, TripClassification.BUSINESS),
+                createTrip("p", "2026-11-06", 0.006, TripClassification.PERSONAL),
+                createTrip("u", "2026-11-06", 10.0, TripClassification.UNREVIEWED)
+            ), TimeFilter.TODAY, referenceDate = fixedReferenceDate
+        )
+        assertEquals(0.004, summary.rawBusinessMiles, 0.000001)
+        assertEquals(0.006, summary.rawPersonalMiles, 0.000001)
+        assertEquals(0.01, summary.rawBusinessMiles + summary.rawPersonalMiles, 0.000001)
+        assertEquals(40.0, summary.rawBusinessMiles / (summary.rawBusinessMiles + summary.rawPersonalMiles) * 100, 0.000001)
+        assertEquals(0.0, summary.businessMiles, 0.000001)
+        assertEquals(0.01, summary.personalMiles, 0.000001)
+        assertEquals(0.0, summary.estimatedDeduction, 0.000001)
+        assertEquals(3, summary.totalTripsCount)
+    }
+
     @Before
     fun setUp() {
         useCase = GetDashboardSummaryUseCase()

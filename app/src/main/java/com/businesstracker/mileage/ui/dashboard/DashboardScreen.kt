@@ -5,7 +5,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -31,11 +30,6 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.BrightnessLow
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Sort
-import androidx.compose.material.icons.filled.BusinessCenter
-import androidx.compose.material.icons.filled.AccountBalanceWallet
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsNotFixed
@@ -70,12 +64,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -88,7 +78,6 @@ import com.businesstracker.mileage.ui.components.SwipeableTripCard
 import com.businesstracker.mileage.ui.theme.AmoledBlack
 import com.businesstracker.mileage.ui.theme.HighAccuracyGreen
 import com.businesstracker.mileage.ui.theme.SlateNeutral
-import com.businesstracker.mileage.ui.theme.PersonalBlue
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import com.businesstracker.mileage.ui.theme.WeakGpsAmber
@@ -113,8 +102,8 @@ fun DashboardScreen(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 2.dp, bottom = 16.dp),
+                .background(if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.background else Color(0xFFF3F6FA)),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // MileIQ-Style Header Bar (Month Picker + Document Icon & 3-Stat Bar)
@@ -224,72 +213,7 @@ fun DashboardScreen(
             }
 
             item {
-                Text(
-                    text = "Mileage Breakdown",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            item {
-                val bMiles = state.summary.businessMiles
-                val pMiles = state.summary.personalMiles
-                val totalClassified = bMiles + pMiles
-                val businessFraction = if (totalClassified > 0) (bMiles / totalClassified).toFloat().coerceIn(0f, 1f) else 0f
-                val personalFraction = if (totalClassified > 0) 1f - businessFraction else 0f
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Box(modifier = Modifier.size(128.dp), contentAlignment = Alignment.Center) {
-                                val emptyRingColor = MaterialTheme.colorScheme.outlineVariant
-                                Canvas(modifier = Modifier.size(120.dp)) {
-                                    val ring = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Butt)
-                                    val inset = ring.width / 2f
-                                    val arcTopLeft = Offset(inset, inset)
-                                    val arcSize = Size(size.width - ring.width, size.height - ring.width)
-                                    if (totalClassified <= 0) {
-                                        drawArc(emptyRingColor, -90f, 360f, topLeft = arcTopLeft, size = arcSize, useCenter = false, style = ring)
-                                    } else {
-                                        val businessSweep = 360f * businessFraction
-                                        val gap = if (businessFraction > 0f && personalFraction > 0f) minOf(3f, businessSweep / 2f, 360f * personalFraction / 2f) else 0f
-                                        if (businessFraction > 0f) drawArc(SucculentPrimary, -90f + gap / 2f, businessSweep - gap, topLeft = arcTopLeft, size = arcSize, useCenter = false, style = ring)
-                                        if (personalFraction > 0f) drawArc(PersonalBlue, -90f + businessSweep + gap / 2f, 360f * personalFraction - gap, topLeft = arcTopLeft, size = arcSize, useCenter = false, style = ring)
-
-                                    }
-                                }
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(String.format(Locale.US, "%.1f", totalClassified), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                                    Text("Classified Miles", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                                    Text("${state.summary.totalTripsCount} drives", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                                }
-                            }
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                BreakdownCategoryCard("Business", bMiles, SucculentPrimary, Icons.Default.BusinessCenter)
-                                BreakdownCategoryCard("Personal", pMiles, PersonalBlue, Icons.Default.Home)
-                            }
-                        }
-                        Surface(
-                            modifier = Modifier.fillMaxWidth().then(if (onNavigateToReports != null) Modifier.clickable { onNavigateToReports() } else Modifier),
-                            shape = RoundedCornerShape(12.dp),
-                            color = SucculentPrimary.copy(alpha = 0.12f)
-                        ) {
-                            Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(22.dp))
-                                Spacer(Modifier.width(10.dp))
-                                Text("Est. Deduction: $${String.format(Locale.US, "%,.2f", state.summary.estimatedDeduction)}", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                                if (onNavigateToReports != null) Icon(Icons.Default.ChevronRight, contentDescription = "Open reports", modifier = Modifier.size(20.dp))
-                            }
-                        }
-                    }
-                }
+                MileageBreakdownCard(summary = state.summary, onDeductionClick = onNavigateToReports)
             }
 
             // Section: Drive Tracking Table (Single Table incorporated from Track tab)
@@ -729,138 +653,6 @@ private fun TableMetricCell(
                 ),
                 color = SlateNeutral.copy(alpha = 0.7f)
             )
-        }
-    }
-}
-
-@Composable
-private fun BreakdownCategoryCard(
-    title: String,
-    miles: Double,
-    color: Color,
-    icon: ImageVector
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        color = color.copy(alpha = 0.13f)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(icon, contentDescription = "$title mileage", tint = color, modifier = Modifier.size(22.dp))
-            Spacer(Modifier.width(8.dp))
-            Column {
-                Text(title, color = color,
-                    style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("${String.format(Locale.US, "%.1f", miles)} mi", style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-}
-
-@Composable
-private fun BreakdownRow(
-    title: String,
-    miles: Double,
-    fraction: Float,
-    percent: Float,
-    deduction: Double,
-    color: Color,
-    icon: ImageVector
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        // Top line: Icon, Title, Miles, inline Deduction & Percentage
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f, fill = false)
-            ) {
-                Surface(
-                    shape = CircleShape,
-                    color = color.copy(alpha = 0.15f),
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = color,
-                        modifier = Modifier.padding(6.dp)
-                    )
-                }
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    softWrap = false
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "• ${String.format(Locale.US, "%.1f", miles)} miles",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.End,
-                modifier = Modifier.padding(start = 8.dp)
-            ) {
-                if (deduction > 0) {
-                    Text(
-                        text = "\$${String.format(Locale.US, "%,.2f", deduction)}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = color,
-                        maxLines = 1,
-                        softWrap = false
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                }
-                Text(
-                    text = "${String.format(Locale.US, "%.0f%%", percent)}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = color,
-                    maxLines = 1,
-                    softWrap = false
-                )
-            }
-        }
-
-        // Percentage bar underneath category
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .background(color.copy(alpha = 0.15f))
-        ) {
-            if (fraction > 0f) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(color)
-                )
-            }
         }
     }
 }

@@ -1153,9 +1153,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.112 (Build 113)" to "Compact finance-style mileage and deduction dashboard.",
                 "Version 1.0.111 (Build 112)" to "Reduced navigation bar and selected tab corner radii.",
-                "Version 1.0.110 (Build 111)" to "Saved Locations opens in a floating scrollable list.",
-                "Version 1.0.109 (Build 110)" to "Thinner mileage ring and simpler category cards."
+                "Version 1.0.110 (Build 111)" to "Saved Locations opens in a floating scrollable list."
             )
         }
 
