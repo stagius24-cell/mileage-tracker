@@ -321,7 +321,7 @@ fun SavedLocationDialog(
         Surface(
             modifier = Modifier
                 .fillMaxWidth(0.94f)
-                .heightIn(max = 720.dp),
+                .heightIn(max = 640.dp),
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp
@@ -356,13 +356,13 @@ fun SavedLocationDialog(
                     }
                 }
 
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(4.dp))
 
                 Column(
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // Search Address + Inline GPS button
                     Row(
@@ -379,7 +379,7 @@ fun SavedLocationDialog(
                                 searchResults = emptyList()
                                 searchError = null
                             },
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).heightIn(max = 56.dp),
                             label = { Text("Search Address", style = MaterialTheme.typography.labelMedium) },
                             placeholder = { Text("Search address", style = MaterialTheme.typography.bodySmall) },
                             textStyle = MaterialTheme.typography.bodyMedium,
@@ -527,7 +527,7 @@ fun SavedLocationDialog(
                             name = it
                             formError = null
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 56.dp),
                         label = { Text("Location Name *", style = MaterialTheme.typography.labelMedium) },
                         placeholder = { Text("e.g. Home, Succulent Nursery, Warehouse", style = MaterialTheme.typography.bodySmall) },
                         textStyle = MaterialTheme.typography.bodyMedium,
@@ -539,7 +539,7 @@ fun SavedLocationDialog(
                     OutlinedTextField(
                         value = address,
                         onValueChange = { address = it },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 72.dp),
                         label = { Text("Address *", style = MaterialTheme.typography.labelMedium) },
                         placeholder = { Text("123 Example Street, San Jose, CA", style = MaterialTheme.typography.bodySmall) },
                         textStyle = MaterialTheme.typography.bodyMedium,
@@ -654,7 +654,7 @@ fun SavedLocationDialog(
                     }
                 }
 
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(4.dp))
 
                 // Footer Buttons
                 Row(

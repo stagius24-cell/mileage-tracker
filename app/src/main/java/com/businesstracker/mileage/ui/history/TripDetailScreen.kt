@@ -718,7 +718,7 @@ private fun RouteDetailsTab(
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
