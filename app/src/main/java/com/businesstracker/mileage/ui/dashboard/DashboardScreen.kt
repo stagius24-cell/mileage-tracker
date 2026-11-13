@@ -218,33 +218,8 @@ fun DashboardScreen(
                                     )
                                 }
                             }
-
-                            // Secondary Summary Metrics (Total | Personal)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp, horizontal = 2.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "Total: ${String.format(Locale.US, "%.1f", state.summary.totalMiles)} mi",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
-                                )
-                                Text(
-                                    text = "Personal: ${String.format(Locale.US, "%.1f", state.summary.personalMiles)} mi",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = SlateNeutral
-                                )
-                            }
-                            Spacer(modifier = Modifier.height(2.dp))
                         }
                     }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-
                 }
             }
 
@@ -276,7 +251,7 @@ fun DashboardScreen(
                             Box(modifier = Modifier.size(128.dp), contentAlignment = Alignment.Center) {
                                 val emptyRingColor = MaterialTheme.colorScheme.outlineVariant
                                 Canvas(modifier = Modifier.size(120.dp)) {
-                                    val ring = Stroke(width = 18.dp.toPx(), cap = StrokeCap.Butt)
+                                    val ring = Stroke(width = 12.dp.toPx(), cap = StrokeCap.Butt)
                                     val inset = ring.width / 2f
                                     val arcTopLeft = Offset(inset, inset)
                                     val arcSize = Size(size.width - ring.width, size.height - ring.width)
@@ -297,8 +272,8 @@ fun DashboardScreen(
                                 }
                             }
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                BreakdownCategoryCard("Business", bMiles, businessFraction, SucculentPrimary, Icons.Default.BusinessCenter)
-                                BreakdownCategoryCard("Personal", pMiles, personalFraction, PersonalBlue, Icons.Default.Home)
+                                BreakdownCategoryCard("Business", bMiles, SucculentPrimary, Icons.Default.BusinessCenter)
+                                BreakdownCategoryCard("Personal", pMiles, PersonalBlue, Icons.Default.Home)
                             }
                         }
                         Surface(
@@ -762,7 +737,6 @@ private fun TableMetricCell(
 private fun BreakdownCategoryCard(
     title: String,
     miles: Double,
-    fraction: Float,
     color: Color,
     icon: ImageVector
 ) {
@@ -778,7 +752,7 @@ private fun BreakdownCategoryCard(
             Icon(icon, contentDescription = "$title mileage", tint = color, modifier = Modifier.size(22.dp))
             Spacer(Modifier.width(8.dp))
             Column {
-                Text("$title · ${String.format(Locale.US, "%.0f", fraction * 100)}%", color = color,
+                Text(title, color = color,
                     style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("${String.format(Locale.US, "%.1f", miles)} mi", style = MaterialTheme.typography.bodyMedium,
