@@ -40,7 +40,9 @@ class GetDashboardSummaryUseCase @Inject constructor() {
             unreviewedMiles = unreviewedMiles,
             estimatedDeduction = estimatedDeduction,
             totalTripsCount = filtered.size,
-            unreviewedTripsCount = totalUnreviewedCount
+            unreviewedTripsCount = totalUnreviewedCount,
+            rawBusinessMiles = businessTrips.sumOf { it.businessMiles },
+            rawPersonalMiles = personalTrips.sumOf { it.totalDistanceMiles }
         )
     }
 

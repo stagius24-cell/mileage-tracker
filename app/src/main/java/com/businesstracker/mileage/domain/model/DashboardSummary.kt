@@ -7,5 +7,7 @@ data class DashboardSummary(
     val unreviewedMiles: Double = 0.0,
     val estimatedDeduction: Double = 0.0,
     val totalTripsCount: Int = 0,
-    val unreviewedTripsCount: Int = 0
+    val unreviewedTripsCount: Int = 0,
+    val rawBusinessMiles: Double = businessMiles,
+    val rawPersonalMiles: Double = personalMiles
 )
