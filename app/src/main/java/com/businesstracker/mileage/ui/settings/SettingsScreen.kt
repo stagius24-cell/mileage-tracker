@@ -548,7 +548,7 @@ fun SettingsScreen(
 
             if (showPurposeList) {
                 Dialog(onDismissRequest = { showPurposeList = false }) {
-                    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)) {
+                    SettingsDialogSurface() {
                         Column(Modifier.fillMaxWidth().padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Business purposes", modifier = Modifier.weight(1f),
@@ -947,7 +947,7 @@ fun SettingsScreen(
 
     if (showSavedLocationsList) {
         Dialog(onDismissRequest = { showSavedLocationsList = false }) {
-            Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)) {
+            SettingsDialogSurface() {
                 Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Saved Locations", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -1080,9 +1080,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.122 (Build 123)" to "Floating dialogs use 90% opacity and 80% outside dimming.",
                 "Version 1.0.121 (Build 122)" to "Matching editor backgrounds, dimming, and button corners.",
-                "Version 1.0.120 (Build 121)" to "Compact Add dialogs for saved locations and business purposes.",
-                "Version 1.0.119 (Build 120)" to "Tighter Settings rows and matching translucent lists."
+                "Version 1.0.120 (Build 121)" to "Compact Add dialogs for saved locations and business purposes."
             )
         }
 

@@ -1,7 +1,6 @@
 package com.businesstracker.mileage.ui.settings
 
 import android.view.WindowManager
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -19,12 +18,12 @@ internal fun SettingsDialogSurface(modifier: Modifier = Modifier, content: @Comp
     val window = (LocalView.current.parent as? DialogWindowProvider)?.window
     SideEffect {
         window?.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-        window?.setDimAmount(0.55f)
+        window?.setDimAmount(0.8f)
     }
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp).copy(alpha = 0.8f),
+        color = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp).copy(alpha = 0.9f),
         tonalElevation = 0.dp,
         content = content
     )
