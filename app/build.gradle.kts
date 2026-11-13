@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 118
-        versionName = "1.0.117"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings: compact sections and inline actions.\"")
+        versionCode = 119
+        versionName = "1.0.118"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings: business purposes in a scrollable list.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -362,6 +362,8 @@ fun SettingsScreen(
 
         item {
             var newPurposeText by remember { mutableStateOf("") }
+            var showAddPurpose by remember { mutableStateOf(false) }
+            var showPurposeList by remember { mutableStateOf(false) }
             var purposeError by remember { mutableStateOf<String?>(null) }
             var editingPurpose by remember { mutableStateOf<String?>(null) }
             var editPurposeText by remember { mutableStateOf("") }
@@ -480,145 +482,93 @@ fun SettingsScreen(
 
             SettingsSection(
                 title = "Business purposes",
-                icon = Icons.Default.BusinessCenter
-            ) {
-                // Input row to add new custom purpose
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(
-                            1.dp,
-                            if (purposeError != null) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                icon = Icons.Default.BusinessCenter,
+                trailing = {
+                    IconButton(onClick = { purposeError = null; showAddPurpose = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "Add business purpose", tint = SucculentPrimary)
+                    }
+                    IconButton(onClick = { showPurposeList = true }) {
+                        Icon(Icons.Default.ChevronRight, contentDescription = "Show business purposes",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            )
+
+            if (showAddPurpose) {
+                AlertDialog(
+                    onDismissRequest = { showAddPurpose = false },
+                    title = { Text("Add business purpose") },
+                    text = {
+                        OutlinedTextField(
+                            value = newPurposeText,
+                            onValueChange = { newPurposeText = it; purposeError = null },
+                            label = { Text("Purpose name") },
+                            singleLine = true,
+                            isError = purposeError != null,
+                            supportingText = purposeError?.let { error -> { Text(error) } },
+                            modifier = Modifier.fillMaxWidth()
                         )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(horizontal = 14.dp),
-                            contentAlignment = Alignment.CenterStart
-                        ) {
-                            if (newPurposeText.isEmpty()) {
-                                Text(
-                                    text = "New purpose",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                                    maxLines = 1
-                                )
-                            }
-                            BasicTextField(
-                                value = newPurposeText,
-                                onValueChange = {
-                                    newPurposeText = it
-                                    if (purposeError != null) purposeError = null
-                                },
-                                singleLine = true,
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(
-                                    color = MaterialTheme.colorScheme.onSurface
-                                ),
-                                cursorBrush = SolidColor(SucculentPrimary),
-                                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "New business purpose" }
-                            )
-                        }
-                    }
-
-                    Button(
-                        onClick = {
+                    },
+                    confirmButton = {
+                        Button(onClick = {
                             val trimmed = newPurposeText.trim()
-                            if (trimmed.isBlank()) {
-                                purposeError = "Purpose cannot be empty"
-                            } else if (state.customPurposes.any { it.equals(trimmed, ignoreCase = true) }) {
-                                purposeError = "Purpose already exists"
-                            } else {
-                                viewModel.addCustomPurpose(trimmed)
-                                newPurposeText = ""
-                                purposeError = null
+                            when {
+                                trimmed.isBlank() -> purposeError = "Purpose cannot be empty"
+                                state.customPurposes.any { it.equals(trimmed, ignoreCase = true) } -> purposeError = "Purpose already exists"
+                                else -> {
+                                    viewModel.addCustomPurpose(trimmed)
+                                    newPurposeText = ""
+                                    purposeError = null
+                                    showAddPurpose = false
+                                }
                             }
-                        },
-                        modifier = Modifier.heightIn(min = 48.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 0.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Add purpose", modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Add", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
-                    }
-                }
+                        }, colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)) {
+                            Text("Add")
+                        }
+                    },
+                    dismissButton = { TextButton(onClick = { showAddPurpose = false }) { Text("Cancel") } }
+                )
+            }
 
-                if (purposeError != null) {
-                    Text(
-                        text = purposeError!!,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.labelSmall
-                    )
-                }
-
-                // Custom purposes chips
-                if (state.customPurposes.isNotEmpty()) {
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        state.customPurposes.forEach { purpose ->
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = SucculentPrimary.copy(alpha = 0.12f),
-                                contentColor = SucculentPrimary
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(start = 10.dp, end = 6.dp, top = 4.dp, bottom = 4.dp)
-                                ) {
-                                    Text(
-                                        text = purpose,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier.weight(1f, fill = false)
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    // Edit button
-                                    Box(
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clickable {
+            if (showPurposeList) {
+                Dialog(onDismissRequest = { showPurposeList = false }) {
+                    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
+                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Business purposes", modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                IconButton(onClick = { showPurposeList = false }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close business purposes")
+                                }
+                            }
+                            LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                if (state.customPurposes.isEmpty()) item {
+                                    Text("No business purposes yet.", modifier = Modifier.padding(vertical = 16.dp))
+                                }
+                                items(state.customPurposes.size) { index ->
+                                    val purpose = state.customPurposes[index]
+                                    Surface(shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
+                                        Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically) {
+                                            Text(purpose, modifier = Modifier.weight(1f), maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
+                                            IconButton(onClick = {
+                                                showPurposeList = false
                                                 editingPurpose = purpose
                                                 editPurposeText = purpose
                                                 editPurposeError = null
-                                            },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Edit,
-                                            contentDescription = "Edit $purpose",
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    }
-                                    Spacer(Modifier.width(2.dp))
-                                    // Delete button
-                                    Box(
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .clickable { deleteConfirmationPurpose = purpose },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.DeleteOutline,
-                                            contentDescription = "Delete $purpose",
-                                            tint = SpeedRed,
-                                            modifier = Modifier.size(15.dp)
-                                        )
+                                            }) {
+                                                Icon(Icons.Default.Edit, contentDescription = "Edit $purpose", tint = SucculentPrimary)
+                                            }
+                                            IconButton(onClick = {
+                                                showPurposeList = false
+                                                deleteConfirmationPurpose = purpose
+                                            }) {
+                                                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete $purpose", tint = SpeedRed)
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1114,9 +1064,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.118 (Build 119)" to "Business purposes now open in a scrollable list.",
                 "Version 1.0.117 (Build 118)" to "Compact Settings sections, simpler labels, and inline actions.",
-                "Version 1.0.116 (Build 117)" to "Mileage percentages now show whole numbers.",
-                "Version 1.0.115 (Build 116)" to "Removed the Backup & Restore info button."
+                "Version 1.0.116 (Build 117)" to "Mileage percentages now show whole numbers."
             )
         }
 
