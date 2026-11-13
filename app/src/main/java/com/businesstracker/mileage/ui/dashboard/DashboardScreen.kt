@@ -32,6 +32,9 @@ import androidx.compose.material.icons.filled.BrightnessLow
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.BusinessCenter
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.GpsFixed
@@ -422,45 +425,45 @@ fun DashboardScreen(
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
                     ) {
-                        Canvas(modifier = Modifier.size(112.dp)) {
-                            val ring = Stroke(width = 18.dp.toPx(), cap = StrokeCap.Butt)
-                            if (totalClassified <= 0) {
-                                drawArc(Color.LightGray.copy(alpha = 0.4f), -90f, 360f, useCenter = false, style = ring)
-                            } else {
-                                val businessSweep = 360f * businessFraction
-                                val gap = if (businessFraction > 0f && personalFraction > 0f) minOf(3f, businessSweep / 2f, 360f * personalFraction / 2f) else 0f
-                                if (businessFraction > 0f) {
-                                    drawArc(SucculentPrimary, -90f + gap / 2f, businessSweep - gap, useCenter = false, style = ring)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(modifier = Modifier.size(144.dp), contentAlignment = Alignment.Center) {
+                                val emptyRingColor = MaterialTheme.colorScheme.outlineVariant
+                                Canvas(modifier = Modifier.size(132.dp)) {
+                                    val ring = Stroke(width = 18.dp.toPx(), cap = StrokeCap.Butt)
+                                    if (totalClassified <= 0) {
+                                        drawArc(emptyRingColor, -90f, 360f, useCenter = false, style = ring)
+                                    } else {
+                                        val businessSweep = 360f * businessFraction
+                                        val gap = if (businessFraction > 0f && personalFraction > 0f) minOf(3f, businessSweep / 2f, 360f * personalFraction / 2f) else 0f
+                                        if (businessFraction > 0f) drawArc(SucculentPrimary, -90f + gap / 2f, businessSweep - gap, useCenter = false, style = ring)
+                                        if (personalFraction > 0f) drawArc(PersonalBlue, -90f + businessSweep + gap / 2f, 360f * personalFraction - gap, useCenter = false, style = ring)
+                                    }
                                 }
-                                if (personalFraction > 0f) {
-                                    drawArc(PersonalBlue, -90f + businessSweep + gap / 2f, 360f * personalFraction - gap, useCenter = false, style = ring)
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(String.format(Locale.US, "%.1f", totalClassified), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                                    Text("Classified Miles", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
                                 }
                             }
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                BreakdownCategoryCard("Business", bMiles, businessFraction, SucculentPrimary, Icons.Default.BusinessCenter)
+                                BreakdownCategoryCard("Personal", pMiles, personalFraction, PersonalBlue, Icons.Default.Home)
+                            }
                         }
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Business ${String.format(Locale.US, "%.0f", businessFraction * 100)}% · ${String.format(Locale.US, "%.1f", bMiles)} mi",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = SucculentPrimary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "Personal ${String.format(Locale.US, "%.0f", personalFraction * 100)}% · ${String.format(Locale.US, "%.1f", pMiles)} mi",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = PersonalBlue,
-                                fontWeight = FontWeight.Bold
-                            )
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            Text(
-                                "Business deduction: $${String.format(Locale.US, "%,.2f", state.summary.estimatedDeduction)}",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().then(if (onNavigateToReports != null) Modifier.clickable { onNavigateToReports() } else Modifier),
+                            shape = RoundedCornerShape(12.dp),
+                            color = SucculentPrimary.copy(alpha = 0.12f)
+                        ) {
+                            Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(22.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Text("Est. Deduction: $${String.format(Locale.US, "%,.2f", state.summary.estimatedDeduction)}", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                if (onNavigateToReports != null) Icon(Icons.Default.ChevronRight, contentDescription = "Open reports", modifier = Modifier.size(20.dp))
+                            }
                         }
                     }
                 }
@@ -851,6 +854,35 @@ private fun OdometerMilesDisplay(
             ),
             color = MaterialTheme.colorScheme.onBackground
         )
+    }
+}
+
+@Composable
+private fun BreakdownCategoryCard(
+    title: String,
+    miles: Double,
+    fraction: Float,
+    color: Color,
+    icon: ImageVector
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        color = color.copy(alpha = 0.13f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(8.dp))
+            Column {
+                Text("$title · ${String.format(Locale.US, "%.0f", fraction * 100)}%", color = color,
+                    style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis)
+                Text("${String.format(Locale.US, "%.1f", miles)} mi", style = MaterialTheme.typography.bodySmall)
+            }
+        }
     }
 }
 
