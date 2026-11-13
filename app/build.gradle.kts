@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 102
-        versionName = "1.0.101"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"History: removed duplicate category badge beside trip time.\"")
+        versionCode = 103
+        versionName = "1.0.102"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"History: selected filter values appear on compact green controls.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

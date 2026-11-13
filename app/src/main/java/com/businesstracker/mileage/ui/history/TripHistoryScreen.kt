@@ -285,6 +285,8 @@ private fun HistoryControls(
 ) {
     var isSortExpanded by remember { mutableStateOf(false) }
     var openPicker by remember { mutableStateOf<String?>(null) }
+    var choseAllMonths by remember { mutableStateOf(false) }
+    var choseAllCategories by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -411,34 +413,6 @@ private fun HistoryControls(
             }
         }
 
-        // Active Month Filter Badge (if present)
-        if (state.startDateFilter.isNotBlank()) {
-            Surface(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(10.dp))
-                    .clickable(onClick = onClearDateFilter),
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.primaryContainer
-            ) {
-                Row(
-                    modifier = Modifier.padding(start = 10.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Month: ${formatMonthFilter(state.startDateFilter)}",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = "Clear month filter",
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        }
-
         AnimatedVisibility(
             visible = isSortExpanded,
             enter = expandVertically() + fadeIn(),
@@ -449,13 +423,34 @@ private fun HistoryControls(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf("Months", "Category", "Sort").forEach { picker ->
-                    Surface(
-                        modifier = Modifier.weight(1f).heightIn(min = 48.dp).clickable { openPicker = picker },
-                        shape = RoundedCornerShape(12.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
+                    val label = when (picker) {
+                        "Months" -> state.startDateFilter.takeIf { it.isNotBlank() }?.let(::formatMonthFilter)
+                            ?: if (choseAllMonths) "All months" else "Months"
+                        "Category" -> state.selectedClassificationFilter.takeIf { it != "ALL" }
+                            ?.lowercase()?.replaceFirstChar { it.uppercase() }
+                            ?: if (choseAllCategories) "All" else "Category"
+                        else -> when (state.sortOrder) {
+                            SortOrder.HIGHEST_MILEAGE -> "High to low"
+                            SortOrder.LOWEST_MILEAGE -> "Low to high"
+                            SortOrder.MOST_MONEY -> "Most money"
+                            SortOrder.LEAST_MONEY -> "Least money"
+                            else -> "Sort"
+                        }
+                    }
+                    Box(
+                        modifier = Modifier.weight(1f).height(48.dp).clickable { openPicker = picker },
+                        contentAlignment = Alignment.Center
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(picker, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().height(38.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            color = SucculentPrimary.copy(alpha = 0.14f)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(label, style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold, color = SucculentPrimary,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                 }
@@ -493,8 +488,8 @@ private fun HistoryControls(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
                                 .clickable {
                                     when (picker) {
-                                        "Months" -> onMonthChange(value)
-                                        "Category" -> onClassificationChange(value)
+                                        "Months" -> { choseAllMonths = value.isBlank(); onMonthChange(value) }
+                                        "Category" -> { choseAllCategories = value == "ALL"; onClassificationChange(value) }
                                         else -> onSortChange(SortOrder.valueOf(value))
                                     }
                                     openPicker = null

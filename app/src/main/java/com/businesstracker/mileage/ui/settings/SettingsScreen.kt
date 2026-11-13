@@ -1162,9 +1162,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.102 (Build 103)" to "Trip History filters show selected values on compact green controls.",
                 "Version 1.0.101 (Build 102)" to "Removed duplicate category badges beside trip times.",
-                "Version 1.0.100 (Build 101)" to "Trip History shows category icons in place of delete buttons.",
-                "Version 1.0.99 (Build 100)" to "Trip History adds month, category, and sort pickers."
+                "Version 1.0.100 (Build 101)" to "Trip History shows category icons in place of delete buttons."
             )
         }
 
