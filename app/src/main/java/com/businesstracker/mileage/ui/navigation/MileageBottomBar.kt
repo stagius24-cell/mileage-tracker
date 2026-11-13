@@ -61,7 +61,7 @@ fun MileageBottomBar(
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(32.dp),
+            shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp,
             shadowElevation = 8.dp
@@ -93,7 +93,7 @@ fun MileageBottomBar(
                         .padding(horizontal = 6.dp, vertical = 6.dp)
                         .background(
                             color = SucculentPrimary.copy(alpha = 0.16f),
-                            shape = RoundedCornerShape(percent = 50)
+                            shape = RoundedCornerShape(14.dp)
                         )
                 )
 
@@ -121,7 +121,7 @@ fun MileageBottomBar(
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxHeight()
-                                .clip(RoundedCornerShape(percent = 50))
+                                .clip(RoundedCornerShape(14.dp))
                                 .clickable {
                                     if (currentBaseRoute != screen.route) {
                                         navController.navigate(screen.route) {

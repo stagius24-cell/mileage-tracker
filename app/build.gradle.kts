@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 111
-        versionName = "1.0.110"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings: saved locations open in a floating scrollable list.\"")
+        versionCode = 112
+        versionName = "1.0.111"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Navigation: softer rectangular corners for bar and selected tab.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
