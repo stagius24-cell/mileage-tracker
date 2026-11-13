@@ -329,7 +329,7 @@ fun SavedLocationDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 18.dp, vertical = 14.dp)
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
             ) {
                 // Header
                 Row(
@@ -346,7 +346,7 @@ fun SavedLocationDialog(
                         onClick = onDismiss,
                         enabled = !isSaving,
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(48.dp)
                             .semantics {
                                 role = Role.Button
                                 contentDescription = "Close dialog"
@@ -356,13 +356,13 @@ fun SavedLocationDialog(
                     }
                 }
 
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(0.dp))
 
                 Column(
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     // Search Address + Inline GPS button
                     Row(
@@ -654,7 +654,7 @@ fun SavedLocationDialog(
                     }
                 }
 
-                Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(0.dp))
 
                 // Footer Buttons
                 Row(

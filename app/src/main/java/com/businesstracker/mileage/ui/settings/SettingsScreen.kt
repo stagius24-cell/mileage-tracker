@@ -495,39 +495,53 @@ fun SettingsScreen(
             )
 
             if (showAddPurpose) {
-                AlertDialog(
-                    onDismissRequest = { showAddPurpose = false },
-                    title = { Text("Add business purpose") },
-                    text = {
-                        OutlinedTextField(
-                            value = newPurposeText,
-                            onValueChange = { newPurposeText = it; purposeError = null },
-                            label = { Text("Purpose name") },
-                            singleLine = true,
-                            isError = purposeError != null,
-                            supportingText = purposeError?.let { error -> { Text(error) } },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    confirmButton = {
-                        Button(onClick = {
-                            val trimmed = newPurposeText.trim()
-                            when {
-                                trimmed.isBlank() -> purposeError = "Purpose cannot be empty"
-                                state.customPurposes.any { it.equals(trimmed, ignoreCase = true) } -> purposeError = "Purpose already exists"
-                                else -> {
-                                    viewModel.addCustomPurpose(trimmed)
-                                    newPurposeText = ""
-                                    purposeError = null
-                                    showAddPurpose = false
+                Dialog(onDismissRequest = { showAddPurpose = false }) {
+                    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Add business purpose", modifier = Modifier.weight(1f),
+                                    style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                IconButton(onClick = { showAddPurpose = false }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Close add purpose")
                                 }
                             }
-                        }, colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)) {
-                            Text("Add")
+                            OutlinedTextField(
+                                value = newPurposeText,
+                                onValueChange = { newPurposeText = it; purposeError = null },
+                                label = { Text("Purpose name") },
+                                singleLine = true,
+                                isError = purposeError != null,
+                                supportingText = purposeError?.let { error -> { Text(error) } },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically) {
+                                TextButton(onClick = { showAddPurpose = false },
+                                    modifier = Modifier.defaultMinSize(minHeight = 48.dp)) { Text("Cancel") }
+                                Spacer(Modifier.width(8.dp))
+                                Button(onClick = {
+                                    val trimmed = newPurposeText.trim()
+                                    when {
+                                        trimmed.isBlank() -> purposeError = "Purpose cannot be empty"
+                                        state.customPurposes.any { it.equals(trimmed, ignoreCase = true) } -> purposeError = "Purpose already exists"
+                                        else -> {
+                                            viewModel.addCustomPurpose(trimmed)
+                                            newPurposeText = ""
+                                            purposeError = null
+                                            showAddPurpose = false
+                                        }
+                                    }
+                                }, modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)) {
+                                    Text("Add")
+                                }
+                            }
                         }
-                    },
-                    dismissButton = { TextButton(onClick = { showAddPurpose = false }) { Text("Cancel") } }
-                )
+                    }
+                }
             }
 
             if (showPurposeList) {
@@ -1064,9 +1078,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.120 (Build 121)" to "Compact Add dialogs for saved locations and business purposes.",
                 "Version 1.0.119 (Build 120)" to "Tighter Settings rows and matching translucent lists.",
-                "Version 1.0.118 (Build 119)" to "Business purposes now open in a scrollable list.",
-                "Version 1.0.117 (Build 118)" to "Compact Settings sections, simpler labels, and inline actions."
+                "Version 1.0.118 (Build 119)" to "Business purposes now open in a scrollable list."
             )
         }
 
