@@ -317,6 +317,71 @@ fun DashboardScreen(
                 }
             }
 
+            // Section: Classification Breakdown (MySucculentCorner vs Personal)
+            item {
+                Text(
+                    text = "Mileage Breakdown",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
+            item {
+                val bMiles = state.summary.businessMiles
+                val pMiles = state.summary.personalMiles
+                val totalClassified = bMiles + pMiles
+                val businessFraction = if (totalClassified > 0) (bMiles / totalClassified).toFloat().coerceIn(0f, 1f) else 0f
+                val personalFraction = if (totalClassified > 0) 1f - businessFraction else 0f
+
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            Box(modifier = Modifier.size(144.dp), contentAlignment = Alignment.Center) {
+                                val emptyRingColor = MaterialTheme.colorScheme.outlineVariant
+                                Canvas(modifier = Modifier.size(132.dp)) {
+                                    val ring = Stroke(width = 18.dp.toPx(), cap = StrokeCap.Butt)
+                                    if (totalClassified <= 0) {
+                                        drawArc(emptyRingColor, -90f, 360f, useCenter = false, style = ring)
+                                    } else {
+                                        val businessSweep = 360f * businessFraction
+                                        val gap = if (businessFraction > 0f && personalFraction > 0f) minOf(3f, businessSweep / 2f, 360f * personalFraction / 2f) else 0f
+                                        if (businessFraction > 0f) drawArc(SucculentPrimary, -90f + gap / 2f, businessSweep - gap, useCenter = false, style = ring)
+                                        if (personalFraction > 0f) drawArc(PersonalBlue, -90f + businessSweep + gap / 2f, 360f * personalFraction - gap, useCenter = false, style = ring)
+                                    }
+                                }
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(String.format(Locale.US, "%.1f", totalClassified), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
+                                    Text("Classified Miles", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                BreakdownCategoryCard("Business", bMiles, businessFraction, SucculentPrimary, Icons.Default.BusinessCenter)
+                                BreakdownCategoryCard("Personal", pMiles, personalFraction, PersonalBlue, Icons.Default.Home)
+                            }
+                        }
+                        Surface(
+                            modifier = Modifier.fillMaxWidth().then(if (onNavigateToReports != null) Modifier.clickable { onNavigateToReports() } else Modifier),
+                            shape = RoundedCornerShape(12.dp),
+                            color = SucculentPrimary.copy(alpha = 0.12f)
+                        ) {
+                            Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(22.dp))
+                                Spacer(Modifier.width(10.dp))
+                                Text("Est. Deduction: $${String.format(Locale.US, "%,.2f", state.summary.estimatedDeduction)}", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                                if (onNavigateToReports != null) Icon(Icons.Default.ChevronRight, contentDescription = "Open reports", modifier = Modifier.size(20.dp))
+                            }
+                        }
+                    }
+                }
+            }
+
             // Section: Drive Tracking Table (Single Table incorporated from Track tab)
             item {
                 DriveTrackingTable(
@@ -404,70 +469,6 @@ fun DashboardScreen(
                 }
             }
 
-            // Section: Classification Breakdown (MySucculentCorner vs Personal)
-            item {
-                Text(
-                    text = "Mileage Breakdown",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            item {
-                val bMiles = state.summary.businessMiles
-                val pMiles = state.summary.personalMiles
-                val totalClassified = bMiles + pMiles
-                val businessFraction = if (totalClassified > 0) (bMiles / totalClassified).toFloat().coerceIn(0f, 1f) else 0f
-                val personalFraction = if (totalClassified > 0) 1f - businessFraction else 0f
-
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Box(modifier = Modifier.size(144.dp), contentAlignment = Alignment.Center) {
-                                val emptyRingColor = MaterialTheme.colorScheme.outlineVariant
-                                Canvas(modifier = Modifier.size(132.dp)) {
-                                    val ring = Stroke(width = 18.dp.toPx(), cap = StrokeCap.Butt)
-                                    if (totalClassified <= 0) {
-                                        drawArc(emptyRingColor, -90f, 360f, useCenter = false, style = ring)
-                                    } else {
-                                        val businessSweep = 360f * businessFraction
-                                        val gap = if (businessFraction > 0f && personalFraction > 0f) minOf(3f, businessSweep / 2f, 360f * personalFraction / 2f) else 0f
-                                        if (businessFraction > 0f) drawArc(SucculentPrimary, -90f + gap / 2f, businessSweep - gap, useCenter = false, style = ring)
-                                        if (personalFraction > 0f) drawArc(PersonalBlue, -90f + businessSweep + gap / 2f, 360f * personalFraction - gap, useCenter = false, style = ring)
-                                    }
-                                }
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(String.format(Locale.US, "%.1f", totalClassified), style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Black)
-                                    Text("Classified Miles", style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
-                                }
-                            }
-                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                BreakdownCategoryCard("Business", bMiles, businessFraction, SucculentPrimary, Icons.Default.BusinessCenter)
-                                BreakdownCategoryCard("Personal", pMiles, personalFraction, PersonalBlue, Icons.Default.Home)
-                            }
-                        }
-                        Surface(
-                            modifier = Modifier.fillMaxWidth().then(if (onNavigateToReports != null) Modifier.clickable { onNavigateToReports() } else Modifier),
-                            shape = RoundedCornerShape(12.dp),
-                            color = SucculentPrimary.copy(alpha = 0.12f)
-                        ) {
-                            Row(modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.AccountBalanceWallet, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(22.dp))
-                                Spacer(Modifier.width(10.dp))
-                                Text("Est. Deduction: $${String.format(Locale.US, "%,.2f", state.summary.estimatedDeduction)}", modifier = Modifier.weight(1f), fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                                if (onNavigateToReports != null) Icon(Icons.Default.ChevronRight, contentDescription = "Open reports", modifier = Modifier.size(20.dp))
-                            }
-                        }
-                    }
-                }
-            }
         }
 
         // AMOLED Dim Screen Overlay (Double-tap to wake)
