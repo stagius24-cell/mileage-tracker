@@ -34,6 +34,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -497,10 +499,11 @@ fun SettingsScreen(
             )
 
             if (showAddPurpose) {
-                Dialog(onDismissRequest = { showAddPurpose = false }) {
-                    SettingsDialogSurface() {
+                val purposeFocusRequester = remember { FocusRequester() }
+                SettingsBottomSheet(onDismissRequest = { showAddPurpose = false }) {
+                    LaunchedEffect(Unit) { purposeFocusRequester.requestFocus() }
                         Column(
-                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            modifier = Modifier.fillMaxWidth().imePadding().padding(horizontal = 20.dp).padding(bottom = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -517,7 +520,7 @@ fun SettingsScreen(
                                 singleLine = true,
                                 isError = purposeError != null,
                                 supportingText = purposeError?.let { error -> { Text(error) } },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).focusRequester(purposeFocusRequester),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
                                     focusedContainerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.surfaceVariant else Color.White,
@@ -525,12 +528,7 @@ fun SettingsScreen(
                                     errorContainerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.surfaceVariant else Color.White
                                 )
                             )
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
-                                verticalAlignment = Alignment.CenterVertically) {
-                                TextButton(onClick = { showAddPurpose = false },
-                                    modifier = Modifier.defaultMinSize(minHeight = 48.dp)) { Text("Cancel") }
-                                Spacer(Modifier.width(8.dp))
-                                Button(onClick = {
+                            Button(onClick = {
                                     val trimmed = newPurposeText.trim()
                                     when {
                                         trimmed.isBlank() -> purposeError = "Purpose cannot be empty"
@@ -542,14 +540,12 @@ fun SettingsScreen(
                                             showAddPurpose = false
                                         }
                                     }
-                                }, modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)) {
-                                    Text("Add")
-                                }
+                            }, modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)) {
+                                Text("Add Purpose")
                             }
                         }
-                    }
                 }
             }
 
@@ -1087,9 +1083,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.124 (Build 125)" to "Purpose and saved location forms now use bottom sheets.",
                 "Version 1.0.123 (Build 124)" to "Business purpose input is brighter and easier to read.",
-                "Version 1.0.122 (Build 123)" to "Floating dialogs use 90% opacity and 80% outside dimming.",
-                "Version 1.0.121 (Build 122)" to "Matching editor backgrounds, dimming, and button corners."
+                "Version 1.0.122 (Build 123)" to "Floating dialogs use 90% opacity and 80% outside dimming."
             )
         }
 

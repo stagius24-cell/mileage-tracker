@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -59,6 +61,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -83,6 +87,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -312,21 +317,15 @@ fun SavedLocationDialog(
         }
     }
 
-    Dialog(
-        onDismissRequest = {
-            if (!isSaving) onDismiss()
-        },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        SettingsDialogSurface(
-            modifier = Modifier
-                .fillMaxWidth(0.94f)
-                .heightIn(max = 640.dp)
-        ) {
+    SettingsBottomSheet(onDismissRequest = { if (!isSaving) onDismiss() }) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .heightIn(max = (LocalConfiguration.current.screenHeightDp.dp - 64.dp).coerceAtLeast(320.dp))
+                    .imePadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 12.dp)
             ) {
                 // Header
                 Row(
@@ -376,7 +375,7 @@ fun SavedLocationDialog(
                                 searchResults = emptyList()
                                 searchError = null
                             },
-                            modifier = Modifier.weight(1f).heightIn(max = 56.dp),
+                            modifier = Modifier.weight(1f).heightIn(min = 56.dp),
                             label = { Text("Search Address", style = MaterialTheme.typography.labelMedium) },
                             placeholder = { Text("Search address", style = MaterialTheme.typography.bodySmall) },
                             textStyle = MaterialTheme.typography.bodyMedium,
@@ -524,7 +523,7 @@ fun SavedLocationDialog(
                             name = it
                             formError = null
                         },
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 56.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                         label = { Text("Location Name *", style = MaterialTheme.typography.labelMedium) },
                         placeholder = { Text("e.g. Home, Succulent Nursery, Warehouse", style = MaterialTheme.typography.bodySmall) },
                         textStyle = MaterialTheme.typography.bodyMedium,
@@ -536,7 +535,7 @@ fun SavedLocationDialog(
                     OutlinedTextField(
                         value = address,
                         onValueChange = { address = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 72.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                         label = { Text("Address *", style = MaterialTheme.typography.labelMedium) },
                         placeholder = { Text("123 Example Street, San Jose, CA", style = MaterialTheme.typography.bodySmall) },
                         textStyle = MaterialTheme.typography.bodyMedium,
@@ -553,29 +552,32 @@ fun SavedLocationDialog(
                         )
                     }
 
-                    // Icon Picker
-                    Text("Location Icon", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(AVAILABLE_LOCATION_ICONS) { (key, label) ->
-                            FilterChip(
-                                selected = selectedIcon.equals(key, ignoreCase = true),
-                                onClick = { selectedIcon = key },
-                                modifier = Modifier.defaultMinSize(minHeight = 40.dp),
-                                leadingIcon = {
-                                    Icon(getIconForLocation(key), contentDescription = null, modifier = Modifier.size(16.dp))
-                                },
-                                label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = SucculentPrimary,
-                                    selectedLabelColor = Color.White,
-                                    selectedLeadingIconColor = Color.White
-                                )
-                            )
+                    // Three visible choices; the menu retains every existing icon option.
+                    var iconMenuExpanded by remember { mutableStateOf(false) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Location Icon", modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        Box {
+                            TextButton(onClick = { iconMenuExpanded = true },
+                                modifier = Modifier.defaultMinSize(minHeight = 48.dp)) { Text("All icons") }
+                            DropdownMenu(expanded = iconMenuExpanded,
+                                onDismissRequest = { iconMenuExpanded = false }) {
+                                AVAILABLE_LOCATION_ICONS.forEach { (key, label) ->
+                                    DropdownMenuItem(text = { Text(label) },
+                                        leadingIcon = { Icon(getIconForLocation(key), contentDescription = null) },
+                                        onClick = { selectedIcon = key; iconMenuExpanded = false })
+                                }
+                            }
                         }
                     }
+                    val visibleIcons = listOf("place", "home",
+                        selectedIcon.takeIf { it != "place" && it != "home" } ?: "nursery")
+                    SettingsSegmentedOptions(
+                        options = visibleIcons.map { key -> key to (AVAILABLE_LOCATION_ICONS.firstOrNull { it.first == key }?.second ?: key) },
+                        selected = selectedIcon,
+                        onSelect = { selectedIcon = it },
+                        iconFor = ::getIconForLocation
+                    )
 
                     // Matching Radius Slider in Imperial units (feet)
                     Column(modifier = Modifier.fillMaxWidth()) {
@@ -596,29 +598,20 @@ fun SavedLocationDialog(
                             colors = SliderDefaults.colors(
                                 thumbColor = SucculentPrimary,
                                 activeTrackColor = SucculentPrimary
-                            )
+                            ),
+                            track = { sliderState ->
+                                SliderDefaults.Track(sliderState = sliderState, modifier = Modifier.height(4.dp))
+                            }
                         )
                     }
 
-                    // Classification Preference
-                    Text("Classification Preference", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf("NONE" to "None", "BUSINESS" to "Business", "PERSONAL" to "Personal").forEach { (pref, label) ->
-                            FilterChip(
-                                selected = classificationPref == pref,
-                                onClick = { classificationPref = pref },
-                                modifier = Modifier.defaultMinSize(minHeight = 40.dp),
-                                label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = SucculentPrimary,
-                                    selectedLabelColor = Color.White
-                                )
-                            )
-                        }
-                    }
+                    Text("Classification Preference", style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold)
+                    SettingsSegmentedOptions(
+                        options = listOf("NONE" to "None", "BUSINESS" to "Business", "PERSONAL" to "Personal"),
+                        selected = classificationPref,
+                        onSelect = { classificationPref = it }
+                    )
 
                     if (classificationPref == "BUSINESS") {
                         Text("Business Entity", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
@@ -653,20 +646,12 @@ fun SavedLocationDialog(
 
                 Spacer(Modifier.height(0.dp))
 
-                // Footer Buttons
+                // Footer stays outside the scrolling form and above the keyboard.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(
-                        onClick = onDismiss,
-                        enabled = !isSaving,
-                        modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                    ) {
-                        Text("Cancel")
-                    }
-                    Spacer(Modifier.width(12.dp))
                     Button(
                         onClick = {
                             if (isSaving) return@Button
@@ -700,7 +685,7 @@ fun SavedLocationDialog(
                         enabled = !isSaving,
                         colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp)
                     ) {
                         if (isSaving) {
                             CircularProgressIndicator(
@@ -716,7 +701,6 @@ fun SavedLocationDialog(
                     }
                 }
             }
-        }
     }
 }
 
@@ -1008,6 +992,36 @@ private fun RestoreCandidateRow(
                     color = statusColor,
                     fontWeight = FontWeight.Medium
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSegmentedOptions(
+    options: List<Pair<String, String>>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    iconFor: ((String) -> ImageVector)? = null
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { (key, label) ->
+            val active = selected.equals(key, ignoreCase = true)
+            Surface(
+                modifier = Modifier.weight(1f).defaultMinSize(minHeight = 48.dp)
+                    .clip(RoundedCornerShape(12.dp)).clickable { onSelect(key) },
+                shape = RoundedCornerShape(12.dp),
+                color = if (active) SucculentPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+            ) {
+                Row(Modifier.defaultMinSize(minHeight = 48.dp).padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center) {
+                    iconFor?.let { Icon(it(key), contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    if (iconFor != null) Spacer(Modifier.width(4.dp))
+                    Text(label, style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }
