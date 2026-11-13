@@ -318,13 +318,10 @@ fun SavedLocationDialog(
         },
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Surface(
+        SettingsDialogSurface(
             modifier = Modifier
                 .fillMaxWidth(0.94f)
-                .heightIn(max = 640.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+                .heightIn(max = 640.dp)
         ) {
             Column(
                 modifier = Modifier

@@ -496,7 +496,7 @@ fun SettingsScreen(
 
             if (showAddPurpose) {
                 Dialog(onDismissRequest = { showAddPurpose = false }) {
-                    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
+                    SettingsDialogSurface() {
                         Column(
                             modifier = Modifier.fillMaxWidth().padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -515,7 +515,8 @@ fun SettingsScreen(
                                 singleLine = true,
                                 isError = purposeError != null,
                                 supportingText = purposeError?.let { error -> { Text(error) } },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(10.dp)
                             )
                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End,
                                 verticalAlignment = Alignment.CenterVertically) {
@@ -535,6 +536,7 @@ fun SettingsScreen(
                                         }
                                     }
                                 }, modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                                    shape = RoundedCornerShape(10.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)) {
                                     Text("Add")
                                 }
@@ -1078,9 +1080,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.121 (Build 122)" to "Matching editor backgrounds, dimming, and button corners.",
                 "Version 1.0.120 (Build 121)" to "Compact Add dialogs for saved locations and business purposes.",
-                "Version 1.0.119 (Build 120)" to "Tighter Settings rows and matching translucent lists.",
-                "Version 1.0.118 (Build 119)" to "Business purposes now open in a scrollable list."
+                "Version 1.0.119 (Build 120)" to "Tighter Settings rows and matching translucent lists."
             )
         }
 
