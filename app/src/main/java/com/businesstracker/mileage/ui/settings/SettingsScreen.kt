@@ -165,6 +165,7 @@ fun SettingsScreen(
 
     // Saved Locations State
     var showLocationDialog by remember { mutableStateOf(false) }
+    var showSavedLocationsList by remember { mutableStateOf(false) }
     var editingLocation by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
     var locationPendingDeletion by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
     var locationActionError by remember { mutableStateOf<String?>(null) }
@@ -636,46 +637,12 @@ fun SettingsScreen(
                 subtitle = "Custom place names for trip history",
                 icon = Icons.Default.LocationOn,
                 trailing = {
-                    Icon(
-                        imageVector = Icons.Default.ChevronRight,
-                        contentDescription = "Saved Locations options",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(24.dp)
-                    )
+                    IconButton(onClick = { showSavedLocationsList = true }) {
+                        Icon(Icons.Default.ChevronRight, contentDescription = "Show saved locations",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             ) {
-                if (state.savedLocations.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "No saved locations yet.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        state.savedLocations.forEach { loc ->
-                            SavedLocationItem(
-                                location = loc,
-                                onEdit = {
-                                    editingLocation = loc
-                                    showLocationDialog = true
-                                },
-                                onDelete = {
-                                    locationPendingDeletion = loc
-                                }
-                            )
-                        }
-                    }
-                }
 
                 Button(
                     onClick = {
@@ -1051,6 +1018,30 @@ fun SettingsScreen(
         }
     }
 
+    if (showSavedLocationsList) {
+        Dialog(onDismissRequest = { showSavedLocationsList = false }) {
+            Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
+                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("Saved Locations", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        IconButton(onClick = { showSavedLocationsList = false }) {
+                            Icon(Icons.Default.Close, contentDescription = "Close saved locations")
+                        }
+                    }
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (state.savedLocations.isEmpty()) item { Text("No saved locations yet.", modifier = Modifier.padding(vertical = 16.dp)) }
+                        items(state.savedLocations.size) { index ->
+                            val location = state.savedLocations[index]
+                            SavedLocationItem(location = location,
+                                onEdit = { showSavedLocationsList = false; editingLocation = location; showLocationDialog = true },
+                                onDelete = { showSavedLocationsList = false; locationPendingDeletion = location })
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Saved Location Delete Dialog
     if (locationPendingDeletion != null) {
         val loc = locationPendingDeletion!!
@@ -1162,9 +1153,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.110 (Build 111)" to "Saved Locations opens in a floating scrollable list.",
                 "Version 1.0.109 (Build 110)" to "Thinner mileage ring and simpler category cards.",
-                "Version 1.0.108 (Build 109)" to "Clean mileage ring with labeled category cards.",
-                "Version 1.0.107 (Build 108)" to "Removed redundant dashboard totals and heading."
+                "Version 1.0.108 (Build 109)" to "Clean mileage ring with labeled category cards."
             )
         }
 
