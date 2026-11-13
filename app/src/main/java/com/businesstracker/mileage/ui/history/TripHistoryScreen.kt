@@ -44,7 +44,6 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
@@ -109,7 +108,6 @@ fun TripHistoryScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    var tripPendingDeletion by remember { mutableStateOf<TripEntity?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(state.recentlyDeletedTrip) {
@@ -199,7 +197,6 @@ fun TripHistoryScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (tripPendingDeletion != null) Modifier.blur(8.dp) else Modifier)
                 .background(MaterialTheme.colorScheme.background)
         ) {
             HistoryControls(
@@ -245,8 +242,7 @@ fun TripHistoryScreen(
                                     trip = trip,
                                     smartNames = state.smartNamesMap[trip.id],
                                     showDate = false,
-                                    onClick = { viewModel.selectTripForDetails(trip) },
-                                    onDelete = { tripPendingDeletion = trip }
+                                    onClick = { viewModel.selectTripForDetails(trip) }
                                 )
                             }
                         }
@@ -256,8 +252,7 @@ fun TripHistoryScreen(
                                 trip = trip,
                                 smartNames = state.smartNamesMap[trip.id],
                                 showDate = true,
-                                onClick = { viewModel.selectTripForDetails(trip) },
-                                onDelete = { tripPendingDeletion = trip }
+                                onClick = { viewModel.selectTripForDetails(trip) }
                             )
                         }
                     }
@@ -273,79 +268,7 @@ fun TripHistoryScreen(
         )
     }
 
-    if (tripPendingDeletion != null) {
-        val targetTrip = tripPendingDeletion!!
-        Dialog(
-            onDismissRequest = { tripPendingDeletion = null },
-            properties = DialogProperties(
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true,
-                usePlatformDefaultWidth = false
-            )
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .clickable(
-                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                        indication = null
-                    ) { tripPendingDeletion = null },
-                contentAlignment = Alignment.Center
-            ) {
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth(0.85f)
-                        .clickable(
-                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                            indication = null
-                        ) {},
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.80f),
-                    tonalElevation = 6.dp,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(24.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Text(
-                            text = "Delete Trip",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Delete this ${formatMiles(targetTrip.totalDistanceMiles)} mi trip from your trip history?",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(onClick = { tripPendingDeletion = null }) {
-                                Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Button(
-                                onClick = {
-                                    val idToDelete = targetTrip.id
-                                    tripPendingDeletion = null
-                                    viewModel.deleteTrip(idToDelete)
-                                },
-                                shape = RoundedCornerShape(10.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
-                            ) {
-                                Text("Delete", color = Color.White, fontWeight = FontWeight.SemiBold)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
+
 }
 
 @Composable
@@ -748,15 +671,18 @@ private fun TripHistoryItem(
     trip: TripEntity,
     smartNames: com.businesstracker.mileage.domain.usecase.SmartTripNames? = null,
     showDate: Boolean,
-    onClick: () -> Unit,
-    onDelete: () -> Unit
+    onClick: () -> Unit
 ) {
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     val timeRange = remember(trip.startTime, trip.endTime) {
         "${timeFormatter.format(Date(trip.startTime))} – ${timeFormatter.format(Date(trip.endTime))}"
     }
     val isBusiness = trip.classification == "BUSINESS"
-    val badgeIcon = if (isBusiness) Icons.Default.BusinessCenter else Icons.Default.Person
+    val badgeIcon = when (trip.classification) {
+        "BUSINESS" -> Icons.Default.BusinessCenter
+        "PERSONAL" -> Icons.Default.Person
+        else -> Icons.Default.Info
+    }
     val badgeColor = if (isBusiness) SucculentPrimary else Color(0xFF2563EB)
     val start = smartNames?.startDisplayName ?: (trip.startAddress ?: "Recorded start location")
     val end = smartNames?.endDisplayName ?: (trip.endAddress ?: "Recorded destination")
@@ -850,11 +776,11 @@ private fun TripHistoryItem(
                             color = SucculentPrimary
                         )
                     }
-                    IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                    Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
                         Icon(
-                            Icons.Default.DeleteOutline,
-                            contentDescription = "Delete trip",
-                            tint = SpeedRed,
+                            badgeIcon,
+                            contentDescription = if (isBusiness) "Business trip" else if (trip.classification == "PERSONAL") "Personal trip" else "Unreviewed trip",
+                            tint = if (trip.classification == "UNREVIEWED") MaterialTheme.colorScheme.onSurfaceVariant else badgeColor,
                             modifier = Modifier.size(18.dp)
                         )
                     }
