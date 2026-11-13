@@ -165,6 +165,7 @@ fun SettingsScreen(
     // Saved Locations State
     var showLocationDialog by remember { mutableStateOf(false) }
     var showSavedLocationsList by remember { mutableStateOf(false) }
+    var showPurposeList by remember { mutableStateOf(false) }
     var editingLocation by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
     var locationPendingDeletion by remember { mutableStateOf<com.businesstracker.mileage.data.local.entity.SavedLocationEntity?>(null) }
     var locationActionError by remember { mutableStateOf<String?>(null) }
@@ -185,10 +186,10 @@ fun SettingsScreen(
         state = listState,
         modifier = modifier
             .fillMaxSize()
-            .then(if (showVersionHistoryDialog) Modifier.blur(8.dp) else Modifier)
+            .then(if (showVersionHistoryDialog || showPurposeList || showSavedLocationsList) Modifier.blur(8.dp) else Modifier)
             .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         item {
             Text(
@@ -363,7 +364,6 @@ fun SettingsScreen(
         item {
             var newPurposeText by remember { mutableStateOf("") }
             var showAddPurpose by remember { mutableStateOf(false) }
-            var showPurposeList by remember { mutableStateOf(false) }
             var purposeError by remember { mutableStateOf<String?>(null) }
             var editingPurpose by remember { mutableStateOf<String?>(null) }
             var editPurposeText by remember { mutableStateOf("") }
@@ -532,8 +532,8 @@ fun SettingsScreen(
 
             if (showPurposeList) {
                 Dialog(onDismissRequest = { showPurposeList = false }) {
-                    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
-                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)) {
+                        Column(Modifier.fillMaxWidth().padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Business purposes", modifier = Modifier.weight(1f),
                                     style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -542,7 +542,7 @@ fun SettingsScreen(
                                 }
                             }
                             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 if (state.customPurposes.isEmpty()) item {
                                     Text("No business purposes yet.", modifier = Modifier.padding(vertical = 16.dp))
                                 }
@@ -931,15 +931,15 @@ fun SettingsScreen(
 
     if (showSavedLocationsList) {
         Dialog(onDismissRequest = { showSavedLocationsList = false }) {
-            Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface) {
-                Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)) {
+                Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("Saved Locations", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         IconButton(onClick = { showSavedLocationsList = false }) {
                             Icon(Icons.Default.Close, contentDescription = "Close saved locations")
                         }
                     }
-                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (state.savedLocations.isEmpty()) item { Text("No saved locations yet.", modifier = Modifier.padding(vertical = 16.dp)) }
                         items(state.savedLocations.size) { index ->
                             val location = state.savedLocations[index]
@@ -1064,9 +1064,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.119 (Build 120)" to "Tighter Settings rows and matching translucent lists.",
                 "Version 1.0.118 (Build 119)" to "Business purposes now open in a scrollable list.",
-                "Version 1.0.117 (Build 118)" to "Compact Settings sections, simpler labels, and inline actions.",
-                "Version 1.0.116 (Build 117)" to "Mileage percentages now show whole numbers."
+                "Version 1.0.117 (Build 118)" to "Compact Settings sections, simpler labels, and inline actions."
             )
         }
 
@@ -1195,8 +1195,8 @@ private fun SettingsSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
