@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 113
-        versionName = "1.0.112"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Dashboard: compact finance-style mileage distribution and deduction card.\"")
+        versionCode = 116
+        versionName = "1.0.115"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings: removed the Backup & Restore info button.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

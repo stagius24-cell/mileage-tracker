@@ -21,7 +21,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -50,14 +49,13 @@ internal fun MileageBreakdownCard(summary: DashboardSummary, onDeductionClick: (
     val animatedFraction by animateFloatAsState(fraction, tween(350), label = "mileage_distribution")
     val businessPercent = if (total > 0) business / total * 100 else 0.0
     val personalPercent = if (total > 0) personal / total * 100 else 0.0
-    val fontScale = LocalDensity.current.fontScale
     Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = colors.surface)) {
-        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Total classified mileage", modifier = Modifier.weight(1f), fontSize = 13.sp,
                     fontWeight = FontWeight.Medium, color = colors.muted)
                 Surface(shape = RoundedCornerShape(12.dp), color = colors.divider) {
-                    Text("${summary.totalTripsCount} trips", modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    Text("${summary.totalTripsCount} trips", modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         fontSize = 12.sp, color = colors.muted)
                 }
             }
@@ -74,26 +72,22 @@ internal fun MileageBreakdownCard(summary: DashboardSummary, onDeductionClick: (
                     drawRect(colors.personal, topLeft = Offset(boundary, 0f), size = Size(size.width - boundary, size.height))
                 }
             }
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val stacked = maxWidth < 280.dp || fontScale > 1.3f
-                if (stacked) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MileageCategory("Business", business, businessPercent, Icons.Outlined.BusinessCenter, colors.business, colors.mint, colors)
-                    MileageCategory("Personal", personal, personalPercent, Icons.Outlined.Home, colors.personal, colors.blue, colors)
-                } else Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Box(Modifier.weight(1f)) { MileageCategory("Business", business, businessPercent, Icons.Outlined.BusinessCenter, colors.business, colors.mint, colors) }
-                    Box(Modifier.weight(1f)) { MileageCategory("Personal", personal, personalPercent, Icons.Outlined.Home, colors.personal, colors.blue, colors) }
-                }
+            Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MileageCategory("Business", business, businessPercent, Icons.Outlined.BusinessCenter, colors.business, colors.mint, colors,
+                    Modifier.weight(1f).fillMaxHeight())
+                MileageCategory("Personal", personal, personalPercent, Icons.Outlined.Home, colors.personal, colors.blue, colors,
+                    Modifier.weight(1f).fillMaxHeight())
             }
             HorizontalDivider(color = colors.divider)
             Row(
-                Modifier.fillMaxWidth().heightIn(min = 64.dp).clip(RoundedCornerShape(12.dp))
+                Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(12.dp))
                     .then(if (onDeductionClick != null) Modifier.clickable(onClickLabel = "Open deduction reports", onClick = onDeductionClick) else Modifier)
-                    .padding(vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Surface(shape = RoundedCornerShape(12.dp), color = colors.mint) {
                     Icon(Icons.Outlined.AccountBalanceWallet, contentDescription = null, tint = colors.business,
-                        modifier = Modifier.padding(10.dp).size(22.dp))
+                        modifier = Modifier.padding(8.dp).size(20.dp))
                 }
                 Column(Modifier.weight(1f)) {
                     Text("Estimated tax deduction", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = colors.muted)
@@ -109,12 +103,12 @@ internal fun MileageBreakdownCard(summary: DashboardSummary, onDeductionClick: (
 
 @Composable
 private fun MileageCategory(title: String, miles: Double, percent: Double, icon: ImageVector,
-    accent: Color, background: Color, colors: MileageCardColors) {
-    Surface(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), color = background) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    accent: Color, background: Color, colors: MileageCardColors, modifier: Modifier = Modifier) {
+    Surface(modifier, shape = RoundedCornerShape(16.dp), color = background) {
+        Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
-                Text(title, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = accent)
+                Text(title, modifier = Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.Medium, color = accent)
             }
             Text("${String.format(Locale.US, "%,.1f", miles)} mi", fontSize = 20.sp, fontWeight = FontWeight.Bold,
                 color = colors.text, style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"))

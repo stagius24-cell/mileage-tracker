@@ -60,7 +60,6 @@ import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SyncAlt
@@ -677,20 +676,7 @@ fun SettingsScreen(
                 title = "Backup & Restore",
                 subtitle = if (state.isSheetsConnected) "Google Sheets · Connected" else "Google Sheets · Not connected",
                 subtitlePositive = state.isSheetsConnected,
-                icon = Icons.Default.CloudSync,
-                trailing = {
-                    IconButton(
-                        onClick = { showVersionHistoryDialog = true },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = "Backup info & version history",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-                }
+                icon = Icons.Default.CloudSync
             ) {
                 // 1. Combined Backup Status
                 CombinedBackupStatusBox(
@@ -1153,9 +1139,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
-                "Version 1.0.112 (Build 113)" to "Compact finance-style mileage and deduction dashboard.",
-                "Version 1.0.111 (Build 112)" to "Reduced navigation bar and selected tab corner radii.",
-                "Version 1.0.110 (Build 111)" to "Saved Locations opens in a floating scrollable list."
+                "Version 1.0.115 (Build 116)" to "Removed the Backup & Restore info button.",
+                "Version 1.0.114 (Build 115)" to "Removed the Custom dashboard time filter button.",
+                "Version 1.0.113 (Build 114)" to "Category cards stay side by side with more compact spacing."
             )
         }
 
