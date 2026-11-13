@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.businesstracker.mileage.domain.model.DashboardSummary
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private data class MileageCardColors(
     val surface: Color, val text: Color, val muted: Color, val business: Color,
@@ -47,8 +48,8 @@ internal fun MileageBreakdownCard(summary: DashboardSummary, onDeductionClick: (
     val total = business + personal
     val fraction = if (total > 0) (business / total).toFloat().coerceIn(0f, 1f) else 0f
     val animatedFraction by animateFloatAsState(fraction, tween(350), label = "mileage_distribution")
-    val businessPercent = if (total > 0) business / total * 100 else 0.0
-    val personalPercent = if (total > 0) personal / total * 100 else 0.0
+    val businessPercent = if (total > 0) (business / total * 100).roundToInt() else 0
+    val personalPercent = if (total > 0) 100 - businessPercent else 0
     Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = colors.surface)) {
         Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -63,7 +64,7 @@ internal fun MileageBreakdownCard(summary: DashboardSummary, onDeductionClick: (
                 fontWeight = FontWeight.Bold, color = colors.text,
                 style = MaterialTheme.typography.headlineLarge.copy(fontFeatureSettings = "tnum"))
             Canvas(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).semantics {
-                contentDescription = "Business ${String.format(Locale.US, "%.1f", businessPercent)} percent, personal ${String.format(Locale.US, "%.1f", personalPercent)} percent"
+                contentDescription = "Business $businessPercent percent, personal $personalPercent percent"
             }) {
                 if (total <= 0) drawRect(colors.divider)
                 else {
@@ -102,7 +103,7 @@ internal fun MileageBreakdownCard(summary: DashboardSummary, onDeductionClick: (
 }
 
 @Composable
-private fun MileageCategory(title: String, miles: Double, percent: Double, icon: ImageVector,
+private fun MileageCategory(title: String, miles: Double, percent: Int, icon: ImageVector,
     accent: Color, background: Color, colors: MileageCardColors, modifier: Modifier = Modifier) {
     Surface(modifier, shape = RoundedCornerShape(16.dp), color = background) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -112,7 +113,7 @@ private fun MileageCategory(title: String, miles: Double, percent: Double, icon:
             }
             Text("${String.format(Locale.US, "%,.1f", miles)} mi", fontSize = 20.sp, fontWeight = FontWeight.Bold,
                 color = colors.text, style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum"))
-            Text("${String.format(Locale.US, "%.1f", percent)}% of total", fontSize = 11.sp, color = colors.muted)
+            Text("$percent% of total", fontSize = 11.sp, color = colors.muted)
         }
     }
 }

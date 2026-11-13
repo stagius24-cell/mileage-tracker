@@ -1139,9 +1139,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.116 (Build 117)" to "Mileage percentages now show whole numbers.",
                 "Version 1.0.115 (Build 116)" to "Removed the Backup & Restore info button.",
-                "Version 1.0.114 (Build 115)" to "Removed the Custom dashboard time filter button.",
-                "Version 1.0.113 (Build 114)" to "Category cards stay side by side with more compact spacing."
+                "Version 1.0.114 (Build 115)" to "Removed the Custom dashboard time filter button."
             )
         }
 
