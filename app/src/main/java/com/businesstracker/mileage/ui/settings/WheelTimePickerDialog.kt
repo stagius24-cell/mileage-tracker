@@ -1,10 +1,6 @@
 package com.businesstracker.mileage.ui.settings
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,7 +10,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -36,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -89,58 +86,45 @@ fun WheelTimePickerDialog(
             usePlatformDefaultWidth = false
         )
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.5f))
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null
-                ) { onDismiss() },
-            contentAlignment = Alignment.Center
-        ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth(0.72f) // ~20% smaller width compared to typical 90% dialogs
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {},
-                shape = RoundedCornerShape(20.dp),
+                    .fillMaxWidth(0.88f)
+                    .widthIn(max = 400.dp),
+                shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 6.dp,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                tonalElevation = 0.dp
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     // Dialog Title
                     Text(
                         text = "Select Time",
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 20.sp
                         ),
                         color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(12.dp))
 
-                    // Wheels container: 3 items * 36.dp = 108.dp height
+                    // Three 48dp rows keep the selected value centered and touchable.
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(108.dp),
+                            .height(144.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         // Center highlighted selection band
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(36.dp),
-                            shape = RoundedCornerShape(8.dp),
-                            color = SucculentPrimary.copy(alpha = 0.12f)
+                                .height(48.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            color = SucculentPrimary.copy(alpha = 0.10f)
                         ) {}
 
                         // 3 scrolling wheel columns: Hour : Minute  AM/PM
@@ -153,7 +137,7 @@ fun WheelTimePickerDialog(
                             WheelColumn(
                                 items = hoursList,
                                 initialIndex = initialHourIndex,
-                                itemHeight = 36.dp,
+                                itemHeight = 48.dp,
                                 modifier = Modifier.weight(1f),
                                 onItemSelected = { selectedHourIndex = it }
                             )
@@ -173,7 +157,7 @@ fun WheelTimePickerDialog(
                             WheelColumn(
                                 items = minutesList,
                                 initialIndex = initialMinuteIndex,
-                                itemHeight = 36.dp,
+                                itemHeight = 48.dp,
                                 modifier = Modifier.weight(1f),
                                 onItemSelected = { selectedMinuteIndex = it }
                             )
@@ -184,14 +168,14 @@ fun WheelTimePickerDialog(
                             WheelColumn(
                                 items = amPmList,
                                 initialIndex = initialAmPmIndex,
-                                itemHeight = 36.dp,
+                                itemHeight = 48.dp,
                                 modifier = Modifier.weight(1f),
                                 onItemSelected = { selectedAmPmIndex = it }
                             )
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(16.dp))
 
                     // Buttons row with compacted spacing
                     Row(
@@ -201,8 +185,8 @@ fun WheelTimePickerDialog(
                     ) {
                         TextButton(
                             onClick = onDismiss,
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                            modifier = Modifier.height(36.dp)
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            modifier = Modifier.heightIn(min = 48.dp)
                         ) {
                             Text(
                                 text = "Cancel",
@@ -227,13 +211,13 @@ fun WheelTimePickerDialog(
                                 onTimeConfirm(formatted24)
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                            modifier = Modifier.height(36.dp)
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 20.dp),
+                            modifier = Modifier.heightIn(min = 48.dp)
                         ) {
                             Text(
                                 text = "Confirm",
-                                color = Color.White,
+                                color = MaterialTheme.colorScheme.onPrimary,
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
                             )
                         }

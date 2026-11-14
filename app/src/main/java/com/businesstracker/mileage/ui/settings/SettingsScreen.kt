@@ -1068,9 +1068,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.127 (Build 128)" to "Refined the work schedule time picker layout and controls.",
                 "Version 1.0.126 (Build 127)" to "Corrected sheet insets, slider thumb, and Settings row alignment.",
                 "Version 1.0.125 (Build 126)" to "Refined Settings cards and navigation bar.",
-                "Version 1.0.124 (Build 125)" to "Purpose and saved location forms now use bottom sheets."
             )
         }
 
