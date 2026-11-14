@@ -1061,9 +1061,12 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.144 (Build 145)" to "New modern app icon, route timeline connector lines, and walking auto-stop tracking.",
+                "Version 1.0.143 (Build 144)" to "Added vertical route timeline connector line in Trip Details.",
+                "Version 1.0.142 (Build 143)" to "Aligned destination pin with map marker and added walking detection for auto-stop tracking.",
+                "Version 1.0.141 (Build 142)" to "Full GPS coordinates and route polyline backup/restore to Google Sheets.",
+                "Version 1.0.140 (Build 141)" to "Primary Google Sheets sync engine and Sheet1 trip restore.",
                 "Version 1.0.138 (Build 139)" to "Compact Backup & Restore settings with account details on demand.",
-                "Version 1.0.137 (Build 138)" to "Added monthly mileage chart and route destination pin.",
-                "Version 1.0.136 (Build 137)" to "Refined Trip History and navigation.",
             )
         }
 

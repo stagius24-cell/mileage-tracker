@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 144
-        versionName = "1.0.143"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Add vertical timeline connector line between start beacon and destination pin in Trip Details screen.\"")
+        versionCode = 145
+        versionName = "1.0.144"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Updated app icon artwork to modern navigation pin theme.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
