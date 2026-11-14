@@ -120,6 +120,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.contentDescription
@@ -191,7 +192,7 @@ fun SettingsScreen(
         modifier = modifier
             .fillMaxSize()
             .then(if (showVersionHistoryDialog || showPurposeList || showSavedLocationsList) Modifier.blur(8.dp) else Modifier)
-            .background(MaterialTheme.colorScheme.background),
+            .background(if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.background else Color(0xFFF3F6FA)),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
@@ -598,14 +599,33 @@ fun SettingsScreen(
         }
 
         item {
-            SettingsSection(
-                title = "Saved Locations",
-                icon = Icons.Default.LocationOn,
-                trailing = {
-                    IconButton(onClick = {
-                        editingLocation = null
-                        showLocationDialog = true
-                    }) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 76.dp)
+                        .padding(horizontal = 14.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(shape = RoundedCornerShape(12.dp),
+                        color = SucculentPrimary.copy(alpha = 0.10f)) {
+                        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.LocationOn, contentDescription = null,
+                                tint = SucculentPrimary, modifier = Modifier.size(22.dp))
+                        }
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Saved Locations", style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis)
+                        Text("${state.savedLocations.size} saved places",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = { editingLocation = null; showLocationDialog = true }) {
                         Icon(Icons.Default.Add, contentDescription = "Add saved location", tint = SucculentPrimary)
                     }
                     IconButton(onClick = { showSavedLocationsList = true }) {
@@ -613,7 +633,7 @@ fun SettingsScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
-            )
+            }
         }
 
         item {
@@ -631,7 +651,8 @@ fun SettingsScreen(
                 title = "Backup & Restore",
                 subtitle = if (state.isSheetsConnected) "Google Sheets · Connected" else "Google Sheets · Not connected",
                 subtitlePositive = state.isSheetsConnected,
-                icon = Icons.Default.CloudSync
+                icon = Icons.Default.CloudSync,
+                shape = RoundedCornerShape(22.dp)
             ) {
                 // 1. Combined Backup Status
                 CombinedBackupStatusBox(
@@ -717,7 +738,7 @@ fun SettingsScreen(
                             disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f),
                             disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                         ),
-                        border = BorderStroke(1.dp, SucculentPrimary.copy(alpha = 0.35f)),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                     ) {
                         if (isRestoring) {
@@ -745,7 +766,7 @@ fun SettingsScreen(
                                     Icon(
                                         imageVector = Icons.Default.CloudDownload,
                                         contentDescription = null,
-                                        tint = SucculentPrimary,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Spacer(Modifier.width(6.dp))
@@ -780,13 +801,14 @@ fun SettingsScreen(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = "Google Sheets options",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
+                        Column(Modifier.weight(1f)) {
+                            Text("Google Sheets options", style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface)
+                            Text("Account, spreadsheet and sync details",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                         Icon(
                             imageVector = if (isAdvancedExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                             contentDescription = if (isAdvancedExpanded) "Collapse" else "Expand",
@@ -1083,9 +1105,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.125 (Build 126)" to "Refined Settings cards and navigation bar.",
                 "Version 1.0.124 (Build 125)" to "Purpose and saved location forms now use bottom sheets.",
-                "Version 1.0.123 (Build 124)" to "Business purpose input is brighter and easier to read.",
-                "Version 1.0.122 (Build 123)" to "Floating dialogs use 90% opacity and 80% outside dimming."
+                "Version 1.0.123 (Build 124)" to "Business purpose input is brighter and easier to read."
             )
         }
 
@@ -1204,11 +1226,12 @@ private fun SettingsSection(
     subtitle: String? = null,
     subtitlePositive: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
+    shape: RoundedCornerShape = RoundedCornerShape(16.dp),
     content: (@Composable ColumnScope.() -> Unit)? = null
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = shape,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
@@ -1564,7 +1587,9 @@ private fun AccountRow(
                 Text(
                     text = it,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
@@ -1704,14 +1729,14 @@ private fun CombinedBackupStatusBox(
 
     val boxBg = when {
         hasError -> SpeedRed.copy(alpha = 0.08f)
-        isAllBackedUp -> SucculentPrimary.copy(alpha = 0.08f)
-        else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+        isAllBackedUp -> SucculentPrimary.copy(alpha = 0.07f)
+        else -> SucculentPrimary.copy(alpha = 0.05f)
     }
 
     val boxBorder = when {
         hasError -> BorderStroke(1.dp, SpeedRed.copy(alpha = 0.3f))
-        isAllBackedUp -> BorderStroke(1.dp, SucculentPrimary.copy(alpha = 0.25f))
-        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f))
+        isAllBackedUp -> BorderStroke(1.dp, SucculentPrimary.copy(alpha = 0.12f))
+        else -> BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.10f))
     }
 
     Surface(

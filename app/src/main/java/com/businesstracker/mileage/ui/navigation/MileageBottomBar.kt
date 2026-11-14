@@ -57,19 +57,19 @@ fun MileageBottomBar(
         modifier = modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp
+            tonalElevation = 2.dp,
+            shadowElevation = 3.dp
         ) {
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
+                    .height(60.dp)
             ) {
                 val itemCount = Screen.bottomNavItems.size
                 val tabWidth = maxWidth / itemCount
@@ -90,9 +90,9 @@ fun MileageBottomBar(
                         .offset(x = indicatorOffset)
                         .width(tabWidth)
                         .fillMaxHeight()
-                        .padding(horizontal = 6.dp, vertical = 6.dp)
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
                         .background(
-                            color = SucculentPrimary.copy(alpha = 0.16f),
+                            color = SucculentPrimary.copy(alpha = 0.11f),
                             shape = RoundedCornerShape(14.dp)
                         )
                 )
