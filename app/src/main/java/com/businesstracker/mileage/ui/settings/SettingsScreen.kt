@@ -425,6 +425,7 @@ fun SettingsScreen(
                 subtitle = if (state.isSheetsConnected) "Google Sheets connected" else "Google Sheets · Not connected",
                 subtitlePositive = state.isSheetsConnected,
                 icon = Icons.Default.CloudSync,
+                trailing = { if (state.isAllDataBackedUp && state.unifiedBackupError.isNullOrBlank() && state.sheetsLastError.isNullOrBlank() && state.savedLocationsLastBackupError.isNullOrBlank()) Icon(Icons.Outlined.CheckCircle, contentDescription = "All data backed up", tint = SucculentPrimary, modifier = Modifier.size(20.dp)) },
                 shape = RoundedCornerShape(22.dp)
             ) {
                 // 1. Combined Backup Status
@@ -1087,7 +1088,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
-                "Version 1.0.130 (Build 131)" to "Grouped Settings into compact floating cards.",
+                "Version 1.0.131 (Build 132)" to "Grouped Settings into compact floating cards.",
                 "Version 1.0.128 (Build 129)" to "Added time picker swipe and outside-tap dismissal.",
                 "Version 1.0.127 (Build 128)" to "Refined the work schedule time picker layout and controls.",
             )
@@ -1812,93 +1813,15 @@ private fun CombinedBackupStatusBox(
                 }
             }
 
-            // Row 2: Visual Metrics Row (Car icon + "Trips up to date" | Divider | Location icon + "Locations: X")
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Trips Metric
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DirectionsCar,
-                        contentDescription = null,
-                        tint = SucculentPrimary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(
-                        text = if (state.pendingTripsCount > 0) {
-                            "Trips: ${state.pendingTripsCount} pending"
-                        } else {
-                            "Trips up to date"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-
-                // Vertical Divider between metrics
-                Box(
-                    modifier = Modifier
-                        .height(14.dp)
-                        .width(1.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                )
-
-                Spacer(Modifier.width(12.dp))
-
-                // Locations Metric
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.LocationOn,
-                        contentDescription = null,
-                        tint = SucculentPrimary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    val locCount = state.savedLocations.size
-                    val locText = if (state.savedLocationsPendingBackupCount > 0) {
-                        "Locations: ${state.savedLocationsPendingBackupCount} pending"
-                    } else {
-                        "$locCount locations"
-                    }
-                    Text(
-                        text = locText,
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(if (state.pendingTripsCount > 0) "Trips: ${state.pendingTripsCount} pending" else "Trips up to date",
+                    modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (state.savedLocationsPendingBackupCount > 0) "${state.savedLocationsPendingBackupCount} locations pending" else "${state.savedLocations.size} locations",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-
-            // Row 3: Clock icon + "Last backup: Nov 11, 5:46 PM"
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Schedule,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(15.dp)
-                )
-                Text(
-                    text = "Last backup: $lastBackupFormatted",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text("Last backup: $lastBackupFormatted", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             // Error message banner if present
             val errorMsg = state.unifiedBackupError ?: state.sheetsLastError ?: state.savedLocationsLastBackupError
@@ -1947,8 +1870,10 @@ private fun SettingsManagementRow(
                 }
             }
         }
-        IconButton(onClick = onAdd, modifier = Modifier.size(48.dp).background(SucculentPrimary.copy(alpha = 0.10f), RoundedCornerShape(14.dp))) {
-            Icon(Icons.Default.Add, contentDescription = "Add $title", tint = SucculentPrimary)
+        IconButton(onClick = onAdd, modifier = Modifier.size(48.dp)) {
+            Box(Modifier.size(32.dp).background(SucculentPrimary.copy(alpha = 0.10f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Add, contentDescription = "Add $title", tint = SucculentPrimary, modifier = Modifier.size(20.dp))
+            }
         }
         IconButton(onClick = onOpen, modifier = Modifier.size(48.dp)) {
             Icon(Icons.Default.ChevronRight, contentDescription = "Show $title",
