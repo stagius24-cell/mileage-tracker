@@ -76,7 +76,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -767,7 +769,7 @@ private fun RouteDetailsTab(
             primaryName = smartEndName,
             address = endAddress,
             time = endTime,
-            color = Color(0xFFCC5B77),
+            color = Color(0xFFD7737D),
             isStart = false,
             locationActionLabel = endLocationActionLabel,
             onSaveLocation = onSaveEndLocation
@@ -785,21 +787,50 @@ private fun DestinationRow(
     locationActionLabel: String,
     onSaveLocation: (() -> Unit)? = null
 ) {
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 3.dp, bottom = 3.dp)
+            .heightIn(min = 64.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .width(24.dp)
+                .heightIn(min = 64.dp)
+                .drawBehind {
+                    val cx = size.width / 2f
+                    if (isStart) {
+                        drawLine(
+                            color = Color(0xFFD9E3EB),
+                            start = Offset(cx, size.height / 2f),
+                            end = Offset(cx, size.height),
+                            strokeWidth = 2.dp.toPx()
+                        )
+                    } else {
+                        drawLine(
+                            color = Color(0xFFD9E3EB),
+                            start = Offset(cx, 0f),
+                            end = Offset(cx, size.height / 2f),
+                            strokeWidth = 2.dp.toPx()
+                        )
+                    }
+                },
+            contentAlignment = Alignment.Center
         ) {
             if (isStart) {
-                com.businesstracker.mileage.ui.components.StartBeaconIcon(tint = color)
+                com.businesstracker.mileage.ui.components.StartBeaconIcon(
+                    size = 20.dp,
+                    tint = color
+                )
             } else {
-                com.businesstracker.mileage.ui.components.EndFlagIcon(tint = color)
+                com.businesstracker.mileage.ui.components.EndPinIcon(
+                    size = 20.dp,
+                    tint = color,
+                    fillColor = MaterialTheme.colorScheme.surface
+                )
             }
-            Spacer(modifier = Modifier.width(10.dp))
+        }
+        Spacer(modifier = Modifier.width(10.dp))
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.Center
@@ -865,7 +896,6 @@ private fun DestinationRow(
                 }
             }
         }
-    }
 }
 
 @Composable

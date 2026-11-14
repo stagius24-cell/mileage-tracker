@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 143
-        versionName = "1.0.142"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Align review card destination pin with map, add vertical route timeline connector, and add walking detection to auto-stop tracking.\"")
+        versionCode = 144
+        versionName = "1.0.143"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Add vertical timeline connector line between start beacon and destination pin in Trip Details screen.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
