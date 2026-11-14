@@ -35,6 +35,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -162,6 +163,22 @@ class SettingsViewModelSavedLocationsBackupTest {
             context = context,
             customPurposesSheetsService = fakePurposesService
         )
+    }
+
+    @Test
+    fun saveVehicleName_validatesAndPersistsOnlySuccessfulEdits() = runTest {
+        preferencesManager.setDefaultVehicle("Old car")
+        val service = SavedLocationsSheetsService(
+            preferencesManager, repository, database.savedLocationSyncQueueDao(),
+            secureStorageManager, null, Gson(), testDispatcher
+        )
+        val viewModel = createViewModel(service)
+
+        assertTrue(viewModel.saveVehicleName("   ").isFailure)
+        assertTrue(viewModel.saveVehicleName("x".repeat(61)).isFailure)
+        assertEquals("Old car", preferencesManager.defaultVehicle.first())
+        assertTrue(viewModel.saveVehicleName("  New car  ").isSuccess)
+        assertEquals("New car", preferencesManager.defaultVehicle.first())
     }
 
     @Test

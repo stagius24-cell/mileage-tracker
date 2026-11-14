@@ -552,10 +552,12 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun setDefaultVehicle(vehicle: String) {
-        viewModelScope.launch {
-            preferencesManager.setDefaultVehicle(vehicle)
+    suspend fun saveVehicleName(vehicle: String): Result<Unit> {
+        val trimmed = vehicle.trim()
+        if (trimmed.isEmpty() || trimmed.length > 60) {
+            return Result.failure(IllegalArgumentException("Vehicle name must be 1–60 characters"))
         }
+        return runCatching { preferencesManager.setDefaultVehicle(trimmed) }
     }
 
     fun setBluetoothAutoStopEnabled(enabled: Boolean) {

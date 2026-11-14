@@ -32,6 +32,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,6 +45,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.sp
@@ -180,6 +183,10 @@ fun SettingsScreen(
 
     var showVersionHistoryDialog by rememberSaveable { mutableStateOf(false) }
     var showDisconnectConfirmation by rememberSaveable { mutableStateOf(false) }
+    var showEditVehicle by rememberSaveable { mutableStateOf(false) }
+    var vehicleNameDraft by rememberSaveable { mutableStateOf("") }
+    var vehicleNameError by rememberSaveable { mutableStateOf<String?>(null) }
+    var isSavingVehicle by remember { mutableStateOf(false) }
     var showSpreadsheetIdEditor by rememberSaveable { mutableStateOf(false) }
     var spreadsheetIdInput by rememberSaveable { mutableStateOf("") }
     var spreadsheetIdError by rememberSaveable { mutableStateOf(false) }
@@ -230,22 +237,57 @@ fun SettingsScreen(
         }
 
         item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(shape = RoundedCornerShape(15.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
+                        Box(Modifier.size(50.dp), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Default.DirectionsCar, contentDescription = null,
+                                tint = SucculentPrimary, modifier = Modifier.size(24.dp))
+                        }
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Vehicle", style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.height(3.dp))
+                        Text(state.defaultVehicle, style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Surface(shape = RoundedCornerShape(14.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
+                        IconButton(
+                            onClick = {
+                                vehicleNameDraft = state.defaultVehicle
+                                vehicleNameError = null
+                                showEditVehicle = true
+                            },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit vehicle name",
+                                tint = SucculentPrimary, modifier = Modifier.size(21.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
             var bluetoothMenuExpanded by remember { mutableStateOf(false) }
-
-            SettingsSection(title = "Vehicle", icon = Icons.Default.DirectionsCar) {
-                OutlinedTextField(
-                    value = state.defaultVehicle,
-                    onValueChange = viewModel::setDefaultVehicle,
-                    label = { Text("Vehicle name") },
-                    placeholder = { Text("Tesla Model Y") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp)
-                )
-
-                SectionDivider()
-                SettingsSwitchRow(
-                    title = "Bluetooth auto-stop",
+            SettingsSection(
+                title = "Bluetooth auto-stop",
+                icon = Icons.Default.DirectionsCar,
+                trailing = {
+                    SettingsToggle(
                     checked = state.bluetoothAutoStopEnabled,
                     onCheckedChange = { enabled ->
                         if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
@@ -259,8 +301,11 @@ fun SettingsScreen(
                             viewModel.setBluetoothAutoStopEnabled(enabled)
                             if (enabled) viewModel.refreshPairedBluetoothDevices()
                         }
-                    }
-                )
+                    },
+                    label = "Bluetooth auto-stop"
+                    )
+                }
+            ) {
 
                 if (state.bluetoothAutoStopEnabled) {
                     Box(modifier = Modifier.fillMaxWidth()) {
@@ -602,6 +647,84 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        }
+    }
+
+    if (showEditVehicle) {
+        val vehicleFocusRequester = remember { FocusRequester() }
+        val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+        val trimmedName = vehicleNameDraft.trim()
+        val isValidName = trimmedName.isNotEmpty() && trimmedName.length <= 60
+        AppFloatingBottomSheet(
+            onDismissRequest = { if (!isSavingVehicle) showEditVehicle = false },
+            title = "Edit Vehicle Name",
+            onClose = { if (!isSavingVehicle) showEditVehicle = false },
+            isDismissible = !isSavingVehicle
+        ) {
+            LaunchedEffect(Unit) {
+                vehicleFocusRequester.requestFocus()
+                keyboardController?.show()
+            }
+            Column(
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                OutlinedTextField(
+                    value = vehicleNameDraft,
+                    onValueChange = {
+                        vehicleNameDraft = it
+                        vehicleNameError = when {
+                            it.trim().isEmpty() -> "Enter a vehicle name"
+                            it.trim().length > 60 -> "Use 60 characters or fewer"
+                            else -> null
+                        }
+                    },
+                    label = { Text("Vehicle name") },
+                    singleLine = true,
+                    isError = vehicleNameError != null,
+                    supportingText = vehicleNameError?.let { error -> { Text(error) } },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                        .focusRequester(vehicleFocusRequester),
+                    shape = RoundedCornerShape(13.dp),
+                    keyboardOptions = KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Words,
+                        imeAction = ImeAction.Done
+                    )
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { showEditVehicle = false },
+                        enabled = !isSavingVehicle,
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(13.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    ) { Text("Cancel") }
+                    Button(
+                        onClick = {
+                            isSavingVehicle = true
+                            coroutineScope.launch {
+                                val result = viewModel.saveVehicleName(trimmedName)
+                                isSavingVehicle = false
+                                if (result.isSuccess) {
+                                    keyboardController?.hide()
+                                    showEditVehicle = false
+                                } else {
+                                    vehicleNameError = result.exceptionOrNull()?.localizedMessage
+                                        ?: "Could not save vehicle name. Try again."
+                                }
+                            }
+                        },
+                        enabled = isValidName && trimmedName != state.defaultVehicle && !isSavingVehicle,
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(13.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                    ) { Text(if (isSavingVehicle) "Saving" else "Save") }
                 }
             }
         }
