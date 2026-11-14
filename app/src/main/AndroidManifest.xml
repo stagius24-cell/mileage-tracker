@@ -85,6 +85,7 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="com.businesstracker.mileage.ACTION_ACTIVITY_TRANSITION" />
+                <action android:name="com.businesstracker.mileage.ACTION_TRIGGER_VEHICLE_ENTER" />
             </intent-filter>
         </receiver>
 

@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
@@ -76,6 +77,12 @@ open class VehicleBluetoothManager @Inject constructor(
         if (action == BluetoothDevice.ACTION_ACL_CONNECTED) {
             if (isCarDevice(name, address)) {
                 setConnected(true)
+                // When confirmed connected to car Bluetooth, notify AutoDriveReceiver to check
+                // and initiate candidate drive tracking if auto-tracking is enabled
+                val triggerIntent = Intent(context, AutoDriveReceiver::class.java).apply {
+                    this.action = AutoDriveReceiver.ACTION_TRIGGER_VEHICLE_ENTER
+                }
+                context.sendBroadcast(triggerIntent)
             }
         } else if (action == BluetoothDevice.ACTION_ACL_DISCONNECTED) {
             if (isCarDevice(name, address)) {

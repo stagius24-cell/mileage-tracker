@@ -1099,6 +1099,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.151 (Build 152)" to "Restored automatic drive detection with walking transition protection and Tesla Model Y Bluetooth motion trigger.",
                 "Version 1.0.150 (Build 151)" to "Refined vertical route connector lines with thinner 1dp stroke and lighter color.",
                 "Version 1.0.149 (Build 150)" to "Consistent Google Sheets floating modal with drag handle pull-to-close, app theme surface color, and active custom purpose sync.",
                 "Version 1.0.148 (Build 149)" to "Clean Backup & Restore card with inline sync timestamp and removed duplicate status line.",

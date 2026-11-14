@@ -33,6 +33,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
     companion object {
         const val ACTION_ACTIVITY_TRANSITION = "com.businesstracker.mileage.ACTION_ACTIVITY_TRANSITION"
+        const val ACTION_TRIGGER_VEHICLE_ENTER = "com.businesstracker.mileage.ACTION_TRIGGER_VEHICLE_ENTER"
         const val TRANSITION_REQUEST_CODE = 3001
         const val START_TRIGGER_DISPLACEMENT_METERS = 200.0f
     }
@@ -45,8 +46,21 @@ class AutoDriveReceiver : BroadcastReceiver() {
     private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onReceive(context: Context, intent: Intent?) {
-        if (intent == null || !ActivityTransitionResult.hasResult(intent)) return
+        if (intent == null) return
 
+        if (intent.action == ACTION_TRIGGER_VEHICLE_ENTER) {
+            val pendingResult = goAsync()
+            receiverScope.launch(ioDispatcher) {
+                try {
+                    handleVehicleEnter(context)
+                } finally {
+                    pendingResult.finish()
+                }
+            }
+            return
+        }
+
+        if (!ActivityTransitionResult.hasResult(intent)) return
         val result = ActivityTransitionResult.extractResult(intent) ?: return
         val pendingResult = goAsync()
 
@@ -68,7 +82,13 @@ class AutoDriveReceiver : BroadcastReceiver() {
                         DetectedActivity.WALKING,
                         DetectedActivity.ON_FOOT -> {
                             if (event.transitionType == ActivityTransition.ACTIVITY_TRANSITION_ENTER) {
-                                handleVehicleExit(context)
+                                // Only trigger vehicle exit if service is actively tracking a trip,
+                                // preventing walking from killing candidate drive start before vehicle motion confirms
+                                val isTracking = LocationTrackingService.serviceState.value.isTracking
+                                val hasActiveTrip = preferencesManager.activeTripId.first() != null
+                                if (isTracking && hasActiveTrip) {
+                                    handleVehicleExit(context)
+                                }
                             }
                         }
                         DetectedActivity.STILL -> {
