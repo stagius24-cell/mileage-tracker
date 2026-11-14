@@ -1061,6 +1061,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.145 (Build 146)" to "Full Google Sheets backup & restore for Business Custom Purposes, plus enhanced vertical route timeline connector lines.",
                 "Version 1.0.144 (Build 145)" to "New modern app icon, route timeline connector lines, and walking auto-stop tracking.",
                 "Version 1.0.143 (Build 144)" to "Added vertical route timeline connector line in Trip Details.",
                 "Version 1.0.142 (Build 143)" to "Aligned destination pin with map marker and added walking detection for auto-stop tracking.",

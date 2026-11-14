@@ -801,17 +801,17 @@ private fun DestinationRow(
                     val cx = size.width / 2f
                     if (isStart) {
                         drawLine(
-                            color = Color(0xFFD9E3EB),
+                            color = Color(0xFF94A3B8),
                             start = Offset(cx, size.height / 2f),
                             end = Offset(cx, size.height),
-                            strokeWidth = 2.dp.toPx()
+                            strokeWidth = 2.5.dp.toPx()
                         )
                     } else {
                         drawLine(
-                            color = Color(0xFFD9E3EB),
+                            color = Color(0xFF94A3B8),
                             start = Offset(cx, 0f),
                             end = Offset(cx, size.height / 2f),
-                            strokeWidth = 2.dp.toPx()
+                            strokeWidth = 2.5.dp.toPx()
                         )
                     }
                 },

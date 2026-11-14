@@ -12,7 +12,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import com.businesstracker.mileage.data.remote.CustomPurposesSheetsService
 import com.businesstracker.mileage.data.remote.GoogleSheetsSyncService
+import com.businesstracker.mileage.data.remote.SavedLocationsSheetsService
 import com.businesstracker.mileage.data.remote.SheetsSyncResult
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -22,7 +24,9 @@ import java.util.concurrent.TimeUnit
 class GoogleSheetsSyncWorker @AssistedInject constructor(
     @Assisted private val context: Context,
     @Assisted workerParams: WorkerParameters,
-    private val sheetsSyncService: GoogleSheetsSyncService
+    private val sheetsSyncService: GoogleSheetsSyncService,
+    private val customPurposesSheetsService: CustomPurposesSheetsService? = null,
+    private val savedLocationsSheetsService: SavedLocationsSheetsService? = null
 ) : CoroutineWorker(context, workerParams) {
 
     companion object {
@@ -72,6 +76,12 @@ class GoogleSheetsSyncWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result {
+        try {
+            customPurposesSheetsService?.backupCustomPurposes()
+            savedLocationsSheetsService?.backupSavedLocations(fullSnapshot = false)
+        } catch (_: Exception) {
+            // Background secondary sync failure does not fail trip sync
+        }
         return when (val result = sheetsSyncService.syncPendingTrips()) {
             is SheetsSyncResult.Success -> Result.success()
             is SheetsSyncResult.NotConfigured -> Result.success()

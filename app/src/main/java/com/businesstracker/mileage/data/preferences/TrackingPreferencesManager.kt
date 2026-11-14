@@ -85,6 +85,8 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_SHEETS_AUTO_SYNC_ENABLED = booleanPreferencesKey("sheets_auto_sync_enabled")
         private val KEY_SAVED_LOCATIONS_LAST_BACKUP_TIME = longPreferencesKey("saved_locations_last_backup_time")
         private val KEY_SAVED_LOCATIONS_LAST_BACKUP_ERROR = stringPreferencesKey("saved_locations_last_backup_error")
+        private val KEY_CUSTOM_PURPOSES_LAST_BACKUP_TIME = longPreferencesKey("custom_purposes_last_backup_time")
+        private val KEY_CUSTOM_PURPOSES_LAST_BACKUP_ERROR = stringPreferencesKey("custom_purposes_last_backup_error")
 
         // Work Schedule & Auto-Classification Keys
         private val KEY_SCHEDULE_FILTERING_ENABLED = booleanPreferencesKey("schedule_filtering_enabled")
@@ -512,6 +514,63 @@ class TrackingPreferencesManager @Inject constructor(
             }
         }
     }
+
+    suspend fun getCustomPurposesList(): List<String> {
+        val prefs = context.dataStore.data.first()
+        val raw = prefs[KEY_CUSTOM_PURPOSES] ?: prefs[KEY_CUSTOM_CATEGORIES]
+        return if (raw == null) {
+            TripPurpose.DEFAULT_SUCCULENT_PURPOSES
+        } else {
+            parseCustomPurposes(raw)
+        }
+    }
+
+    suspend fun setCustomPurposes(purposes: List<String>) {
+        val sanitized = purposes.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+        context.dataStore.edit { prefs ->
+            val json = JSONArray().apply { sanitized.forEach { put(it) } }.toString()
+            prefs[KEY_CUSTOM_PURPOSES] = json
+        }
+    }
+
+    suspend fun mergeCustomPurposes(incoming: List<String>): Int {
+        val current = getCustomPurposesList().toMutableList()
+        var addedCount = 0
+        incoming.map { it.trim() }.filter { it.isNotEmpty() }.forEach { inc ->
+            if (!current.any { it.equals(inc, ignoreCase = true) }) {
+                current.add(inc)
+                addedCount++
+            }
+        }
+        if (addedCount > 0) {
+            setCustomPurposes(current)
+        }
+        return addedCount
+    }
+
+    val customPurposesLastBackupTime: Flow<Long?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CUSTOM_PURPOSES_LAST_BACKUP_TIME]
+    }
+
+    suspend fun setCustomPurposesLastBackupTime(timestamp: Long?) {
+        context.dataStore.edit { prefs ->
+            if (timestamp == null) prefs.remove(KEY_CUSTOM_PURPOSES_LAST_BACKUP_TIME)
+            else prefs[KEY_CUSTOM_PURPOSES_LAST_BACKUP_TIME] = timestamp
+        }
+    }
+
+    val customPurposesLastBackupError: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CUSTOM_PURPOSES_LAST_BACKUP_ERROR]
+    }
+
+    suspend fun setCustomPurposesLastBackupError(error: String?) {
+        context.dataStore.edit { prefs ->
+            if (error == null) prefs.remove(KEY_CUSTOM_PURPOSES_LAST_BACKUP_ERROR)
+            else prefs[KEY_CUSTOM_PURPOSES_LAST_BACKUP_ERROR] = error
+        }
+    }
+
+    suspend fun isSheetsConnected(): Boolean = isSheetsConnected.first()
 
     // Google Sheets Sync Flow & Functions
     val isSheetsConnected: Flow<Boolean> = context.dataStore.data.map { prefs ->

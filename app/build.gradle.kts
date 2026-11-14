@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 145
-        versionName = "1.0.144"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Updated app icon artwork to modern navigation pin theme.\"")
+        versionCode = 146
+        versionName = "1.0.145"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Google Sheets backup & restore for Business Custom Purposes and enhanced route timeline connectors.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

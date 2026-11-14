@@ -10,6 +10,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.data.remote.CustomPurposesRestoreResult
+import com.businesstracker.mileage.data.remote.CustomPurposesSheetsService
+import com.businesstracker.mileage.data.remote.CustomPurposesSyncResult
 import com.businesstracker.mileage.data.remote.GoogleSheetsSyncService
 import com.businesstracker.mileage.data.remote.RestoreApplyResult
 import com.businesstracker.mileage.data.remote.RestorePreviewData
@@ -106,7 +109,8 @@ sealed interface SavedLocationsRestorePreviewUi {
         val preview: RestorePreviewData,
         val selectedIds: Set<String>,
         val approvedConflictIds: Set<String>,
-        val tripsRestoredCount: Int = 0
+        val tripsRestoredCount: Int = 0,
+        val purposesRestoredCount: Int = 0
     ) : SavedLocationsRestorePreviewUi
 
     data class Empty(
@@ -186,7 +190,8 @@ class SettingsViewModel @Inject constructor(
     private val savedLocationRepository: com.businesstracker.mileage.domain.repository.SavedLocationRepository,
     private val searchAddressUseCase: com.businesstracker.mileage.domain.usecase.SearchAddressUseCase,
     private val getCurrentLocationUseCase: com.businesstracker.mileage.domain.usecase.GetCurrentLocationUseCase,
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val customPurposesSheetsService: CustomPurposesSheetsService? = null
 ) : ViewModel() {
 
     private val _isSyncing = MutableStateFlow(false)
@@ -470,18 +475,27 @@ class SettingsViewModel @Inject constructor(
     fun addCustomPurpose(purpose: String) {
         viewModelScope.launch {
             preferencesManager.addCustomPurpose(purpose)
+            if (preferencesManager.isSheetsConnected()) {
+                customPurposesSheetsService?.backupCustomPurposes()
+            }
         }
     }
 
     fun removeCustomPurpose(purpose: String) {
         viewModelScope.launch {
             preferencesManager.removeCustomPurpose(purpose)
+            if (preferencesManager.isSheetsConnected()) {
+                customPurposesSheetsService?.backupCustomPurposes()
+            }
         }
     }
 
     fun updateCustomPurpose(oldPurpose: String, newPurpose: String) {
         viewModelScope.launch {
             preferencesManager.updateCustomPurpose(oldPurpose, newPurpose)
+            if (preferencesManager.isSheetsConnected()) {
+                customPurposesSheetsService?.backupCustomPurposes()
+            }
         }
     }
 
@@ -846,6 +860,7 @@ class SettingsViewModel @Inject constructor(
             try {
                 val tripRestoreResult = sheetsSyncService.restoreTripsFromSheets()
                 val locResult = savedLocationsSheetsService.previewRestoreFromSheets()
+                val purpRestoreResult = customPurposesSheetsService?.restoreCustomPurposes()
 
                 val tripsRestored = if (tripRestoreResult is GoogleSheetsSyncService.TripRestoreResult.Success) {
                     tripRestoreResult.importedCount
@@ -853,6 +868,30 @@ class SettingsViewModel @Inject constructor(
                 val tripsExisting = if (tripRestoreResult is GoogleSheetsSyncService.TripRestoreResult.Success) {
                     tripRestoreResult.existingCount
                 } else 0
+
+                val purpRestored = if (purpRestoreResult is CustomPurposesRestoreResult.Success) {
+                    purpRestoreResult.addedCount
+                } else 0
+                val purpCloudTotal = if (purpRestoreResult is CustomPurposesRestoreResult.Success) {
+                    purpRestoreResult.totalCloudCount
+                } else 0
+
+                val tripSummary = when (tripRestoreResult) {
+                    is GoogleSheetsSyncService.TripRestoreResult.Success ->
+                        if (tripsRestored > 0) "Restored $tripsRestored trips from Sheet1 ($tripsExisting already present)."
+                        else "All $tripsExisting trips on Sheet1 are already up to date locally."
+                    is GoogleSheetsSyncService.TripRestoreResult.Empty -> "No trips found on Sheet1."
+                    is GoogleSheetsSyncService.TripRestoreResult.Failed -> "Trips restore: ${tripRestoreResult.message}"
+                }
+
+                val purpSummary = when (purpRestoreResult) {
+                    is CustomPurposesRestoreResult.Success ->
+                        if (purpRestored > 0) "Restored $purpRestored new custom purposes ($purpCloudTotal on sheet)."
+                        else "All $purpCloudTotal custom purposes are already up to date locally."
+                    is CustomPurposesRestoreResult.Empty -> "No custom purposes found on Google Sheets."
+                    is CustomPurposesRestoreResult.Failure -> "Purposes restore: ${purpRestoreResult.message}"
+                    is CustomPurposesRestoreResult.NotConfigured, null -> ""
+                }
 
                 when (locResult) {
                     is RestorePreviewResult.Success -> {
@@ -864,27 +903,32 @@ class SettingsViewModel @Inject constructor(
                             preview = locResult.preview,
                             selectedIds = defaultSelected,
                             approvedConflictIds = emptySet(),
-                            tripsRestoredCount = tripsRestored
+                            tripsRestoredCount = tripsRestored,
+                            purposesRestoredCount = purpRestored
                         )
                     }
                     is RestorePreviewResult.EmptyCloudSheet -> {
-                        val tripSummary = when (tripRestoreResult) {
-                            is GoogleSheetsSyncService.TripRestoreResult.Success ->
-                                if (tripsRestored > 0) "Restored $tripsRestored trips from Sheet1 ($tripsExisting already present)."
-                                else "All $tripsExisting trips on Sheet1 are already up to date locally."
-                            is GoogleSheetsSyncService.TripRestoreResult.Empty -> "No trips found on Sheet1."
-                            is GoogleSheetsSyncService.TripRestoreResult.Failed -> "Trips restore: ${tripRestoreResult.message}"
-                        }
+                        val combinedSummary = listOfNotNull(
+                            tripSummary.takeIf { it.isNotBlank() },
+                            purpSummary.takeIf { it.isNotBlank() },
+                            "No saved locations found on Google Sheets."
+                        ).joinToString("\n\n")
                         _restorePreviewState.value = SavedLocationsRestorePreviewUi.Empty(
                             localCount = locResult.localCount,
-                            message = "$tripSummary\n\nNo saved locations found on Google Sheets."
+                            message = combinedSummary
                         )
                     }
                     is RestorePreviewResult.Error -> {
-                        if (tripRestoreResult is GoogleSheetsSyncService.TripRestoreResult.Success && tripsRestored > 0) {
+                        if ((tripRestoreResult is GoogleSheetsSyncService.TripRestoreResult.Success && tripsRestored > 0) ||
+                            (purpRestoreResult is CustomPurposesRestoreResult.Success && purpRestored > 0)) {
+                            val combinedSummary = listOfNotNull(
+                                tripSummary.takeIf { it.isNotBlank() },
+                                purpSummary.takeIf { it.isNotBlank() },
+                                "Saved Locations: ${locResult.failure.toMessage()}"
+                            ).joinToString("\n\n")
                             _restorePreviewState.value = SavedLocationsRestorePreviewUi.Empty(
                                 localCount = 0,
-                                message = "Restored $tripsRestored trips from Sheet1 ($tripsExisting already present).\n\nSaved Locations: ${locResult.failure.toMessage()}"
+                                message = combinedSummary
                             )
                         } else {
                             _restorePreviewState.value = SavedLocationsRestorePreviewUi.Failure(
@@ -969,15 +1013,21 @@ class SettingsViewModel @Inject constructor(
                 val tripResult = sheetsSyncService.syncPendingTrips()
                 // 2. Back up all Saved Locations (full snapshot)
                 val locResult = savedLocationsSheetsService.backupSavedLocations(fullSnapshot = true)
+                // 3. Back up all Custom Business Purposes
+                val purpResult = customPurposesSheetsService?.backupCustomPurposes()
 
                 val tripSuccess = tripResult is SheetsSyncResult.Success
                 val locSuccess = locResult is SavedLocationsSyncResult.Success
+                val purpSuccess = purpResult == null || purpResult is CustomPurposesSyncResult.Success
 
-                if (tripSuccess && locSuccess) {
+                if (tripSuccess && locSuccess && purpSuccess) {
                     _unifiedBackupMessage.value = "All data backed up"
                     _unifiedBackupError.value = null
+                } else if (tripSuccess && locSuccess && !purpSuccess) {
+                    _unifiedBackupError.value = "Trips & Locations backed up, but Custom Purposes failed: ${purpResult?.toMessage()}"
                 } else if (tripSuccess && !locSuccess) {
-                    _unifiedBackupError.value = "Trips up to date, but Saved Locations backup failed: ${locResult.toMessage()}"
+                    val purpSuffix = if (!purpSuccess) " (and Custom Purposes failed: ${purpResult?.toMessage()})" else ""
+                    _unifiedBackupError.value = "Trips up to date, but Saved Locations backup failed: ${locResult.toMessage()}$purpSuffix"
                 } else if (!tripSuccess && locSuccess) {
                     val tripMsg = when (tripResult) {
                         is SheetsSyncResult.PartialSuccess -> "Trips partially synced (${tripResult.successCount} succeeded, ${tripResult.failedCount} failed)"
@@ -993,7 +1043,8 @@ class SettingsViewModel @Inject constructor(
                         is SheetsSyncResult.UnexpectedError -> tripResult.exception.localizedMessage ?: "Trips sync error"
                         is SheetsSyncResult.Success -> ""
                     }
-                    _unifiedBackupError.value = "Saved Locations backed up, but trips failed: $tripMsg"
+                    val purpSuffix = if (!purpSuccess) " (and Custom Purposes failed: ${purpResult?.toMessage()})" else ""
+                    _unifiedBackupError.value = "Saved Locations backed up, but trips failed: $tripMsg$purpSuffix"
                 } else {
                     val tripMsg = when (tripResult) {
                         is SheetsSyncResult.NotConfigured -> "Google Sheets not configured"
@@ -1003,7 +1054,8 @@ class SettingsViewModel @Inject constructor(
                         is SheetsSyncResult.UnexpectedError -> tripResult.exception.localizedMessage ?: "Sync error"
                         else -> "Trips sync failed"
                     }
-                    _unifiedBackupError.value = "Backup failed: $tripMsg; ${locResult.toMessage()}"
+                    val purpSuffix = if (!purpSuccess) "; Custom Purposes: ${purpResult?.toMessage()}" else ""
+                    _unifiedBackupError.value = "Backup failed: $tripMsg; ${locResult.toMessage()}$purpSuffix"
                 }
             } finally {
                 _isBackingUpAll.value = false
@@ -1025,16 +1077,19 @@ class SettingsViewModel @Inject constructor(
                     is RestoreApplyResult.Success -> {
                         _restorePreviewState.value = null
                         val tripSuffix = if (current.tripsRestoredCount > 0) " & ${current.tripsRestoredCount} trips" else ""
+                        val purpSuffix = if (current.purposesRestoredCount > 0) " & ${current.purposesRestoredCount} purposes" else ""
                         _savedLocationsBackupMessage.value =
-                            "Restored ${result.importedCount} new, ${result.updatedCount} overwritten locations$tripSuffix" +
+                            "Restored ${result.importedCount} new, ${result.updatedCount} overwritten locations$tripSuffix$purpSuffix" +
                                 if (result.preservedLocalCount > 0) " (${result.preservedLocalCount} local kept)" else ""
                     }
                     is RestoreApplyResult.NothingSelected -> {
                         _restorePreviewState.value = null
-                        val tripMsg = if (current.tripsRestoredCount > 0)
-                            "Restored ${current.tripsRestoredCount} trips from Sheet1. No locations selected."
-                        else "No locations selected to restore. Local records preserved."
-                        _savedLocationsBackupMessage.value = tripMsg
+                        val tripSuffix = if (current.tripsRestoredCount > 0) "Restored ${current.tripsRestoredCount} trips from Sheet1. " else ""
+                        val purpSuffix = if (current.purposesRestoredCount > 0) "Restored ${current.purposesRestoredCount} purposes. " else ""
+                        _savedLocationsBackupMessage.value =
+                            if (tripSuffix.isNotEmpty() || purpSuffix.isNotEmpty())
+                                "${tripSuffix}${purpSuffix}No locations selected."
+                            else "No locations selected to restore. Local records preserved."
                     }
                     is RestoreApplyResult.Failed -> {
                         _restorePreviewState.value = SavedLocationsRestorePreviewUi.Failure(result.message)
