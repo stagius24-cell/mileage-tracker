@@ -78,6 +78,18 @@ class ActivityTransitionManager @Inject constructor(
                 .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_EXIT)
                 .build(),
 
+            // Walking enter (user exits car and walks away)
+            ActivityTransition.Builder()
+                .setActivityType(DetectedActivity.WALKING)
+                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
+                .build(),
+
+            // On foot enter (user exits car and moves on foot)
+            ActivityTransition.Builder()
+                .setActivityType(DetectedActivity.ON_FOOT)
+                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
+                .build(),
+
             // Still enter (stationary confirmation for debounce)
             ActivityTransition.Builder()
                 .setActivityType(DetectedActivity.STILL)

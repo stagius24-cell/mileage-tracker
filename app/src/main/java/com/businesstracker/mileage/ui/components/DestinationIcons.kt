@@ -138,25 +138,73 @@ fun StartBeaconIcon(
 }
 
 /**
- * Destination Finish Flag Composable for list rows and card previews.
+ * Destination Soft Red Map Pin Composable matching the Google Maps marker style:
+ * - Soft rose-red outline (default: #D7737D matching the map pin)
+ * - Interior fill with card/surface background so connector lines sit cleanly behind it
+ * - Small center red dot
+ * - Downward-pointing teardrop pin tip
+ */
+@Composable
+fun EndPinIcon(
+    modifier: Modifier = Modifier,
+    size: Dp = 20.dp,
+    tint: Color = Color(0xFFD7737D),
+    fillColor: Color = Color.White
+) {
+    androidx.compose.foundation.Canvas(modifier = modifier.size(size)) {
+        val cx = this.size.width / 2f
+        val headRadius = this.size.width * 0.35f
+        val headCenterY = this.size.height * 0.40f
+        val tipY = this.size.height * 0.95f
+        val pinStroke = 1.8.dp.toPx()
+
+        val pinPath = androidx.compose.ui.graphics.Path().apply {
+            moveTo(cx, tipY)
+            val dx = headRadius * 0.88f
+            val dy = headRadius * 0.45f
+            lineTo(cx - dx, headCenterY + dy)
+            arcTo(
+                rect = androidx.compose.ui.geometry.Rect(
+                    cx - headRadius,
+                    headCenterY - headRadius,
+                    cx + headRadius,
+                    headCenterY + headRadius
+                ),
+                startAngleDegrees = 155f,
+                sweepAngleDegrees = 230f,
+                forceMoveTo = false
+            )
+            lineTo(cx, tipY)
+            close()
+        }
+
+        // 1. Interior fill
+        drawPath(path = pinPath, color = fillColor, style = androidx.compose.ui.graphics.drawscope.Fill)
+        // 2. Soft red outline
+        drawPath(path = pinPath, color = tint, style = androidx.compose.ui.graphics.drawscope.Stroke(width = pinStroke))
+        // 3. Small center red dot
+        drawCircle(
+            color = tint,
+            radius = headRadius * 0.35f,
+            center = Offset(cx, headCenterY)
+        )
+    }
+}
+
+/**
+ * Destination Finish Pin Composable for list rows and card previews.
  */
 @Composable
 fun EndFlagIcon(
     modifier: Modifier = Modifier,
-    size: Dp = 22.dp,
-    tint: Color = Color(0xFFCC5B77)
+    size: Dp = 20.dp,
+    tint: Color = Color(0xFFD7737D),
+    fillColor: Color = Color.White
 ) {
-    androidx.compose.foundation.Canvas(modifier = modifier.size(size)) {
-        val w = this.size.width
-        val h = this.size.height
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(w * .5f, h * .94f)
-            cubicTo(w * .34f, h * .70f, w * .13f, h * .50f, w * .13f, h * .36f)
-            cubicTo(w * .13f, h * .12f, w * .29f, h * .05f, w * .5f, h * .05f)
-            cubicTo(w * .71f, h * .05f, w * .87f, h * .12f, w * .87f, h * .36f)
-            cubicTo(w * .87f, h * .50f, w * .66f, h * .70f, w * .5f, h * .94f)
-        }
-        drawPath(path, tint, style = Stroke(width = 2.dp.toPx()))
-        drawCircle(tint, radius = w * .10f, center = Offset(w * .5f, h * .36f))
-    }
+    EndPinIcon(
+        modifier = modifier,
+        size = size,
+        tint = tint,
+        fillColor = fillColor
+    )
 }

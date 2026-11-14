@@ -65,6 +65,12 @@ class AutoDriveReceiver : BroadcastReceiver() {
                                 }
                             }
                         }
+                        DetectedActivity.WALKING,
+                        DetectedActivity.ON_FOOT -> {
+                            if (event.transitionType == ActivityTransition.ACTIVITY_TRANSITION_ENTER) {
+                                handleVehicleExit(context)
+                            }
+                        }
                         DetectedActivity.STILL -> {
                             if (event.transitionType == ActivityTransition.ACTIVITY_TRANSITION_ENTER) {
                                 handleStillEnter(context)

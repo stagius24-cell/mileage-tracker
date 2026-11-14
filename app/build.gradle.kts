@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 142
-        versionName = "1.0.141"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Back up and restore full GPS routes and coordinates to Google Sheets.\"")
+        versionCode = 143
+        versionName = "1.0.142"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Align review card destination pin with map, add vertical route timeline connector, and add walking detection to auto-stop tracking.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
