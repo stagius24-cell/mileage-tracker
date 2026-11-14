@@ -82,6 +82,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.luminance
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.data.local.entity.TripEntity
@@ -206,10 +207,16 @@ fun TripHistoryScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
+        val pageBg = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+            MaterialTheme.colorScheme.background
+        } else {
+            Color(0xFFEFF3F9)
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .background(pageBg)
         ) {
             HistoryControls(
                 state = state,
@@ -242,8 +249,8 @@ fun TripHistoryScreen(
 
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (groupByDate) {
                         state.trips.groupBy { it.date }.forEach { (date, trips) ->
@@ -251,20 +258,18 @@ fun TripHistoryScreen(
                                 DateSectionHeader(date = date, trips = trips)
                             }
                             items(trips, key = { it.id }) { trip ->
-                                TripHistoryItem(
+                                CompactTripHistoryCard(
                                     trip = trip,
                                     smartNames = state.smartNamesMap[trip.id],
-                                    showDate = false,
                                     onClick = { viewModel.selectTripForDetails(trip) }
                                 )
                             }
                         }
                     } else {
                         items(state.trips, key = { it.id }) { trip ->
-                            TripHistoryItem(
+                            CompactTripHistoryCard(
                                 trip = trip,
                                 smartNames = state.smartNamesMap[trip.id],
-                                showDate = true,
                                 onClick = { viewModel.selectTripForDetails(trip) }
                             )
                         }
@@ -306,6 +311,10 @@ private fun HistoryControls(
     var choseAllMonths by remember { mutableStateOf(false) }
     var choseAllCategories by remember { mutableStateOf(false) }
 
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val primaryText = if (dark) MaterialTheme.colorScheme.onSurface else Color(0xFF192A40)
+    val secondaryText = if (dark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF718096)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -322,16 +331,17 @@ private fun HistoryControls(
             Text(
                 text = "Trip History",
                 style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                color = primaryText
             )
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "${state.trips.size} drives  •  ${formatMiles(state.totalFilteredMiles)} mi",
+                    text = "${state.trips.size} drives · ${formatMiles(state.totalFilteredMiles)} mi",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = secondaryText
                 )
                 if (onBackToReports != null) {
                     TextButton(onClick = onBackToReports) {
@@ -601,22 +611,28 @@ private fun SortFilterPill(
 @Composable
 private fun DateSectionHeader(date: String, trips: List<TripEntity>) {
     val miles = trips.sumOf { it.totalDistanceMiles }
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val titleColor = if (dark) MaterialTheme.colorScheme.onSurface else Color(0xFF192A40)
+    val summaryColor = if (dark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF718096)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 2.dp),
+            .padding(top = 14.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = formatHistoryDate(date),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = titleColor
         )
         Text(
-            text = "${trips.size} ${if (trips.size == 1) "drive" else "drives"}  •  ${formatMiles(miles)} mi",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = "${trips.size} ${if (trips.size == 1) "drive" else "drives"} · ${formatMiles(miles)} mi",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = summaryColor
         )
     }
 }
@@ -714,133 +730,6 @@ private fun EmptyHistory(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun TripHistoryItem(
-    trip: TripEntity,
-    smartNames: com.businesstracker.mileage.domain.usecase.SmartTripNames? = null,
-    showDate: Boolean,
-    onClick: () -> Unit
-) {
-    val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
-    val timeRange = remember(trip.startTime, trip.endTime) {
-        "${timeFormatter.format(Date(trip.startTime))} – ${timeFormatter.format(Date(trip.endTime))}"
-    }
-    val isBusiness = trip.classification == "BUSINESS"
-    val badgeIcon = when (trip.classification) {
-        "BUSINESS" -> Icons.Default.BusinessCenter
-        "PERSONAL" -> Icons.Default.Person
-        else -> Icons.Default.Info
-    }
-    val badgeColor = if (isBusiness) SucculentPrimary else Color(0xFF2563EB)
-    val start = smartNames?.startDisplayName ?: (trip.startAddress ?: "Recorded start location")
-    val end = smartNames?.endDisplayName ?: (trip.endAddress ?: "Recorded destination")
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 14.dp, top = 12.dp, end = 8.dp, bottom = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (showDate) "${formatHistoryDate(trip.date)}  •  $timeRange" else timeRange,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "${formatMiles(trip.totalDistanceMiles)} mi",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            if (isBusiness && trip.purpose.isNotBlank()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = trip.purpose,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)
-                    )
-                    Text(
-                        text = formatCurrency(trip.calculatedDeduction),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = SucculentPrimary
-                    )
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    HistoryLocationLine(address = start, tint = SucculentPrimary, isStart = true)
-                    HistoryLocationLine(address = end, tint = SpeedRed, isStart = false)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    if (isBusiness && trip.purpose.isBlank()) {
-                        Text(
-                            text = formatCurrency(trip.calculatedDeduction),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = SucculentPrimary
-                        )
-                    }
-                    Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                        Icon(
-                            badgeIcon,
-                            contentDescription = if (isBusiness) "Business trip" else if (trip.classification == "PERSONAL") "Personal trip" else "Unreviewed trip",
-                            tint = if (trip.classification == "UNREVIEWED") MaterialTheme.colorScheme.onSurfaceVariant else badgeColor,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HistoryLocationLine(address: String, tint: androidx.compose.ui.graphics.Color, isStart: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        if (isStart) {
-            com.businesstracker.mileage.ui.components.StartBeaconIcon(tint = tint, size = 16.dp)
-        } else {
-            com.businesstracker.mileage.ui.components.EndFlagIcon(tint = tint, size = 16.dp)
-        }
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = address,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
     }
 }
 
