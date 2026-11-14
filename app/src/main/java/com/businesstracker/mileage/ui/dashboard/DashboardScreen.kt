@@ -57,6 +57,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -98,6 +99,10 @@ fun DashboardScreen(
     var monthMenuExpanded by remember { mutableStateOf(false) }
     var isTimeFilterExpanded by remember { mutableStateOf(false) }
     var isAmoledDimmed by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshBluetoothConnection()
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
@@ -237,6 +242,7 @@ fun DashboardScreen(
             item {
                 DriveTrackingTable(
                     serviceState = serviceState,
+                    isCarBluetoothConnected = state.isCarBluetoothConnected,
                     onStart = { viewModel.startManualTracking() },
                     onPause = { viewModel.pauseTracking() },
                     onResume = { viewModel.resumeTracking() },
@@ -369,6 +375,7 @@ fun DashboardScreen(
 @Composable
 private fun DriveTrackingTable(
     serviceState: TrackingServiceState,
+    isCarBluetoothConnected: Boolean,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -433,15 +440,17 @@ private fun DriveTrackingTable(
                                 fontSize = 16.sp
                             )
                         )
-                        if (!serviceState.isTracking) {
+                        val subtitleText = when {
+                            serviceState.isRecoveryRequired -> serviceState.statusMessage ?: "Recovery Required • Preserved"
+                            isCarBluetoothConnected -> if (serviceState.isTracking) "Tesla Model Y • Connected" else "Tesla Model Y • Ready"
+                            serviceState.isTracking -> null
+                            else -> "Ready"
+                        }
+                        if (subtitleText != null) {
                             Text(
-                                text = if (serviceState.isRecoveryRequired) {
-                                    serviceState.statusMessage ?: "Recovery Required • Preserved"
-                                } else {
-                                    "Tesla Model Y • Ready"
-                                },
+                                text = subtitleText,
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = if (isCarBluetoothConnected) SucculentPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
                     }

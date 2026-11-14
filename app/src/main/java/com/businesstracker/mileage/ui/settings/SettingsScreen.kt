@@ -1061,6 +1061,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.146 (Build 147)" to "Only display Tesla Model Y in the active drive tracker when confirmed connected with car Bluetooth 'Tesla model Y teela'.",
                 "Version 1.0.145 (Build 146)" to "Full Google Sheets backup & restore for Business Custom Purposes, plus enhanced vertical route timeline connector lines.",
                 "Version 1.0.144 (Build 145)" to "New modern app icon, route timeline connector lines, and walking auto-stop tracking.",
                 "Version 1.0.143 (Build 144)" to "Added vertical route timeline connector line in Trip Details.",

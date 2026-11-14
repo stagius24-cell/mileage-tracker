@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 146
-        versionName = "1.0.145"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Google Sheets backup & restore for Business Custom Purposes and enhanced route timeline connectors.\"")
+        versionCode = 147
+        versionName = "1.0.146"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Only display Tesla Model Y on active tracker when confirmed connected to car Bluetooth.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

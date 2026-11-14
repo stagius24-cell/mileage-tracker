@@ -1,6 +1,7 @@
 package com.businesstracker.mileage.receiver
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -18,13 +19,17 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class VehicleBluetoothReceiver : BroadcastReceiver() {
     @Inject lateinit var eventHandler: VehicleBluetoothEventHandler
+    @Inject lateinit var vehicleBluetoothManager: VehicleBluetoothManager
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
         if (action != BluetoothDevice.ACTION_ACL_CONNECTED &&
-            action != BluetoothDevice.ACTION_ACL_DISCONNECTED
+            action != BluetoothDevice.ACTION_ACL_DISCONNECTED &&
+            action != BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED &&
+            action != BluetoothAdapter.ACTION_STATE_CHANGED
         ) return
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) !=
             PackageManager.PERMISSION_GRANTED
@@ -35,12 +40,15 @@ class VehicleBluetoothReceiver : BroadcastReceiver() {
             intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
         } else {
             intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
-        } ?: return
+        }
 
         val pendingResult = goAsync()
         CoroutineScope(SupervisorJob() + ioDispatcher).launch {
             try {
-                eventHandler.handle(action, device.address)
+                vehicleBluetoothManager.onDeviceConnectionChanged(action, device)
+                if (device != null) {
+                    eventHandler.handle(action, device.address)
+                }
             } finally {
                 pendingResult.finish()
             }

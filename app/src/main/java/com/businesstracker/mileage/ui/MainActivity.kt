@@ -45,6 +45,7 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var activityTransitionManager: ActivityTransitionManager
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
+    @Inject lateinit var vehicleBluetoothManager: com.businesstracker.mileage.receiver.VehicleBluetoothManager
 
     var hasRequestedBackgroundPermission = false
         internal set
@@ -132,6 +133,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         checkAndRegisterTransitions()
+        vehicleBluetoothManager.refreshConnectionState()
     }
 
     private fun checkAndRegisterTransitions() {
@@ -198,6 +200,12 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.BLUETOOTH_CONNECT)
             }
         }
 

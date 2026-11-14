@@ -50,7 +50,8 @@ data class DashboardUiState(
     val lastClassifiedTrip: TripEntity? = null,
     val isUndoAvailable: Boolean = false,
     val processingTripIds: Set<String> = emptySet(),
-    val customPurposes: List<String> = emptyList()
+    val customPurposes: List<String> = emptyList(),
+    val isCarBluetoothConnected: Boolean = false
 )
 
 @HiltViewModel
@@ -61,7 +62,8 @@ class DashboardViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val activeTripRepository: ActiveTripRepository? = null,
     private val tripLifecycleDao: TripLifecycleDao? = null,
-    private val preferencesManager: TrackingPreferencesManager? = null
+    private val preferencesManager: TrackingPreferencesManager? = null,
+    private val vehicleBluetoothManager: com.businesstracker.mileage.receiver.VehicleBluetoothManager? = null
 ) : ViewModel() {
 
     private val now = LocalDate.now()
@@ -166,7 +168,8 @@ class DashboardViewModel @Inject constructor(
         val customEnd: String,
         val processingIds: Set<String>,
         val lastClassified: TripEntity?,
-        val customPurposes: List<String> = emptyList()
+        val customPurposes: List<String> = emptyList(),
+        val isCarBluetoothConnected: Boolean = false
     )
 
     private val tripFilterFlow = combine(
@@ -180,14 +183,24 @@ class DashboardViewModel @Inject constructor(
 
     private val customPurposesFlow: Flow<List<String>> = preferencesManager?.customPurposes ?: flowOf(emptyList())
 
+    private val carBluetoothFlow: Flow<Boolean> =
+        vehicleBluetoothManager?.isCarBluetoothConnected ?: preferencesManager?.isCarBluetoothConnected ?: flowOf(false)
+
     private val actionFlow = combine(
         _customStartDate,
         _customEndDate,
         _processingTripIds,
         _lastClassifiedTrip,
-        customPurposesFlow
-    ) { customStart, customEnd, processingIds, lastClassified, customPurposes ->
-        CustomRangeAndActionState(customStart, customEnd, processingIds, lastClassified, customPurposes)
+        combine(customPurposesFlow, carBluetoothFlow) { purposes, isBt -> Pair(purposes, isBt) }
+    ) { customStart, customEnd, processingIds, lastClassified, extra ->
+        CustomRangeAndActionState(
+            customStart = customStart,
+            customEnd = customEnd,
+            processingIds = processingIds,
+            lastClassified = lastClassified,
+            customPurposes = extra.first,
+            isCarBluetoothConnected = extra.second
+        )
     }
 
     val uiState: StateFlow<DashboardUiState> = combine(
@@ -232,7 +245,8 @@ class DashboardViewModel @Inject constructor(
             lastClassifiedTrip = actionState.lastClassified,
             isUndoAvailable = actionState.lastClassified != null,
             processingTripIds = actionState.processingIds,
-            customPurposes = actionState.customPurposes
+            customPurposes = actionState.customPurposes,
+            isCarBluetoothConnected = actionState.isCarBluetoothConnected
         )
     }.stateIn(
         scope = viewModelScope,
@@ -241,6 +255,10 @@ class DashboardViewModel @Inject constructor(
             selectedMonthName = now.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
         )
     )
+
+    fun refreshBluetoothConnection() {
+        vehicleBluetoothManager?.refreshConnectionState()
+    }
 
     fun setTimeFilter(filter: TimeFilter) {
         _timeFilter.value = filter

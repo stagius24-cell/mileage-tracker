@@ -55,6 +55,7 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_VEHICLE_BLUETOOTH_ADDRESS = stringPreferencesKey("vehicle_bluetooth_address")
         private val KEY_VEHICLE_BLUETOOTH_NAME = stringPreferencesKey("vehicle_bluetooth_name")
         private val KEY_BLUETOOTH_DISCONNECT_PENDING = booleanPreferencesKey("bluetooth_disconnect_pending")
+        private val KEY_CAR_BLUETOOTH_CONNECTED = booleanPreferencesKey("car_bluetooth_connected")
         private val KEY_APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
         private val KEY_STATIONARY_TRIP_ID = stringPreferencesKey("stationary_trip_id")
         private val KEY_STATIONARY_LAT = doublePreferencesKey("stationary_lat")
@@ -165,6 +166,19 @@ class TrackingPreferencesManager @Inject constructor(
 
     suspend fun isBluetoothDisconnectPending(): Boolean =
         context.dataStore.data.first()[KEY_BLUETOOTH_DISCONNECT_PENDING] ?: false
+
+    val isCarBluetoothConnected: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CAR_BLUETOOTH_CONNECTED] ?: false
+    }
+
+    suspend fun setCarBluetoothConnected(connected: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_CAR_BLUETOOTH_CONNECTED] = connected
+        }
+    }
+
+    suspend fun isCarBluetoothConnected(): Boolean =
+        context.dataStore.data.first()[KEY_CAR_BLUETOOTH_CONNECTED] ?: false
 
     // Work Schedule & Drive Filtering
     val isScheduleFilteringEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
