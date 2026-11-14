@@ -14,9 +14,9 @@ import androidx.core.view.WindowCompat
 import com.businesstracker.mileage.domain.model.AppThemeMode
 
 private val LightColorScheme = lightColorScheme(
-    primary = SucculentPrimary,
+    primary = AppAccentGreen,
     onPrimary = Color.White,
-    primaryContainer = SucculentContainer,
+    primaryContainer = AppSelectedGreen,
     onPrimaryContainer = SucculentPrimaryVariant,
     secondary = SucculentSecondary,
     onSecondary = Color(0xFF0F172A),
@@ -24,13 +24,14 @@ private val LightColorScheme = lightColorScheme(
     onSecondaryContainer = SucculentPrimaryVariant,
     tertiary = SlateNeutral,
     onTertiary = Color.White,
-    background = NeutralBackgroundLight,
-    onBackground = Color(0xFF1E293B),
-    surface = NeutralSurfaceLight,
-    onSurface = Color(0xFF1E293B),
+    background = AppScreenBackgroundLight,
+    onBackground = AppTextPrimary,
+    surface = AppSurfaceWhite,
+    onSurface = AppTextPrimary,
     surfaceVariant = Color(0xFFF1F5F9),
-    onSurfaceVariant = SlateNeutral,
-    outline = NeutralBorderLight
+    onSurfaceVariant = AppTextSecondary,
+    outline = AppDivider,
+    outlineVariant = AppDivider
 )
 
 private val DarkColorScheme = darkColorScheme(

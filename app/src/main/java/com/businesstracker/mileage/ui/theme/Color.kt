@@ -37,3 +37,15 @@ val AmoledBlack = Color(0xFF000000)
 val HighAccuracyGreen = Color(0xFF10B981)
 val WeakGpsAmber = Color(0xFFF59E0B)
 val SpeedRed = Color(0xFFEF4444)
+
+// Centralized Design System Tokens (Section 2)
+val AppScreenBackgroundLight = Color(0xFFF3F6FA)
+val AppSurfaceWhite = Color(0xFFFFFFFF)
+val AppTextPrimary = Color(0xFF18283E)
+val AppTextSecondary = Color(0xFF718096)
+val AppAccentGreen = Color(0xFF16A05B)
+val AppSelectedGreen = Color(0xFFE8F7EE)
+val AppDivider = Color(0xFFEDF1F5)
+val AppDragHandleColor = Color(0xFF94A3B8)
+val AppScrimLight = Color(0x73000000) // Black at 45% opacity
+val AppScrimDark = Color(0xA6000000)  // Black at 65% opacity

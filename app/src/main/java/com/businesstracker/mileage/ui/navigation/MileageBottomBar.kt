@@ -32,11 +32,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 
@@ -56,20 +59,21 @@ fun MileageBottomBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .background(if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.background else Color(0xFFF3F6FA))
             .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp,
-            shadowElevation = 8.dp
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
         ) {
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(64.dp)
+                    .height(60.dp)
             ) {
                 val itemCount = Screen.bottomNavItems.size
                 val tabWidth = maxWidth / itemCount
@@ -90,9 +94,9 @@ fun MileageBottomBar(
                         .offset(x = indicatorOffset)
                         .width(tabWidth)
                         .fillMaxHeight()
-                        .padding(horizontal = 6.dp, vertical = 6.dp)
+                        .padding(horizontal = 6.dp, vertical = 4.dp)
                         .background(
-                            color = SucculentPrimary.copy(alpha = 0.16f),
+                            color = SucculentPrimary.copy(alpha = 0.11f),
                             shape = RoundedCornerShape(14.dp)
                         )
                 )
@@ -123,14 +127,23 @@ fun MileageBottomBar(
                                 .fillMaxHeight()
                                 .clip(RoundedCornerShape(14.dp))
                                 .clickable {
-                                    if (currentBaseRoute != screen.route) {
+                                    val isCurrent = currentBaseRoute == screen.route
+                                    val startDestId = navController.graph.findStartDestination().id
+                                    if (!isCurrent) {
                                         navController.navigate(screen.route) {
-                                            popUpTo(Screen.Dashboard.route) {
+                                            popUpTo(startDestId) {
                                                 saveState = true
                                             }
                                             launchSingleTop = true
-                                            // A saved History stack can include Settings opened from a trip.
                                             restoreState = screen != Screen.History
+                                        }
+                                    } else if (screen == Screen.History) {
+                                        // Reset to top-level clean History if already on History (e.g. filtered view)
+                                        navController.navigate(Screen.History.route) {
+                                            popUpTo(startDestId) {
+                                                saveState = false
+                                            }
+                                            launchSingleTop = true
                                         }
                                     }
                                 },

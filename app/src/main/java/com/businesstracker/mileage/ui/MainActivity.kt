@@ -28,6 +28,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.ui.components.AppConfirmationDialog
 import com.businesstracker.mileage.domain.model.AppThemeMode
 import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.ui.navigation.MileageBottomBar
@@ -106,32 +107,21 @@ class MainActivity : ComponentActivity() {
                     )
 
                     if (showBackgroundSettingsDialog) {
-                        AlertDialog(
+                        AppConfirmationDialog(
                             onDismissRequest = { showBackgroundSettingsDialog = false },
-                            title = { Text("Allow Background Location") },
-                            text = {
-                                Text("To detect drives automatically while your phone is in your pocket or vehicle, please select 'Allow all the time' in Android Location Settings.")
-                            },
-                            confirmButton = {
-                                Button(
-                                    onClick = {
-                                        showBackgroundSettingsDialog = false
-                                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                            data = Uri.fromParts("package", packageName, null)
-                                            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                                        }
-                                        startActivity(intent)
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-                                ) {
-                                    Text("Open Settings")
+                            title = "Allow Background Location",
+                            message = "To detect drives automatically while your phone is in your pocket or vehicle, please select 'Allow all the time' in Android Location Settings.",
+                            confirmLabel = "Open Settings",
+                            onConfirm = {
+                                showBackgroundSettingsDialog = false
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", packageName, null)
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
                                 }
+                                startActivity(intent)
                             },
-                            dismissButton = {
-                                TextButton(onClick = { showBackgroundSettingsDialog = false }) {
-                                    Text("Not Now")
-                                }
-                            }
+                            dismissLabel = "Not Now",
+                            onDismiss = { showBackgroundSettingsDialog = false }
                         )
                     }
                 }

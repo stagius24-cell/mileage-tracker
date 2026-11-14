@@ -82,18 +82,23 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.luminance
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.SortOrder
+import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import java.text.SimpleDateFormat
+import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
+import java.time.temporal.TemporalAdjusters
 import java.util.Date
 import java.util.Locale
 
@@ -103,6 +108,9 @@ private data class HistoryFilterOption(val value: String, val label: String)
 fun TripHistoryScreen(
     viewModel: TripHistoryViewModel = hiltViewModel(),
     initialMonthIso: String = "",
+    initialCategory: String = "",
+    initialStartDate: String = "",
+    initialEndDate: String = "",
     onBackToReports: (() -> Unit)? = null,
     onNavigateToSavedLocations: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -153,10 +161,23 @@ fun TripHistoryScreen(
         }
     }
 
-    LaunchedEffect(initialMonthIso) {
-        if (initialMonthIso.matches(Regex("\\d{4}-\\d{2}"))) {
-            val month = YearMonth.parse(initialMonthIso)
-            viewModel.setDateRange(month.atDay(1).toString(), month.atEndOfMonth().toString())
+    LaunchedEffect(initialMonthIso, initialCategory, initialStartDate, initialEndDate) {
+        if (initialCategory.isNotBlank() || initialStartDate.isNotBlank() || initialEndDate.isNotBlank() || initialMonthIso.isNotBlank()) {
+            if (initialCategory.isNotBlank()) {
+                viewModel.setClassificationFilter(initialCategory)
+            } else {
+                viewModel.setClassificationFilter("ALL")
+            }
+            if (initialStartDate.isNotBlank() || initialEndDate.isNotBlank()) {
+                viewModel.setDateRange(initialStartDate, initialEndDate)
+            } else if (initialMonthIso.matches(Regex("\\d{4}-\\d{2}"))) {
+                val month = YearMonth.parse(initialMonthIso)
+                viewModel.setDateRange(month.atDay(1).toString(), month.atEndOfMonth().toString())
+            } else {
+                viewModel.setDateRange("", "")
+            }
+        } else {
+            viewModel.clearAllFilters()
         }
     }
 
@@ -194,10 +215,16 @@ fun TripHistoryScreen(
     }
 
     Box(modifier = modifier.fillMaxSize()) {
+        val pageBg = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+            MaterialTheme.colorScheme.background
+        } else {
+            Color(0xFFEFF3F9)
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
+                .background(pageBg)
         ) {
             HistoryControls(
                 state = state,
@@ -207,6 +234,7 @@ fun TripHistoryScreen(
                 onEntityChange = viewModel::setBusinessEntityFilter,
                 onSyncChange = viewModel::setSyncStatusFilter,
                 onClearDateFilter = { viewModel.setDateRange("", "") },
+                onDateRangeChange = viewModel::setDateRange,
                 onMonthChange = { month ->
                     if (month.isBlank()) viewModel.setDateRange("", "")
                     else {
@@ -229,8 +257,8 @@ fun TripHistoryScreen(
 
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 20.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (groupByDate) {
                         state.trips.groupBy { it.date }.forEach { (date, trips) ->
@@ -238,20 +266,18 @@ fun TripHistoryScreen(
                                 DateSectionHeader(date = date, trips = trips)
                             }
                             items(trips, key = { it.id }) { trip ->
-                                TripHistoryItem(
+                                CompactTripHistoryCard(
                                     trip = trip,
                                     smartNames = state.smartNamesMap[trip.id],
-                                    showDate = false,
                                     onClick = { viewModel.selectTripForDetails(trip) }
                                 )
                             }
                         }
                     } else {
                         items(state.trips, key = { it.id }) { trip ->
-                            TripHistoryItem(
+                            CompactTripHistoryCard(
                                 trip = trip,
                                 smartNames = state.smartNamesMap[trip.id],
-                                showDate = true,
                                 onClick = { viewModel.selectTripForDetails(trip) }
                             )
                         }
@@ -280,49 +306,57 @@ private fun HistoryControls(
     onEntityChange: (String) -> Unit,
     onSyncChange: (String) -> Unit,
     onClearDateFilter: () -> Unit,
+    onDateRangeChange: (String, String) -> Unit,
     onMonthChange: (String) -> Unit,
     onBackToReports: (() -> Unit)?
 ) {
-    var isSortExpanded by remember { mutableStateOf(false) }
+    val hasActiveFilter = state.selectedClassificationFilter != "ALL" ||
+        state.startDateFilter.isNotBlank() ||
+        state.endDateFilter.isNotBlank() ||
+        state.searchQuery.isNotBlank()
+    var isSortExpanded by remember(hasActiveFilter) { mutableStateOf(hasActiveFilter) }
     var openPicker by remember { mutableStateOf<String?>(null) }
     var choseAllMonths by remember { mutableStateOf(false) }
     var choseAllCategories by remember { mutableStateOf(false) }
 
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val primaryText = if (dark) MaterialTheme.colorScheme.onSurface else Color(0xFF192A40)
+    val secondaryText = if (dark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF718096)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 10.dp),
+            .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (onBackToReports != null) {
+                IconButton(
+                    onClick = onBackToReports,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = primaryText,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+            }
             Text(
                 text = "Trip History",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                ),
+                color = primaryText
             )
-            if (onBackToReports != null) {
-                TextButton(onClick = onBackToReports) {
-                    Icon(
-                        Icons.Default.ArrowBack,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text("Back to Reports")
-                }
-            } else {
-                Text(
-                    text = "${state.trips.size} drives  •  ${formatMiles(state.totalFilteredMiles)} mi",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
 
         // Search Bar & Sort Toggle Button
@@ -424,8 +458,13 @@ private fun HistoryControls(
             ) {
                 listOf("Months", "Category", "Sort").forEach { picker ->
                     val label = when (picker) {
-                        "Months" -> state.startDateFilter.takeIf { it.isNotBlank() }?.let(::formatMonthFilter)
-                            ?: if (choseAllMonths) "All months" else "Months"
+                        "Months" -> {
+                            if (state.startDateFilter.isNotBlank() || state.endDateFilter.isNotBlank()) {
+                                formatDateRangeFilter(state.startDateFilter, state.endDateFilter)
+                            } else {
+                                if (choseAllMonths) "All dates" else "Dates"
+                            }
+                        }
                         "Category" -> state.selectedClassificationFilter.takeIf { it != "ALL" }
                             ?.lowercase()?.replaceFirstChar { it.uppercase() }
                             ?: if (choseAllCategories) "All" else "Category"
@@ -459,8 +498,19 @@ private fun HistoryControls(
 
         if (openPicker != null) {
             val picker = openPicker!!
+            val todayStr = LocalDate.now().toString()
+            val mondayStr = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString()
+            val sundayStr = LocalDate.now().with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).toString()
+            val monthStart = LocalDate.now().withDayOfMonth(1).toString()
+            val monthEnd = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth()).toString()
+
             val options: List<Pair<String, String>> = when (picker) {
-                "Months" -> listOf("All months" to "") + state.availableMonths.map { formatMonthFilter("$it-01") to it }
+                "Months" -> listOf(
+                    "All dates" to "ALL",
+                    "Today" to "TODAY",
+                    "This Week" to "THIS_WEEK",
+                    "This Month" to "THIS_MONTH"
+                ) + state.availableMonths.map { formatMonthFilter("$it-01") to it }
                 "Category" -> listOf("All" to "ALL", "Business" to "BUSINESS", "Personal" to "PERSONAL")
                 else -> listOf(
                     "High to low" to SortOrder.HIGHEST_MILEAGE.name,
@@ -469,26 +519,44 @@ private fun HistoryControls(
                     "Least money" to SortOrder.LEAST_MONEY.name
                 )
             }
-            androidx.compose.material3.ModalBottomSheet(onDismissRequest = { openPicker = null }) {
-                Text(
-                    picker,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+            AppFloatingBottomSheet(
+                onDismissRequest = { openPicker = null },
+                title = if (picker == "Months") "Filter by date" else if (picker == "Category") "Filter by category" else "Sort trips",
+                onClose = { openPicker = null }
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                ) {
                     items(options.size) { index ->
                         val (label, value) = options[index]
                         val selected = when (picker) {
-                            "Months" -> state.startDateFilter.startsWith(value) && (value.isNotEmpty() || state.startDateFilter.isBlank())
+                            "Months" -> when (value) {
+                                "ALL", "" -> state.startDateFilter.isBlank() && state.endDateFilter.isBlank()
+                                "TODAY" -> state.startDateFilter == todayStr && state.endDateFilter == todayStr
+                                "THIS_WEEK" -> state.startDateFilter == mondayStr && state.endDateFilter == sundayStr
+                                "THIS_MONTH" -> state.startDateFilter == monthStart && state.endDateFilter == monthEnd
+                                else -> state.startDateFilter.startsWith(value) && value.isNotEmpty()
+                            }
                             "Category" -> state.selectedClassificationFilter == value
                             else -> state.sortOrder.name == value
                         }
                         Row(
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 52.dp)
                                 .clickable {
                                     when (picker) {
-                                        "Months" -> { choseAllMonths = value.isBlank(); onMonthChange(value) }
+                                        "Months" -> {
+                                            when (value) {
+                                                "ALL", "" -> { choseAllMonths = true; onClearDateFilter() }
+                                                "TODAY" -> { choseAllMonths = false; onDateRangeChange(todayStr, todayStr) }
+                                                "THIS_WEEK" -> { choseAllMonths = false; onDateRangeChange(mondayStr, sundayStr) }
+                                                "THIS_MONTH" -> { choseAllMonths = false; onDateRangeChange(monthStart, monthEnd) }
+                                                else -> { choseAllMonths = false; onMonthChange(value) }
+                                            }
+                                        }
                                         "Category" -> { choseAllCategories = value == "ALL"; onClassificationChange(value) }
                                         else -> onSortChange(SortOrder.valueOf(value))
                                     }
@@ -545,22 +613,28 @@ private fun SortFilterPill(
 @Composable
 private fun DateSectionHeader(date: String, trips: List<TripEntity>) {
     val miles = trips.sumOf { it.totalDistanceMiles }
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val titleColor = if (dark) MaterialTheme.colorScheme.onSurface else Color(0xFF192A40)
+    val summaryColor = if (dark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF718096)
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 8.dp, bottom = 2.dp),
+            .padding(top = 14.dp, bottom = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = formatHistoryDate(date),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = titleColor
         )
         Text(
-            text = "${trips.size} ${if (trips.size == 1) "drive" else "drives"}  •  ${formatMiles(miles)} mi",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = "${trips.size} ${if (trips.size == 1) "drive" else "drives"} · ${formatMiles(miles)} mi",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            color = summaryColor
         )
     }
 }
@@ -661,133 +735,6 @@ private fun EmptyHistory(
     }
 }
 
-@Composable
-private fun TripHistoryItem(
-    trip: TripEntity,
-    smartNames: com.businesstracker.mileage.domain.usecase.SmartTripNames? = null,
-    showDate: Boolean,
-    onClick: () -> Unit
-) {
-    val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
-    val timeRange = remember(trip.startTime, trip.endTime) {
-        "${timeFormatter.format(Date(trip.startTime))} – ${timeFormatter.format(Date(trip.endTime))}"
-    }
-    val isBusiness = trip.classification == "BUSINESS"
-    val badgeIcon = when (trip.classification) {
-        "BUSINESS" -> Icons.Default.BusinessCenter
-        "PERSONAL" -> Icons.Default.Person
-        else -> Icons.Default.Info
-    }
-    val badgeColor = if (isBusiness) SucculentPrimary else Color(0xFF2563EB)
-    val start = smartNames?.startDisplayName ?: (trip.startAddress ?: "Recorded start location")
-    val end = smartNames?.endDisplayName ?: (trip.endAddress ?: "Recorded destination")
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 14.dp, top = 12.dp, end = 8.dp, bottom = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (showDate) "${formatHistoryDate(trip.date)}  •  $timeRange" else timeRange,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = "${formatMiles(trip.totalDistanceMiles)} mi",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            if (isBusiness && trip.purpose.isNotBlank()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = trip.purpose,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false).padding(end = 8.dp)
-                    )
-                    Text(
-                        text = formatCurrency(trip.calculatedDeduction),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = SucculentPrimary
-                    )
-                }
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    HistoryLocationLine(address = start, tint = SucculentPrimary, isStart = true)
-                    HistoryLocationLine(address = end, tint = SpeedRed, isStart = false)
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    if (isBusiness && trip.purpose.isBlank()) {
-                        Text(
-                            text = formatCurrency(trip.calculatedDeduction),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = SucculentPrimary
-                        )
-                    }
-                    Box(modifier = Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-                        Icon(
-                            badgeIcon,
-                            contentDescription = if (isBusiness) "Business trip" else if (trip.classification == "PERSONAL") "Personal trip" else "Unreviewed trip",
-                            tint = if (trip.classification == "UNREVIEWED") MaterialTheme.colorScheme.onSurfaceVariant else badgeColor,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HistoryLocationLine(address: String, tint: androidx.compose.ui.graphics.Color, isStart: Boolean) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        if (isStart) {
-            com.businesstracker.mileage.ui.components.StartBeaconIcon(tint = tint, size = 16.dp)
-        } else {
-            com.businesstracker.mileage.ui.components.EndFlagIcon(tint = tint, size = 16.dp)
-        }
-        Spacer(Modifier.width(6.dp))
-        Text(
-            text = address,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
 private fun formatMiles(miles: Double): String = String.format(Locale.US, "%.1f", miles)
 
 private fun formatCurrency(amount: Double): String = String.format(Locale.US, "$%.2f", amount)
@@ -805,4 +752,51 @@ private fun formatMonthFilter(startDate: String): String {
         val month = YearMonth.parse(startDate.take(7), DateTimeFormatter.ofPattern("yyyy-MM"))
         "${month.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())} ${month.year}"
     }.getOrDefault(startDate.take(7))
+}
+
+internal fun formatDateRangeFilter(startDate: String, endDate: String): String {
+    if (startDate.isBlank() && endDate.isBlank()) return "Dates"
+    val now = LocalDate.now()
+    val todayStr = now.toString()
+    val yesterdayStr = now.minusDays(1).toString()
+    val mondayStr = now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString()
+    val sundayStr = now.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).toString()
+    val monthStart = now.withDayOfMonth(1).toString()
+    val monthEnd = now.withDayOfMonth(now.lengthOfMonth()).toString()
+    val yearStart = "${now.year}-01-01"
+    val yearEnd = "${now.year}-12-31"
+
+    if (startDate == endDate && startDate.isNotBlank()) {
+        if (startDate == todayStr) return "Today"
+        if (startDate == yesterdayStr) return "Yesterday"
+        return runCatching {
+            val d = LocalDate.parse(startDate)
+            "${d.month.getDisplayName(TextStyle.SHORT, Locale.US)} ${d.dayOfMonth}"
+        }.getOrDefault(startDate)
+    }
+
+    if (startDate == mondayStr && endDate == sundayStr) return "This Week"
+    if (startDate == monthStart && endDate == monthEnd) return "This Month"
+    if (startDate == yearStart && endDate == yearEnd) return "This Year"
+
+    // Check if it's a full calendar month
+    if (startDate.endsWith("-01") && startDate.take(7) == endDate.take(7)) {
+        return runCatching {
+            val ym = YearMonth.parse(startDate.take(7))
+            "${ym.month.getDisplayName(TextStyle.SHORT, Locale.US)} ${ym.year}"
+        }.getOrDefault(startDate.take(7))
+    }
+
+    return runCatching {
+        val s = LocalDate.parse(startDate)
+        val e = LocalDate.parse(endDate)
+        val sMonth = s.month.getDisplayName(TextStyle.SHORT, Locale.US)
+        val eMonth = e.month.getDisplayName(TextStyle.SHORT, Locale.US)
+        if (s.year == e.year) {
+            if (s.month == e.month) "$sMonth ${s.dayOfMonth}–${e.dayOfMonth}"
+            else "$sMonth ${s.dayOfMonth} – $eMonth ${e.dayOfMonth}"
+        } else {
+            "$sMonth ${s.dayOfMonth}, ${s.year} – $eMonth ${e.dayOfMonth}, ${e.year}"
+        }
+    }.getOrDefault(if (startDate == endDate) startDate else "$startDate to $endDate")
 }

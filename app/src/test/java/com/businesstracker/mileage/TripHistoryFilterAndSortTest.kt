@@ -527,4 +527,40 @@ class TripHistoryFilterAndSortTest {
         org.junit.Assert.assertNull(viewModel.uiState.value.recentlyDeletedTrip)
         org.junit.Assert.assertFalse(tripList.any { it.id == "2" })
     }
+
+    @Test
+    fun categoryAndDateRangeFilter_synchronizesWithDashboardMileage() = runTest {
+        val viewModel = TripHistoryViewModel(fakeRepository)
+        advanceUntilIdle()
+
+        // 1. Filter: Business + Week range (2026-11-01 to 2026-11-07)
+        viewModel.setClassificationFilter("BUSINESS")
+        viewModel.setDateRange("2026-11-01", "2026-11-07")
+        advanceUntilIdle()
+
+        val businessState = viewModel.uiState.value
+        assertEquals("BUSINESS", businessState.selectedClassificationFilter)
+        assertEquals("2026-11-01", businessState.startDateFilter)
+        assertEquals("2026-11-07", businessState.endDateFilter)
+        // sampleTrips 1 ("2026-11-01", 10.0 mi, BUSINESS) and 2 ("2026-11-03", 25.0 mi, BUSINESS)
+        assertEquals(2, businessState.trips.size)
+        assertEquals(35.0, businessState.totalFilteredMiles, 0.01)
+
+        // 2. Filter: Personal + Date range
+        viewModel.setClassificationFilter("PERSONAL")
+        advanceUntilIdle()
+
+        val personalState = viewModel.uiState.value
+        assertEquals("PERSONAL", personalState.selectedClassificationFilter)
+        // sampleTrip 3 ("2026-11-02", 5.0 mi, PERSONAL)
+        assertEquals(1, personalState.trips.size)
+        assertEquals(5.0, personalState.totalFilteredMiles, 0.01)
+    }
+
+    @Test
+    fun formatDateRangeFilter_formatsPresetsAndRanges() {
+        val todayStr = java.time.LocalDate.now().toString()
+        assertEquals("Today", com.businesstracker.mileage.ui.history.formatDateRangeFilter(todayStr, todayStr))
+        assertEquals("Dates", com.businesstracker.mileage.ui.history.formatDateRangeFilter("", ""))
+    }
 }

@@ -1,30 +1,39 @@
 package com.businesstracker.mileage.ui.settings
 
 import android.view.WindowManager
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindowProvider
+import com.businesstracker.mileage.ui.theme.AppShapes
 
-/** Shared appearance for Settings editors, including the window behind the dialog. */
+/**
+ * Legacy dialog surface preserved for backwards compatibility.
+ * Replaced by [com.businesstracker.mileage.ui.components.AppFloatingBottomSheet]
+ * and [com.businesstracker.mileage.ui.components.AppConfirmationDialog].
+ *
+ * Updated to use 100% opaque theme-aware surface per design system requirements.
+ */
+@Deprecated("Use AppFloatingBottomSheet for editors or AppConfirmationDialog for alerts")
 @Composable
-internal fun SettingsDialogSurface(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+internal fun SettingsDialogSurface(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
     val window = (LocalView.current.parent as? DialogWindowProvider)?.window
     SideEffect {
         window?.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-        window?.setDimAmount(0.8f)
+        window?.setDimAmount(0.50f)
     }
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceColorAtElevation(6.dp).copy(alpha = 0.9f),
-        tonalElevation = 0.dp,
+        shape = AppShapes.FloatingDialog,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = MaterialTheme.colorScheme.surfaceTint.let { 0.dp },
         content = content
     )
 }

@@ -21,6 +21,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -36,7 +37,12 @@ private data class MileageCardColors(
 )
 
 @Composable
-internal fun MileageBreakdownCard(summary: DashboardSummary, onDeductionClick: (() -> Unit)?) {
+internal fun MileageBreakdownCard(
+    summary: DashboardSummary,
+    periodLabel: String = "",
+    onCategoryClick: ((category: String) -> Unit)? = null,
+    onDeductionClick: (() -> Unit)? = null
+) {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val colors = if (dark) MileageCardColors(MaterialTheme.colorScheme.surface,
         MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.onSurfaceVariant,
@@ -66,18 +72,54 @@ internal fun MileageBreakdownCard(summary: DashboardSummary, onDeductionClick: (
             Canvas(Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)).semantics {
                 contentDescription = "Business $businessPercent percent, personal $personalPercent percent"
             }) {
-                if (total <= 0) drawRect(colors.divider)
-                else {
+                if (total <= 0) {
+                    drawRect(colors.divider)
+                } else {
                     val boundary = size.width * animatedFraction
                     drawRect(colors.business, size = Size(boundary, size.height))
                     drawRect(colors.personal, topLeft = Offset(boundary, 0f), size = Size(size.width - boundary, size.height))
+                    // Draw a crisp 2dp white separator between Business and Personal segments
+                    // Only display when both categories have mileage (disappears for 100% Business, 100% Personal, or zero mileage)
+                    if (animatedFraction > 0.001f && animatedFraction < 0.999f) {
+                        val sepWidth = 2.dp.toPx()
+                        val sepLeft = (boundary - sepWidth / 2f).coerceIn(0f, size.width - sepWidth)
+                        drawRect(
+                            color = Color.White,
+                            topLeft = Offset(sepLeft, 0f),
+                            size = Size(sepWidth, size.height)
+                        )
+                    }
                 }
             }
             Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MileageCategory("Business", business, businessPercent, Icons.Outlined.BusinessCenter, colors.business, colors.mint, colors,
-                    Modifier.weight(1f).fillMaxHeight())
-                MileageCategory("Personal", personal, personalPercent, Icons.Outlined.Home, colors.personal, colors.blue, colors,
-                    Modifier.weight(1f).fillMaxHeight())
+                val periodSuffix = if (periodLabel.isNotBlank()) " for $periodLabel" else ""
+                val businessA11y = "Business, ${String.format(Locale.US, "%,.1f", business)} miles, $businessPercent percent. View Business trips$periodSuffix."
+                val personalA11y = "Personal, ${String.format(Locale.US, "%,.1f", personal)} miles, $personalPercent percent. View Personal trips$periodSuffix."
+
+                MileageCategory(
+                    title = "Business",
+                    miles = business,
+                    percent = businessPercent,
+                    icon = Icons.Outlined.BusinessCenter,
+                    accent = colors.business,
+                    background = colors.mint,
+                    colors = colors,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    onClick = if (onCategoryClick != null) { { onCategoryClick("BUSINESS") } } else null,
+                    accessibilityDescription = businessA11y
+                )
+                MileageCategory(
+                    title = "Personal",
+                    miles = personal,
+                    percent = personalPercent,
+                    icon = Icons.Outlined.Home,
+                    accent = colors.personal,
+                    background = colors.blue,
+                    colors = colors,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    onClick = if (onCategoryClick != null) { { onCategoryClick("PERSONAL") } } else null,
+                    accessibilityDescription = personalA11y
+                )
             }
             HorizontalDivider(color = colors.divider)
             Row(
@@ -103,9 +145,39 @@ internal fun MileageBreakdownCard(summary: DashboardSummary, onDeductionClick: (
 }
 
 @Composable
-private fun MileageCategory(title: String, miles: Double, percent: Int, icon: ImageVector,
-    accent: Color, background: Color, colors: MileageCardColors, modifier: Modifier = Modifier) {
-    Surface(modifier, shape = RoundedCornerShape(16.dp), color = background) {
+private fun MileageCategory(
+    title: String,
+    miles: Double,
+    percent: Int,
+    icon: ImageVector,
+    accent: Color,
+    background: Color,
+    colors: MileageCardColors,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    accessibilityDescription: String? = null
+) {
+    Surface(
+        modifier = modifier
+            .then(
+                if (onClick != null) {
+                    Modifier
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable(
+                            role = Role.Button,
+                            onClickLabel = "View $title trips",
+                            onClick = onClick
+                        )
+                } else Modifier
+            )
+            .then(
+                if (accessibilityDescription != null) {
+                    Modifier.semantics { contentDescription = accessibilityDescription }
+                } else Modifier
+            ),
+        shape = RoundedCornerShape(16.dp),
+        color = background
+    ) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))

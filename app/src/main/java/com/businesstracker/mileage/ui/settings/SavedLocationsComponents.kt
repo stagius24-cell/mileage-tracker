@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -59,6 +61,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -83,10 +87,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
@@ -98,6 +104,11 @@ import com.businesstracker.mileage.domain.usecase.SearchAddressResult
 import com.businesstracker.mileage.domain.usecase.CurrentLocationResult
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
+import com.businesstracker.mileage.ui.theme.AppDimensions
+import com.businesstracker.mileage.ui.theme.AppShapes
+import com.businesstracker.mileage.ui.theme.AppSpacing
+import com.businesstracker.mileage.ui.components.AppConfirmationDialog
+import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.semantics.Role
@@ -312,55 +323,24 @@ fun SavedLocationDialog(
         }
     }
 
-    Dialog(
-        onDismissRequest = {
-            if (!isSaving) onDismiss()
-        },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+    AppFloatingBottomSheet(
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        title = if (initialLocation != null) "Edit Saved Location" else "Add Saved Location",
+        onClose = { onDismiss() },
+        isDismissible = !isSaving
     ) {
-        SettingsDialogSurface(
+        Column(
             modifier = Modifier
-                .fillMaxWidth(0.94f)
-                .heightIn(max = 640.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 12.dp)
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (initialLocation != null) "Edit Saved Location" else "Add Saved Location",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    IconButton(
-                        onClick = onDismiss,
-                        enabled = !isSaving,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .semantics {
-                                role = Role.Button
-                                contentDescription = "Close dialog"
-                            }
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(22.dp))
-                    }
-                }
-
-                Spacer(Modifier.height(0.dp))
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
                     // Search Address + Inline GPS button
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -376,7 +356,7 @@ fun SavedLocationDialog(
                                 searchResults = emptyList()
                                 searchError = null
                             },
-                            modifier = Modifier.weight(1f).heightIn(max = 56.dp),
+                            modifier = Modifier.weight(1f).heightIn(min = 56.dp),
                             label = { Text("Search Address", style = MaterialTheme.typography.labelMedium) },
                             placeholder = { Text("Search address", style = MaterialTheme.typography.bodySmall) },
                             textStyle = MaterialTheme.typography.bodyMedium,
@@ -421,7 +401,7 @@ fun SavedLocationDialog(
                                 }
                             },
                             singleLine = true,
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
 
                         // Inline Use GPS button on the right
@@ -452,8 +432,8 @@ fun SavedLocationDialog(
                             },
                             enabled = !isLocating && !isSaving,
                             modifier = Modifier
-                                .defaultMinSize(minHeight = 48.dp),
-                            shape = RoundedCornerShape(10.dp),
+                                .heightIn(min = 56.dp),
+                            shape = RoundedCornerShape(12.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             if (isLocating) {
@@ -477,7 +457,7 @@ fun SavedLocationDialog(
                     if (searchResults.isNotEmpty()) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
                             Column(modifier = Modifier.padding(8.dp)) {
@@ -524,25 +504,24 @@ fun SavedLocationDialog(
                             name = it
                             formError = null
                         },
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 56.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                         label = { Text("Location Name *", style = MaterialTheme.typography.labelMedium) },
                         placeholder = { Text("e.g. Home, Succulent Nursery, Warehouse", style = MaterialTheme.typography.bodySmall) },
                         textStyle = MaterialTheme.typography.bodyMedium,
                         singleLine = true,
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     // Compact Address Field (resolved)
                     OutlinedTextField(
                         value = address,
                         onValueChange = { address = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(max = 72.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
                         label = { Text("Address *", style = MaterialTheme.typography.labelMedium) },
                         placeholder = { Text("123 Example Street, San Jose, CA", style = MaterialTheme.typography.bodySmall) },
                         textStyle = MaterialTheme.typography.bodyMedium,
-                        singleLine = false,
-                        maxLines = 2,
-                        shape = RoundedCornerShape(10.dp)
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     if (latitude != 0.0 || longitude != 0.0) {
@@ -553,29 +532,32 @@ fun SavedLocationDialog(
                         )
                     }
 
-                    // Icon Picker
-                    Text("Location Icon", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    LazyRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        items(AVAILABLE_LOCATION_ICONS) { (key, label) ->
-                            FilterChip(
-                                selected = selectedIcon.equals(key, ignoreCase = true),
-                                onClick = { selectedIcon = key },
-                                modifier = Modifier.defaultMinSize(minHeight = 40.dp),
-                                leadingIcon = {
-                                    Icon(getIconForLocation(key), contentDescription = null, modifier = Modifier.size(16.dp))
-                                },
-                                label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = SucculentPrimary,
-                                    selectedLabelColor = Color.White,
-                                    selectedLeadingIconColor = Color.White
-                                )
-                            )
+                    // Three visible choices; the menu retains every existing icon option.
+                    var iconMenuExpanded by remember { mutableStateOf(false) }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Location Icon", modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                        Box {
+                            TextButton(onClick = { iconMenuExpanded = true },
+                                modifier = Modifier.defaultMinSize(minHeight = 48.dp)) { Text("All icons") }
+                            DropdownMenu(expanded = iconMenuExpanded,
+                                onDismissRequest = { iconMenuExpanded = false }) {
+                                AVAILABLE_LOCATION_ICONS.forEach { (key, label) ->
+                                    DropdownMenuItem(text = { Text(label) },
+                                        leadingIcon = { Icon(getIconForLocation(key), contentDescription = null) },
+                                        onClick = { selectedIcon = key; iconMenuExpanded = false })
+                                }
+                            }
                         }
                     }
+                    val visibleIcons = listOf("place", "home",
+                        selectedIcon.takeIf { it != "place" && it != "home" } ?: "nursery")
+                    SettingsSegmentedOptions(
+                        options = visibleIcons.map { key -> key to (AVAILABLE_LOCATION_ICONS.firstOrNull { it.first == key }?.second ?: key) },
+                        selected = selectedIcon,
+                        onSelect = { selectedIcon = it },
+                        iconFor = ::getIconForLocation
+                    )
 
                     // Matching Radius Slider in Imperial units (feet)
                     Column(modifier = Modifier.fillMaxWidth()) {
@@ -593,32 +575,25 @@ fun SavedLocationDialog(
                             onValueChange = { radiusMeters = it },
                             valueRange = 50f..500f,
                             steps = 8,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            thumb = { Box(Modifier.size(20.dp).background(SucculentPrimary, CircleShape)) },
                             colors = SliderDefaults.colors(
                                 thumbColor = SucculentPrimary,
                                 activeTrackColor = SucculentPrimary
-                            )
+                            ),
+                            track = { sliderState ->
+                                SliderDefaults.Track(sliderState = sliderState, modifier = Modifier.height(4.dp))
+                            }
                         )
                     }
 
-                    // Classification Preference
-                    Text("Classification Preference", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf("NONE" to "None", "BUSINESS" to "Business", "PERSONAL" to "Personal").forEach { (pref, label) ->
-                            FilterChip(
-                                selected = classificationPref == pref,
-                                onClick = { classificationPref = pref },
-                                modifier = Modifier.defaultMinSize(minHeight = 40.dp),
-                                label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = SucculentPrimary,
-                                    selectedLabelColor = Color.White
-                                )
-                            )
-                        }
-                    }
+                    Text("Classification Preference", style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.SemiBold)
+                    SettingsSegmentedOptions(
+                        options = listOf("NONE" to "None", "BUSINESS" to "Business", "PERSONAL" to "Personal"),
+                        selected = classificationPref,
+                        onSelect = { classificationPref = it }
+                    )
 
                     if (classificationPref == "BUSINESS") {
                         Text("Business Entity", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
@@ -651,22 +626,14 @@ fun SavedLocationDialog(
                     }
                 }
 
-                Spacer(Modifier.height(0.dp))
+                Spacer(Modifier.height(16.dp))
 
-                // Footer Buttons
+                // Footer stays outside the scrolling form and above the keyboard.
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(
-                        onClick = onDismiss,
-                        enabled = !isSaving,
-                        modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                    ) {
-                        Text("Cancel")
-                    }
-                    Spacer(Modifier.width(12.dp))
                     Button(
                         onClick = {
                             if (isSaving) return@Button
@@ -699,8 +666,8 @@ fun SavedLocationDialog(
                         },
                         enabled = !isSaving,
                         colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp)
                     ) {
                         if (isSaving) {
                             CircularProgressIndicator(
@@ -716,7 +683,6 @@ fun SavedLocationDialog(
                     }
                 }
             }
-        }
     }
 }
 
@@ -738,10 +704,13 @@ fun SavedLocationsRestorePreviewDialog(
 ) {
     when (state) {
         is SavedLocationsRestorePreviewUi.Empty -> {
-            AlertDialog(
+            AppConfirmationDialog(
                 onDismissRequest = onDismiss,
-                title = { Text("Restore from Google Sheets", fontWeight = FontWeight.Bold) },
-                text = {
+                title = "Restore from Google Sheets",
+                confirmLabel = "OK",
+                onConfirm = onDismiss,
+                dismissLabel = null,
+                content = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(state.message, style = MaterialTheme.typography.bodyMedium)
                         if (state.localCount > 0) {
@@ -753,22 +722,17 @@ fun SavedLocationsRestorePreviewDialog(
                             )
                         }
                     }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-                    ) {
-                        Text("OK")
-                    }
                 }
             )
         }
         is SavedLocationsRestorePreviewUi.Failure -> {
-            AlertDialog(
+            AppConfirmationDialog(
                 onDismissRequest = onDismiss,
-                title = { Text("Restore Unavailable", fontWeight = FontWeight.Bold) },
-                text = {
+                title = "Restore Unavailable",
+                confirmLabel = "Close",
+                onConfirm = onDismiss,
+                dismissLabel = null,
+                content = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(state.message, style = MaterialTheme.typography.bodyMedium)
                         Text(
@@ -776,14 +740,6 @@ fun SavedLocationsRestorePreviewDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-                    ) {
-                        Text("Close")
                     }
                 }
             )
@@ -795,144 +751,131 @@ fun SavedLocationsRestorePreviewDialog(
                 conflictCandidates.all { it.cloudLocation.id in state.approvedConflictIds }
             val selectedCount = state.selectedIds.size
 
-            Dialog(
+            AppFloatingBottomSheet(
                 onDismissRequest = { if (!isApplying) onDismiss() },
-                properties = DialogProperties(usePlatformDefaultWidth = false)
+                title = "Preview Restore from Sheets",
+                onClose = { onDismiss() },
+                isDismissible = !isApplying
             ) {
-                Surface(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 24.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 8.dp
+                        .padding(horizontal = 20.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp)
+                    Text(
+                        text = "Choose which locations to import. Existing local changes stay protected unless you check them to overwrite.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = "Preview Restore from Sheets",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "Choose which locations to import. Existing local changes stay protected unless you check them to overwrite.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Trip sync is upload-only (restore unavailable). Saved Locations are ready to restore.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
 
-                        Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
 
+                    if (preview.localOnlyLocations.isNotEmpty()) {
+                        Text(
+                            text = "${preview.localOnlyLocations.size} local-only location(s) will remain untouched.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = SucculentPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
+
+                    if (conflictCandidates.isNotEmpty()) {
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFFFF8E1),
+                            border = BorderStroke(1.dp, Color(0xFFFFD54F)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSetOverwriteConflicts(!allConflictsApproved) }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "Trip sync is upload-only (restore unavailable). Saved Locations are ready to restore.",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Checkbox(
+                                    checked = allConflictsApproved,
+                                    onCheckedChange = onSetOverwriteConflicts
                                 )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Overwrite all ${conflictCandidates.size} local conflict/deleted item(s)",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF5D4037)
+                                    )
+                                    Text(
+                                        text = "Leave unchecked to preserve your local versions.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF795548)
+                                    )
+                                }
                             }
                         }
+                        Spacer(Modifier.height(8.dp))
+                    }
 
-                        Spacer(Modifier.height(10.dp))
-
-                        if (preview.localOnlyLocations.isNotEmpty()) {
-                            Text(
-                                text = "${preview.localOnlyLocations.size} local-only location(s) will remain untouched.",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = SucculentPrimary,
-                                fontWeight = FontWeight.SemiBold
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(preview.candidates, key = { it.cloudLocation.id }) { candidate ->
+                            RestoreCandidateRow(
+                                candidate = candidate,
+                                isSelected = candidate.cloudLocation.id in state.selectedIds,
+                                onToggle = { onToggleCandidate(candidate.cloudLocation.id) }
                             )
-                            Spacer(Modifier.height(6.dp))
                         }
+                    }
 
-                        if (conflictCandidates.isNotEmpty()) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFFFFF8E1),
-                                border = BorderStroke(1.dp, Color(0xFFFFD54F)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onSetOverwriteConflicts(!allConflictsApproved) }
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = allConflictsApproved,
-                                        onCheckedChange = onSetOverwriteConflicts
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "Overwrite all ${conflictCandidates.size} local conflict/deleted item(s)",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF5D4037)
-                                        )
-                                        Text(
-                                            text = "Leave unchecked to preserve your local versions.",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF795548)
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss, enabled = !isApplying) {
+                            Text("Cancel")
                         }
-
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 320.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = onConfirmApply,
+                            enabled = !isApplying && selectedCount > 0,
+                            colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            items(preview.candidates, key = { it.cloudLocation.id }) { candidate ->
-                                RestoreCandidateRow(
-                                    candidate = candidate,
-                                    isSelected = candidate.cloudLocation.id in state.selectedIds,
-                                    onToggle = { onToggleCandidate(candidate.cloudLocation.id) }
+                            if (isApplying) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
                                 )
+                                Spacer(Modifier.width(8.dp))
                             }
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(onClick = onDismiss, enabled = !isApplying) {
-                                Text("Cancel")
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Button(
-                                onClick = onConfirmApply,
-                                enabled = !isApplying && selectedCount > 0,
-                                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                if (isApplying) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                }
-                                Text("Apply ($selectedCount)", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
+                            Text("Apply ($selectedCount)", color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1008,6 +951,36 @@ private fun RestoreCandidateRow(
                     color = statusColor,
                     fontWeight = FontWeight.Medium
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsSegmentedOptions(
+    options: List<Pair<String, String>>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    iconFor: ((String) -> ImageVector)? = null
+) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        options.forEach { (key, label) ->
+            val active = selected.equals(key, ignoreCase = true)
+            Surface(
+                modifier = Modifier.weight(1f).defaultMinSize(minHeight = 48.dp)
+                    .clip(RoundedCornerShape(12.dp)).clickable { onSelect(key) },
+                shape = RoundedCornerShape(12.dp),
+                color = if (active) SucculentPrimary else MaterialTheme.colorScheme.surfaceVariant,
+                contentColor = if (active) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+            ) {
+                Row(Modifier.defaultMinSize(minHeight = 48.dp).padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center) {
+                    iconFor?.let { Icon(it(key), contentDescription = null, modifier = Modifier.size(16.dp)) }
+                    if (iconFor != null) Spacer(Modifier.width(4.dp))
+                    Text(label, style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
     }
