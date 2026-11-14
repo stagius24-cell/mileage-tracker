@@ -1088,9 +1088,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
-                "Version 1.0.131 (Build 132)" to "Grouped Settings into compact floating cards.",
-                "Version 1.0.128 (Build 129)" to "Added time picker swipe and outside-tap dismissal.",
-                "Version 1.0.127 (Build 128)" to "Refined the work schedule time picker layout and controls.",
+                "Version 1.0.134 (Build 135)" to "Added interactive monthly mileage chart to Reports.",
+                "Version 1.0.133 (Build 134)" to "Improved the time picker drag handle and width.",
+                "Version 1.0.132 (Build 133)" to "Removed Settings card edges and navigation shadow."
             )
         }
 

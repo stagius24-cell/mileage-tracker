@@ -3,6 +3,7 @@ package com.businesstracker.mileage.ui.reports
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,6 +29,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.outlined.CheckCircleOutline
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -72,6 +75,8 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -92,6 +97,9 @@ import android.os.ParcelFileDescriptor
 import androidx.core.content.FileProvider
 import java.io.File
 import java.util.Locale
+import kotlin.math.ceil
+import kotlin.math.log10
+import kotlin.math.pow
 
 @Composable
 fun ReportsExportScreen(
@@ -104,6 +112,11 @@ fun ReportsExportScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var showCreateReportDialog by rememberSaveable { mutableStateOf(false) }
     var previewPdfFile by remember { mutableStateOf<File?>(null) }
+    var showBusiness by rememberSaveable { mutableStateOf(true) }
+    var showPersonal by rememberSaveable { mutableStateOf(true) }
+    var selectedMonthIso by rememberSaveable { mutableStateOf<String?>(null) }
+    var detailsExpanded by rememberSaveable { mutableStateOf(false) }
+    val reportsListState = androidx.compose.foundation.lazy.rememberLazyListState()
 
     androidx.compose.runtime.LaunchedEffect(state.exportErrorMessage) {
         state.exportErrorMessage?.let { errorMsg ->
@@ -121,6 +134,7 @@ fun ReportsExportScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
+            state = reportsListState,
             modifier = Modifier
                 .fillMaxSize()
                 .then(if (showCreateReportDialog || previewPdfFile != null) Modifier.blur(8.dp) else Modifier)
@@ -171,13 +185,26 @@ fun ReportsExportScreen(
                 ytdLogged = state.totalDeduction,
                 totalMiles = state.totalMiles,
                 drivesCount = state.totalTrips,
-                monthlySummaries = state.monthlySummaries
+                monthlySummaries = state.monthlySummaries,
+                showBusiness = showBusiness,
+                showPersonal = showPersonal,
+                selectedMonthIso = selectedMonthIso,
+                onToggleBusiness = { showBusiness = !showBusiness },
+                onTogglePersonal = { showPersonal = !showPersonal },
+                onSelectMonth = { monthIso ->
+                    selectedMonthIso = monthIso
+                    detailsExpanded = true
+                }
             )
         }
 
         item {
             MonthlyDetailsSection(
                 summaries = state.monthlySummaries,
+                expanded = detailsExpanded,
+                selectedMonthIso = selectedMonthIso,
+                onExpandedChange = { detailsExpanded = it },
+                onSelectMonth = { selectedMonthIso = it },
                 onExportMonth = { monthIso ->
                     viewModel.exportToCsv(monthIso) { intent -> context.startActivity(intent) }
                 },
@@ -730,6 +757,12 @@ private fun YearlyStatsChartCard(
     totalMiles: Double,
     drivesCount: Int,
     monthlySummaries: List<MonthSummary>,
+    showBusiness: Boolean,
+    showPersonal: Boolean,
+    selectedMonthIso: String?,
+    onToggleBusiness: () -> Unit,
+    onTogglePersonal: () -> Unit,
+    onSelectMonth: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -764,7 +797,7 @@ private fun YearlyStatsChartCard(
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "$year Performance",
+                        text = "$year Overview",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -784,116 +817,61 @@ private fun YearlyStatsChartCard(
                 }
             }
 
-            // Financial & Mileage Metrics
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
-            ) {
-                Column {
-                    Text(
-                        text = "\$${String.format(Locale.US, "%,.2f", ytdLogged)}",
-                        style = MaterialTheme.typography.headlineLarge.copy(
-                            fontSize = 32.sp,
-                            fontWeight = FontWeight.Black
-                        ),
-                        color = SucculentPrimary
-                    )
-                    Text(
-                        text = "TOTAL DEDUCTION",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            letterSpacing = 1.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = SlateNeutral
-                    )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(Modifier.weight(1f), shape = RoundedCornerShape(14.dp),
+                    color = SucculentPrimary.copy(alpha = .10f)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("$${String.format(Locale.US, "%,.2f", ytdLogged)}",
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                            color = SucculentPrimary)
+                        Text("TOTAL DEDUCTION", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        text = "${String.format(Locale.US, "%.1f", totalMiles)} mi",
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "TOTAL MILES",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            letterSpacing = 1.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = SlateNeutral
-                    )
-                }
-            }
-
-            // Visual Month-by-Month Chart Bar
-            if (monthlySummaries.isNotEmpty()) {
-                val chartMonths = monthlySummaries.take(6).reversed()
-                val maxMonthPotential = chartMonths.maxOfOrNull { it.potentialDeduction }.let {
-                    if (it == null || it <= 0.0) 100.0 else it
-                }
-
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "MONTHLY DEDUCTION TREND",
-                        style = MaterialTheme.typography.labelSmall.copy(
-                            letterSpacing = 1.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = SlateNeutral
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(90.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        chartMonths.forEach { item ->
-                            val loggedFraction = (item.loggedDeduction / maxMonthPotential).toFloat().coerceIn(0.05f, 1f)
-                            val potentialFraction = (item.potentialDeduction / maxMonthPotential).toFloat().coerceIn(0.05f, 1f)
-                            val shortName = if (item.monthName.length >= 3) item.monthName.substring(0, 3) else item.monthName
-
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Bottom,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                // Stacked Bar
-                                Box(
-                                    modifier = Modifier
-                                        .width(22.dp)
-                                        .height((70 * potentialFraction).dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(SucculentSecondary.copy(alpha = 0.45f)),
-                                    contentAlignment = Alignment.BottomCenter
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height((70 * loggedFraction).dp)
-                                            .background(SucculentPrimary)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = shortName,
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                                    fontWeight = FontWeight.Bold,
-                                    color = SlateNeutral
-                                )
-                            }
-                        }
+                Surface(Modifier.weight(1f), shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = .5f)) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("${String.format(Locale.US, "%.1f", totalMiles)} mi",
+                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface)
+                        Text("TOTAL MILEAGE", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
+
+            val chartMonths = monthlySummaries.take(6).reversed()
+            Text("Monthly Mileage Breakdown", style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MileageCategoryToggle("Business", showBusiness, SucculentPrimary,
+                    SucculentPrimary.copy(alpha = 0.12f), onToggleBusiness, Modifier.weight(1f))
+                MileageCategoryToggle("Personal", showPersonal, PersonalBlue,
+                    PersonalBlue.copy(alpha = 0.12f), onTogglePersonal, Modifier.weight(1f))
+            }
+            if (!showBusiness && !showPersonal) {
+                Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                    Text("Select a category to view mileage.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                MonthlyStackedMileageChart(chartMonths, showBusiness, showPersonal,
+                    selectedMonthIso, onSelectMonth)
+                chartMonths.firstOrNull { it.monthIso == selectedMonthIso }?.let { selected ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text("${selected.monthName} ${selected.year}", fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.bodySmall)
+                        if (showBusiness) Text("Business: ${String.format(Locale.US, "%.1f", selected.businessMiles)} mi",
+                            style = MaterialTheme.typography.bodySmall, color = SucculentPrimary)
+                        if (showPersonal) Text("Personal: ${String.format(Locale.US, "%.1f", selected.personalMiles)} mi",
+                            style = MaterialTheme.typography.bodySmall, color = PersonalBlue)
+                        Text("Total: ${String.format(Locale.US, "%.1f", visibleMiles(selected, showBusiness, showPersonal))} mi",
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
         }
     }
 }
@@ -901,10 +879,13 @@ private fun YearlyStatsChartCard(
 @Composable
 private fun MonthlyDetailsSection(
     summaries: List<MonthSummary>,
+    expanded: Boolean,
+    selectedMonthIso: String?,
+    onExpandedChange: (Boolean) -> Unit,
+    onSelectMonth: (String?) -> Unit,
     onExportMonth: (String) -> Unit,
     onViewMonthDrives: (String) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val rotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = tween(200),
@@ -920,7 +901,7 @@ private fun MonthlyDetailsSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { expanded = !expanded }
+                    .clickable { onExpandedChange(!expanded) }
                     .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -949,6 +930,8 @@ private fun MonthlyDetailsSection(
                         if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         CompactMonthRow(
                             summary = summary,
+                            expanded = selectedMonthIso == summary.monthIso,
+                            onToggle = { onSelectMonth(if (selectedMonthIso == summary.monthIso) null else summary.monthIso) },
                             onExportMonth = { onExportMonth(summary.monthIso) },
                             onViewMonthDrives = { onViewMonthDrives(summary.monthIso) }
                         )
@@ -959,13 +942,19 @@ private fun MonthlyDetailsSection(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CompactMonthRow(
     summary: MonthSummary,
+    expanded: Boolean,
+    onToggle: () -> Unit,
     onExportMonth: () -> Unit,
     onViewMonthDrives: () -> Unit
 ) {
-    var expanded by remember(summary.monthIso) { mutableStateOf(false) }
+    val rowRequester = remember { BringIntoViewRequester() }
+    androidx.compose.runtime.LaunchedEffect(expanded) {
+        if (expanded) rowRequester.bringIntoView()
+    }
     val rotation by animateFloatAsState(
         targetValue = if (expanded) 180f else 0f,
         animationSpec = tween(150),
@@ -976,7 +965,8 @@ private fun CompactMonthRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { expanded = !expanded }
+                .bringIntoViewRequester(rowRequester)
+                .clickable(onClick = onToggle)
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1036,6 +1026,7 @@ private fun CompactMonthRow(
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     if (summary.businessMiles > 0.0) Box(Modifier.weight(businessFraction).fillMaxHeight().background(SucculentPrimary))
+                    if (summary.businessMiles > 0.0 && summary.personalMiles > 0.0) Box(Modifier.width(2.dp).fillMaxHeight().background(Color.White))
                     if (summary.personalMiles > 0.0) Box(Modifier.weight(1f - businessFraction).fillMaxHeight().background(PersonalBlue))
                 }
 
@@ -1081,5 +1072,75 @@ private fun MonthMetric(
     Column(horizontalAlignment = alignment) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+internal fun safeMiles(value: Double): Double = value.takeIf { it.isFinite() && it > 0.0 } ?: 0.0
+
+internal fun visibleMiles(summary: MonthSummary, business: Boolean, personal: Boolean): Double =
+    (if (business) safeMiles(summary.businessMiles) else 0.0) +
+        (if (personal) safeMiles(summary.personalMiles) else 0.0)
+
+internal fun mileageAxisMaximum(maxValue: Double): Double {
+    if (!maxValue.isFinite() || maxValue <= 0.0) return 1.0
+    val magnitude = 10.0.pow(kotlin.math.floor(log10(maxValue)))
+    val step = magnitude / 2.0
+    return (ceil(maxValue / step) * step).coerceAtLeast(1.0)
+}
+
+@Composable
+private fun MileageCategoryToggle(label: String, selected: Boolean, color: Color,
+    selectedBackground: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier.heightIn(min = 48.dp).clickable(onClick = onClick),
+        shape = RoundedCornerShape(24.dp),
+        color = if (selected) selectedBackground else MaterialTheme.colorScheme.surfaceVariant) {
+        Row(Modifier.padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center) {
+            Icon(if (selected) Icons.Outlined.CheckCircleOutline else Icons.Outlined.RadioButtonUnchecked,
+                contentDescription = null, tint = if (selected) color else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(5.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium,
+                color = if (selected) color else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun MonthlyStackedMileageChart(months: List<MonthSummary>, showBusiness: Boolean,
+    showPersonal: Boolean, selectedMonthIso: String?, onSelectMonth: (String) -> Unit) {
+    val maximum = mileageAxisMaximum(months.maxOfOrNull { visibleMiles(it, showBusiness, showPersonal) } ?: 0.0)
+    Row(Modifier.fillMaxWidth().height(148.dp)) {
+        Column(Modifier.width(32.dp).height(120.dp), verticalArrangement = Arrangement.SpaceBetween) {
+            Text("${String.format(Locale.US, "%.0f", maximum)}", style = MaterialTheme.typography.labelSmall)
+            Text("${String.format(Locale.US, "%.0f", maximum / 2)}", style = MaterialTheme.typography.labelSmall)
+            Text("0", style = MaterialTheme.typography.labelSmall)
+        }
+        Box(Modifier.weight(1f)) {
+            Column(Modifier.fillMaxWidth().height(120.dp), verticalArrangement = Arrangement.SpaceBetween) {
+                repeat(3) { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f)) }
+            }
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                months.forEach { month ->
+                    val business = if (showBusiness) safeMiles(month.businessMiles) else 0.0
+                    val personal = if (showPersonal) safeMiles(month.personalMiles) else 0.0
+                    val businessHeight = (120.0 * business / maximum).toFloat().coerceIn(0f, 120f).dp
+                    val personalHeight = (120.0 * personal / maximum).toFloat().coerceIn(0f, 120f).dp
+                    Column(Modifier.weight(1f).clickable { onSelectMonth(month.monthIso) },
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.BottomCenter) {
+                            Column(Modifier.width(22.dp).clip(RoundedCornerShape(topStart = 5.dp, topEnd = 5.dp))) {
+                                if (personal > 0.0) Box(Modifier.fillMaxWidth().height(personalHeight).background(PersonalBlue))
+                                if (business > 0.0 && personal > 0.0) Box(Modifier.fillMaxWidth().height(2.dp).background(Color.White))
+                                if (business > 0.0) Box(Modifier.fillMaxWidth().height(businessHeight).background(SucculentPrimary))
+                            }
+                        }
+                        Text(month.monthName.take(3), style = MaterialTheme.typography.labelSmall,
+                            color = if (month.monthIso == selectedMonthIso) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (month.monthIso == selectedMonthIso) FontWeight.Bold else FontWeight.Normal)
+                    }
+                }
+            }
+        }
     }
 }
