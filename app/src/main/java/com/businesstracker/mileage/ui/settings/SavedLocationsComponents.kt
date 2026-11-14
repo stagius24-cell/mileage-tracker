@@ -104,6 +104,11 @@ import com.businesstracker.mileage.domain.usecase.SearchAddressResult
 import com.businesstracker.mileage.domain.usecase.CurrentLocationResult
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
+import com.businesstracker.mileage.ui.theme.AppDimensions
+import com.businesstracker.mileage.ui.theme.AppShapes
+import com.businesstracker.mileage.ui.theme.AppSpacing
+import com.businesstracker.mileage.ui.components.AppConfirmationDialog
+import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.semantics.Role
@@ -318,46 +323,24 @@ fun SavedLocationDialog(
         }
     }
 
-    SettingsBottomSheet(onDismissRequest = { if (!isSaving) onDismiss() }) {
+    AppFloatingBottomSheet(
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        title = if (initialLocation != null) "Edit Saved Location" else "Add Saved Location",
+        onClose = { onDismiss() },
+        isDismissible = !isSaving
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 12.dp)
+        ) {
             Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 12.dp)
+                    .weight(1f, fill = false)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (initialLocation != null) "Edit Saved Location" else "Add Saved Location",
-                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    IconButton(
-                        onClick = onDismiss,
-                        enabled = !isSaving,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .semantics {
-                                role = Role.Button
-                                contentDescription = "Close dialog"
-                            }
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(22.dp))
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
                     // Search Address + Inline GPS button
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -721,10 +704,13 @@ fun SavedLocationsRestorePreviewDialog(
 ) {
     when (state) {
         is SavedLocationsRestorePreviewUi.Empty -> {
-            AlertDialog(
+            AppConfirmationDialog(
                 onDismissRequest = onDismiss,
-                title = { Text("Restore from Google Sheets", fontWeight = FontWeight.Bold) },
-                text = {
+                title = "Restore from Google Sheets",
+                confirmLabel = "OK",
+                onConfirm = onDismiss,
+                dismissLabel = null,
+                content = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(state.message, style = MaterialTheme.typography.bodyMedium)
                         if (state.localCount > 0) {
@@ -736,22 +722,17 @@ fun SavedLocationsRestorePreviewDialog(
                             )
                         }
                     }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-                    ) {
-                        Text("OK")
-                    }
                 }
             )
         }
         is SavedLocationsRestorePreviewUi.Failure -> {
-            AlertDialog(
+            AppConfirmationDialog(
                 onDismissRequest = onDismiss,
-                title = { Text("Restore Unavailable", fontWeight = FontWeight.Bold) },
-                text = {
+                title = "Restore Unavailable",
+                confirmLabel = "Close",
+                onConfirm = onDismiss,
+                dismissLabel = null,
+                content = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(state.message, style = MaterialTheme.typography.bodyMedium)
                         Text(
@@ -759,14 +740,6 @@ fun SavedLocationsRestorePreviewDialog(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = onDismiss,
-                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
-                    ) {
-                        Text("Close")
                     }
                 }
             )
@@ -778,144 +751,131 @@ fun SavedLocationsRestorePreviewDialog(
                 conflictCandidates.all { it.cloudLocation.id in state.approvedConflictIds }
             val selectedCount = state.selectedIds.size
 
-            Dialog(
+            AppFloatingBottomSheet(
                 onDismissRequest = { if (!isApplying) onDismiss() },
-                properties = DialogProperties(usePlatformDefaultWidth = false)
+                title = "Preview Restore from Sheets",
+                onClose = { onDismiss() },
+                isDismissible = !isApplying
             ) {
-                Surface(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 24.dp),
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 8.dp
+                        .padding(horizontal = 20.dp)
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(20.dp)
+                    Text(
+                        text = "Choose which locations to import. Existing local changes stay protected unless you check them to overwrite.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(8.dp))
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = "Preview Restore from Sheets",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = "Choose which locations to import. Existing local changes stay protected unless you check them to overwrite.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Trip sync is upload-only (restore unavailable). Saved Locations are ready to restore.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
 
-                        Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
 
+                    if (preview.localOnlyLocations.isNotEmpty()) {
+                        Text(
+                            text = "${preview.localOnlyLocations.size} local-only location(s) will remain untouched.",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = SucculentPrimary,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(Modifier.height(6.dp))
+                    }
+
+                    if (conflictCandidates.isNotEmpty()) {
                         Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color(0xFFFFF8E1),
+                            border = BorderStroke(1.dp, Color(0xFFFFD54F)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onSetOverwriteConflicts(!allConflictsApproved) }
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = "Trip sync is upload-only (restore unavailable). Saved Locations are ready to restore.",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Checkbox(
+                                    checked = allConflictsApproved,
+                                    onCheckedChange = onSetOverwriteConflicts
                                 )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Overwrite all ${conflictCandidates.size} local conflict/deleted item(s)",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF5D4037)
+                                    )
+                                    Text(
+                                        text = "Leave unchecked to preserve your local versions.",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF795548)
+                                    )
+                                }
                             }
                         }
+                        Spacer(Modifier.height(8.dp))
+                    }
 
-                        Spacer(Modifier.height(10.dp))
-
-                        if (preview.localOnlyLocations.isNotEmpty()) {
-                            Text(
-                                text = "${preview.localOnlyLocations.size} local-only location(s) will remain untouched.",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = SucculentPrimary,
-                                fontWeight = FontWeight.SemiBold
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(preview.candidates, key = { it.cloudLocation.id }) { candidate ->
+                            RestoreCandidateRow(
+                                candidate = candidate,
+                                isSelected = candidate.cloudLocation.id in state.selectedIds,
+                                onToggle = { onToggleCandidate(candidate.cloudLocation.id) }
                             )
-                            Spacer(Modifier.height(6.dp))
                         }
+                    }
 
-                        if (conflictCandidates.isNotEmpty()) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFFFFF8E1),
-                                border = BorderStroke(1.dp, Color(0xFFFFD54F)),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onSetOverwriteConflicts(!allConflictsApproved) }
-                                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = allConflictsApproved,
-                                        onCheckedChange = onSetOverwriteConflicts
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "Overwrite all ${conflictCandidates.size} local conflict/deleted item(s)",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF5D4037)
-                                        )
-                                        Text(
-                                            text = "Leave unchecked to preserve your local versions.",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF795548)
-                                        )
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = onDismiss, enabled = !isApplying) {
+                            Text("Cancel")
                         }
-
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 320.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Button(
+                            onClick = onConfirmApply,
+                            enabled = !isApplying && selectedCount > 0,
+                            colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            items(preview.candidates, key = { it.cloudLocation.id }) { candidate ->
-                                RestoreCandidateRow(
-                                    candidate = candidate,
-                                    isSelected = candidate.cloudLocation.id in state.selectedIds,
-                                    onToggle = { onToggleCandidate(candidate.cloudLocation.id) }
+                            if (isApplying) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
                                 )
+                                Spacer(Modifier.width(8.dp))
                             }
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(onClick = onDismiss, enabled = !isApplying) {
-                                Text("Cancel")
-                            }
-                            Spacer(Modifier.width(8.dp))
-                            Button(
-                                onClick = onConfirmApply,
-                                enabled = !isApplying && selectedCount > 0,
-                                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                                shape = RoundedCornerShape(10.dp)
-                            ) {
-                                if (isApplying) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(16.dp),
-                                        color = Color.White,
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(Modifier.width(8.dp))
-                                }
-                                Text("Apply ($selectedCount)", color = Color.White, fontWeight = FontWeight.Bold)
-                            }
+                            Text("Apply ($selectedCount)", color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

@@ -138,6 +138,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.BuildConfig
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.model.AppThemeMode
+import com.businesstracker.mileage.ui.components.AppConfirmationDialog
+import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
+import com.businesstracker.mileage.ui.components.AppFloatingCard
+import com.businesstracker.mileage.ui.theme.AppDimensions
+import com.businesstracker.mileage.ui.theme.AppShapes
+import com.businesstracker.mileage.ui.theme.AppSpacing
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import java.text.SimpleDateFormat
@@ -204,7 +210,6 @@ fun SettingsScreen(
         state = listState,
         modifier = modifier
             .fillMaxSize()
-            .then(if (showVersionHistoryDialog || showPurposeList || showSavedLocationsList) Modifier.blur(8.dp) else Modifier)
             .background(if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.background else Color(0xFFF3F6FA)),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -747,42 +752,47 @@ fun SettingsScreen(
 
     // Edit Purpose Dialog
     if (editingPurpose != null) {
-        AlertDialog(
+        val purposeFocusRequester = remember { FocusRequester() }
+        AppFloatingBottomSheet(
             onDismissRequest = {
                 editingPurpose = null
                 editPurposeError = null
             },
-            title = {
+            title = "Edit Purpose",
+            onClose = {
+                editingPurpose = null
+                editPurposeError = null
+            }
+        ) {
+            LaunchedEffect(Unit) { purposeFocusRequester.requestFocus() }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
                 Text(
-                    text = "Edit Purpose",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    text = "Rename this business purpose. Existing trips will be updated if assigned to this name.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            },
-            text = {
-                Column {
-                    Text(
-                        text = "Rename this business purpose. Existing trips will be updated if assigned to this name.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = editPurposeText,
-                        onValueChange = {
-                            editPurposeText = it
-                            if (editPurposeError != null) editPurposeError = null
-                        },
-                        label = { Text("Purpose Name") },
-                        singleLine = true,
-                        isError = editPurposeError != null,
-                        supportingText = editPurposeError?.let { err -> { Text(err, color = MaterialTheme.colorScheme.error) } },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-            },
-            confirmButton = {
+                OutlinedTextField(
+                    value = editPurposeText,
+                    onValueChange = {
+                        editPurposeText = it
+                        if (editPurposeError != null) editPurposeError = null
+                    },
+                    label = { Text("Purpose Name") },
+                    singleLine = true,
+                    isError = editPurposeError != null,
+                    supportingText = editPurposeError?.let { err -> { Text(err, color = MaterialTheme.colorScheme.error) } },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
+                        .focusRequester(purposeFocusRequester),
+                    shape = RoundedCornerShape(12.dp)
+                )
                 Button(
                     onClick = {
                         val trimmed = editPurposeText.trim()
@@ -801,149 +811,171 @@ fun SettingsScreen(
                             editPurposeError = null
                         }
                     },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 52.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
                 ) {
                     Text("Save")
                 }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        editingPurpose = null
-                        editPurposeError = null
-                    }
-                ) {
-                    Text("Cancel")
-                }
             }
-        )
+        }
     }
 
     // Delete Confirmation Dialog
     if (deleteConfirmationPurpose != null) {
-        AlertDialog(
+        val purposeToDelete = deleteConfirmationPurpose!!
+        AppConfirmationDialog(
             onDismissRequest = { deleteConfirmationPurpose = null },
-            title = {
-                Text(
-                    text = "Delete Purpose",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+            title = "Delete Purpose",
+            message = "Are you sure you want to delete \"$purposeToDelete\"? Existing trips will retain their recorded purpose.",
+            confirmLabel = "Delete",
+            onConfirm = {
+                viewModel.removeCustomPurpose(purposeToDelete)
+                deleteConfirmationPurpose = null
             },
-            text = {
-                Text(
-                    text = "Are you sure you want to delete \"${deleteConfirmationPurpose}\"? Existing trips will retain their recorded purpose.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        deleteConfirmationPurpose?.let { viewModel.removeCustomPurpose(it) }
-                        deleteConfirmationPurpose = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
-                ) {
-                    Text("Delete", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteConfirmationPurpose = null }) {
-                    Text("Cancel")
-                }
-            }
+            dismissLabel = "Cancel",
+            onDismiss = { deleteConfirmationPurpose = null },
+            isDestructive = true
         )
     }
 
     if (showAddPurpose) {
         val purposeFocusRequester = remember { FocusRequester() }
-        SettingsBottomSheet(onDismissRequest = { showAddPurpose = false }) {
+        AppFloatingBottomSheet(
+            onDismissRequest = { showAddPurpose = false },
+            title = "Add Business Purpose",
+            onClose = { showAddPurpose = false }
+        ) {
             LaunchedEffect(Unit) { purposeFocusRequester.requestFocus() }
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Add business purpose", modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { showAddPurpose = false }) {
-                            Icon(Icons.Default.Close, contentDescription = "Close add purpose")
-                        }
-                    }
-                    OutlinedTextField(
-                        value = newPurposeText,
-                        onValueChange = { newPurposeText = it; purposeError = null },
-                        label = { Text("Purpose name") },
-                        singleLine = true,
-                        isError = purposeError != null,
-                        supportingText = purposeError?.let { error -> { Text(error) } },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp).focusRequester(purposeFocusRequester),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedContainerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                            unfocusedContainerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.surfaceVariant else Color.White,
-                            errorContainerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.surfaceVariant else Color.White
-                        )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedTextField(
+                    value = newPurposeText,
+                    onValueChange = { newPurposeText = it; purposeError = null },
+                    label = { Text("Purpose name") },
+                    singleLine = true,
+                    isError = purposeError != null,
+                    supportingText = purposeError?.let { error -> { Text(error) } },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
+                        .focusRequester(purposeFocusRequester),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedContainerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.surfaceVariant else Color.White,
+                        unfocusedContainerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.surfaceVariant else Color.White,
+                        errorContainerColor = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.surfaceVariant else Color.White
                     )
-                    Button(onClick = {
-                            val trimmed = newPurposeText.trim()
-                            when {
-                                trimmed.isBlank() -> purposeError = "Purpose cannot be empty"
-                                state.customPurposes.any { it.equals(trimmed, ignoreCase = true) } -> purposeError = "Purpose already exists"
-                                else -> {
-                                    viewModel.addCustomPurpose(trimmed)
-                                    newPurposeText = ""
-                                    purposeError = null
-                                    showAddPurpose = false
-                                }
+                )
+                Button(
+                    onClick = {
+                        val trimmed = newPurposeText.trim()
+                        when {
+                            trimmed.isBlank() -> purposeError = "Purpose cannot be empty"
+                            state.customPurposes.any { it.equals(trimmed, ignoreCase = true) } -> purposeError = "Purpose already exists"
+                            else -> {
+                                viewModel.addCustomPurpose(trimmed)
+                                newPurposeText = ""
+                                purposeError = null
+                                showAddPurpose = false
                             }
-                    }, modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)) {
-                        Text("Add Purpose")
-                    }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .defaultMinSize(minHeight = 52.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                ) {
+                    Text("Add Purpose")
                 }
+            }
         }
     }
 
     if (showPurposeList) {
-        Dialog(onDismissRequest = { showPurposeList = false }) {
-            SettingsDialogSurface() {
-                Column(Modifier.fillMaxWidth().padding(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Business purposes", modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { showPurposeList = false }) {
-                            Icon(Icons.Default.Close, contentDescription = "Close business purposes")
+        AppFloatingBottomSheet(
+            onDismissRequest = { showPurposeList = false },
+            title = "Business Purposes",
+            onClose = { showPurposeList = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 16.dp)
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (state.customPurposes.isEmpty()) {
+                        item {
+                            Text(
+                                "No business purposes yet.",
+                                modifier = Modifier.padding(vertical = 16.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
-                    LazyColumn(Modifier.fillMaxWidth().heightIn(max = 420.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (state.customPurposes.isEmpty()) item {
-                            Text("No business purposes yet.", modifier = Modifier.padding(vertical = 16.dp))
-                        }
-                        items(state.customPurposes.size) { index ->
-                            val purpose = state.customPurposes[index]
-                            Surface(shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)) {
-                                Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically) {
-                                    Text(purpose, modifier = Modifier.weight(1f), maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium)
-                                    IconButton(onClick = {
+                    items(state.customPurposes.size) { index ->
+                        val purpose = state.customPurposes[index]
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(start = 14.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    purpose,
+                                    modifier = Modifier.weight(1f),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                IconButton(
+                                    onClick = {
                                         showPurposeList = false
                                         editingPurpose = purpose
                                         editPurposeText = purpose
                                         editPurposeError = null
-                                    }) {
-                                        Icon(Icons.Default.Edit, contentDescription = "Edit $purpose", tint = SucculentPrimary)
-                                    }
-                                    IconButton(onClick = {
+                                    },
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Edit $purpose",
+                                        tint = SucculentPrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = {
                                         showPurposeList = false
                                         deleteConfirmationPurpose = purpose
-                                    }) {
-                                        Icon(Icons.Default.DeleteOutline, contentDescription = "Delete $purpose", tint = SpeedRed)
-                                    }
+                                    },
+                                    modifier = Modifier.size(44.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.DeleteOutline,
+                                        contentDescription = "Delete $purpose",
+                                        tint = SpeedRed,
+                                        modifier = Modifier.size(20.dp)
+                                    )
                                 }
                             }
                         }
@@ -954,23 +986,47 @@ fun SettingsScreen(
     }
 
     if (showSavedLocationsList) {
-        Dialog(onDismissRequest = { showSavedLocationsList = false }) {
-            SettingsDialogSurface() {
-                Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Saved Locations", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        IconButton(onClick = { showSavedLocationsList = false }) {
-                            Icon(Icons.Default.Close, contentDescription = "Close saved locations")
+        AppFloatingBottomSheet(
+            onDismissRequest = { showSavedLocationsList = false },
+            title = "Saved Locations",
+            onClose = { showSavedLocationsList = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 16.dp)
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (state.savedLocations.isEmpty()) {
+                        item {
+                            Text(
+                                "No saved locations yet.",
+                                modifier = Modifier.padding(vertical = 16.dp),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
-                    LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (state.savedLocations.isEmpty()) item { Text("No saved locations yet.", modifier = Modifier.padding(vertical = 16.dp)) }
-                        items(state.savedLocations.size) { index ->
-                            val location = state.savedLocations[index]
-                            SavedLocationItem(location = location,
-                                onEdit = { showSavedLocationsList = false; editingLocation = location; showLocationDialog = true },
-                                onDelete = { showSavedLocationsList = false; locationPendingDeletion = location })
-                        }
+                    items(state.savedLocations.size) { index ->
+                        val location = state.savedLocations[index]
+                        SavedLocationItem(
+                            location = location,
+                            onEdit = {
+                                showSavedLocationsList = false
+                                editingLocation = location
+                                showLocationDialog = true
+                            },
+                            onDelete = {
+                                showSavedLocationsList = false
+                                locationPendingDeletion = location
+                            }
+                        )
                     }
                 }
             }
@@ -980,20 +1036,37 @@ fun SettingsScreen(
     // Saved Location Delete Dialog
     if (locationPendingDeletion != null) {
         val loc = locationPendingDeletion!!
-        AlertDialog(
-            onDismissRequest = { locationPendingDeletion = null },
-            title = {
-                Text(
-                    text = "Delete Saved Location",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+        AppConfirmationDialog(
+            onDismissRequest = {
+                locationPendingDeletion = null
+                locationActionError = null
+            },
+            title = "Delete Saved Location",
+            confirmLabel = "Delete",
+            onConfirm = {
+                locationActionError = null
+                viewModel.deleteLocation(
+                    location = loc,
+                    onSuccess = {
+                        locationPendingDeletion = null
+                    },
+                    onError = { err ->
+                        locationActionError = err
+                    }
                 )
             },
-            text = {
+            dismissLabel = "Cancel",
+            onDismiss = {
+                locationPendingDeletion = null
+                locationActionError = null
+            },
+            isDestructive = true,
+            content = {
                 Column {
                     Text(
                         text = "Are you sure you want to delete \"${loc.name}\"? Associated trips and GPS data will not be deleted.",
-                        style = MaterialTheme.typography.bodyMedium
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     if (locationActionError != null) {
                         Spacer(Modifier.height(8.dp))
@@ -1004,37 +1077,6 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                     }
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        locationActionError = null
-                        viewModel.deleteLocation(
-                            location = loc,
-                            onSuccess = {
-                                locationPendingDeletion = null
-                            },
-                            onError = { err ->
-                                locationActionError = err
-                            }
-                        )
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = SpeedRed),
-                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                ) {
-                    Text("Delete", color = Color.White)
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        locationPendingDeletion = null
-                        locationActionError = null
-                    },
-                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
-                ) {
-                    Text("Cancel")
                 }
             }
         )
@@ -1088,111 +1130,62 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.133 (Build 134)" to "Unified design system with consistent bottom sheets, dialogs, and tokens.",
                 "Version 1.0.131 (Build 132)" to "Grouped Settings into compact floating cards.",
                 "Version 1.0.128 (Build 129)" to "Added time picker swipe and outside-tap dismissal.",
                 "Version 1.0.127 (Build 128)" to "Refined the work schedule time picker layout and controls.",
             )
         }
 
-        Dialog(
+        AppFloatingBottomSheet(
             onDismissRequest = { showVersionHistoryDialog = false },
-            properties = DialogProperties(
-                dismissOnBackPress = true,
-                dismissOnClickOutside = true,
-                usePlatformDefaultWidth = false
-            )
+            title = "Version History",
+            onClose = { showVersionHistoryDialog = false }
         ) {
-            Box(
+            Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { showVersionHistoryDialog = false },
-                contentAlignment = Alignment.Center
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Surface(
+                LazyColumn(
                     modifier = Modifier
-                        .fillMaxWidth(0.90f)
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {},
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.80f),
-                    tonalElevation = 6.dp,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+                        .fillMaxWidth()
+                        .weight(1f, fill = false),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                    items(updates.size) { index ->
+                        val (version, summary) = updates[index]
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(
-                                text = "Version History",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            IconButton(
-                                onClick = { showVersionHistoryDialog = false },
-                                modifier = Modifier.size(24.dp)
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Close",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp)
+                                Text(
+                                    text = version,
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = SucculentPrimary
                                 )
-                            }
-                        }
-
-                        // Floating Version List with Summary Underneath
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                                .border(
-                                    BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
-                                    RoundedCornerShape(14.dp)
+                                Text(
+                                    text = summary,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontSize = 12.sp,
+                                        lineHeight = 16.sp
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis
                                 )
-                                .padding(vertical = 4.dp)
-                        ) {
-                            updates.forEachIndexed { index, (version, summary) ->
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                                ) {
-                                    Text(
-                                        text = version,
-                                        style = MaterialTheme.typography.bodyMedium.copy(
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        color = SucculentPrimary
-                                    )
-                                    Text(
-                                        text = summary,
-                                        style = MaterialTheme.typography.bodySmall.copy(
-                                            fontSize = 12.sp,
-                                            lineHeight = 16.sp
-                                        ),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 3,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                                if (index < updates.lastIndex) {
-                                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.12f))
-                                }
                             }
                         }
                     }
@@ -1209,7 +1202,7 @@ private fun SettingsSection(
     subtitle: String? = null,
     subtitlePositive: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
-    shape: RoundedCornerShape = RoundedCornerShape(22.dp),
+    shape: RoundedCornerShape = AppShapes.FloatingCard,
     content: (@Composable ColumnScope.() -> Unit)? = null
 ) {
     Card(

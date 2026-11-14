@@ -87,6 +87,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.SortOrder
+import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
@@ -469,14 +470,16 @@ private fun HistoryControls(
                     "Least money" to SortOrder.LEAST_MONEY.name
                 )
             }
-            androidx.compose.material3.ModalBottomSheet(onDismissRequest = { openPicker = null }) {
-                Text(
-                    picker,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)) {
+            AppFloatingBottomSheet(
+                onDismissRequest = { openPicker = null },
+                title = picker,
+                onClose = { openPicker = null }
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                ) {
                     items(options.size) { index ->
                         val (label, value) = options[index]
                         val selected = when (picker) {
@@ -485,7 +488,9 @@ private fun HistoryControls(
                             else -> state.sortOrder.name == value
                         }
                         Row(
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 52.dp)
                                 .clickable {
                                     when (picker) {
                                         "Months" -> { choseAllMonths = value.isBlank(); onMonthChange(value) }

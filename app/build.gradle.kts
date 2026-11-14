@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 133
-        versionName = "1.0.132"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings: grouped floating cards and compact controls.\"")
+        versionCode = 134
+        versionName = "1.0.133"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"App-wide UI consistency audit and unified design system refactor.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

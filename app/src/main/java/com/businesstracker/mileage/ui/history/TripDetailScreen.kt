@@ -61,6 +61,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
+import com.businesstracker.mileage.ui.components.AppConfirmationDialog
+import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -429,42 +431,36 @@ fun TripDetailScreen(
     }
 
     if (showDeleteConfirmation) {
-        AlertDialog(
+        AppConfirmationDialog(
             onDismissRequest = { showDeleteConfirmation = false },
-            title = { Text("Delete this trip?") },
-            text = { Text("This removes the trip from local history. It does not silently delete a Google Sheets row.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showDeleteConfirmation = false
-                        onDeleteTrip(trip.id)
-                        onBack()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = SpeedRed)
-                ) {
-                    Text("Delete", color = Color.White)
-                }
+            title = "Delete this trip?",
+            message = "This removes the trip from local history. It does not silently delete a Google Sheets row.",
+            confirmLabel = "Delete",
+            onConfirm = {
+                showDeleteConfirmation = false
+                onDeleteTrip(trip.id)
+                onBack()
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirmation = false }) {
-                    Text("Cancel")
-                }
-            }
+            dismissLabel = "Cancel",
+            onDismiss = { showDeleteConfirmation = false },
+            isDestructive = true
         )
     }
 
     locationSaveError?.let { error ->
-        AlertDialog(
+        AppConfirmationDialog(
             onDismissRequest = { locationSaveError = null },
-            title = { Text("Could not save location") },
-            text = { Text(error) },
-            confirmButton = { TextButton(onClick = { locationSaveError = null }) { Text("OK") } }
+            title = "Could not save location",
+            message = error,
+            confirmLabel = "OK",
+            onConfirm = { locationSaveError = null },
+            dismissLabel = null,
+            onDismiss = null
         )
     }
 
     // Modal Edit Sheet
     if (showEditSheet) {
-        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         var selectedClassification by remember { mutableStateOf(trip.classification) }
         var selectedEntity by remember { mutableStateOf(trip.businessEntity) }
         var selectedPurpose by remember { mutableStateOf(trip.purpose) }
@@ -480,24 +476,19 @@ fun TripDetailScreen(
             list.distinct()
         }
 
-        ModalBottomSheet(
-            onDismissRequest = { showEditSheet = false },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface
+        AppFloatingBottomSheet(
+            onDismissRequest = { if (!isSaving) showEditSheet = false },
+            title = "Edit Trip",
+            onClose = { showEditSheet = false },
+            isDismissible = !isSaving
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp)
+                    .padding(horizontal = 24.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Text(
-                    text = "Edit Trip",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
 
                 // Classification Picker
                 Text("Classification", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)

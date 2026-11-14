@@ -39,6 +39,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -208,26 +209,23 @@ fun SwipeableTripCard(
         var customPurposeText by remember { mutableStateOf("") }
         var isCustomPurpose by remember { mutableStateOf(false) }
 
-        ModalBottomSheet(
+        AppFloatingBottomSheet(
             onDismissRequest = {
                 showBusinessBottomSheet = false
                 coroutineScope.launch { dismissState.reset() }
             },
-            sheetState = sheetState,
-            containerColor = MaterialTheme.colorScheme.surface
+            title = "Approve Business Drive",
+            onClose = {
+                showBusinessBottomSheet = false
+                coroutineScope.launch { dismissState.reset() }
+            }
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
+                    .padding(horizontal = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "Approve Business Drive",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
 
                 Text(
                     text = "${String.format(Locale.US, "%.1f", trip.totalDistanceMiles)} miles • Tax Deduction: \$${String.format(Locale.US, "%.2f", trip.totalDistanceMiles * trip.applicableRate)}",
