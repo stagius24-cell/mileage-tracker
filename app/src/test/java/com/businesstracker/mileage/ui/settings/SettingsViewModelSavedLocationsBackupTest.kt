@@ -182,6 +182,22 @@ class SettingsViewModelSavedLocationsBackupTest {
     }
 
     @Test
+    fun bluetoothDeviceSelection_persistsWhenAutoStopIsTurnedOff() = runTest {
+        val service = SavedLocationsSheetsService(
+            preferencesManager, repository, database.savedLocationSyncQueueDao(),
+            secureStorageManager, null, Gson(), testDispatcher
+        )
+        val viewModel = createViewModel(service)
+        val device = VehicleBluetoothDevice("00:11:22:33:44:55", "My car")
+        assertTrue(viewModel.selectVehicleBluetoothDevice(device).isSuccess)
+        preferencesManager.setBluetoothAutoStopEnabled(true)
+        preferencesManager.setBluetoothAutoStopEnabled(false)
+
+        assertEquals("My car", preferencesManager.vehicleBluetoothName.first())
+        assertEquals(device.address, preferencesManager.vehicleBluetoothAddress.first())
+    }
+
+    @Test
     fun backUpNow_andRestorePreviewConfirmFlow_updatesUiStateAndRequiresConflictOptIn() = runTest {
         var appliedSelectedIds: Set<String>? = null
         var appliedApprovedConflicts: Set<String>? = null

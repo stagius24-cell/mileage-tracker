@@ -58,6 +58,7 @@ import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatterySaver
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.CloudDownload
@@ -83,14 +84,11 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.graphics.SolidColor
@@ -179,6 +177,10 @@ fun SettingsScreen(
         }
     }
 
+    val bluetoothPickerPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) viewModel.refreshPairedBluetoothDevices() }
+
     LaunchedEffect(Unit) { viewModel.refreshPairedBluetoothDevices() }
 
     var showVersionHistoryDialog by rememberSaveable { mutableStateOf(false) }
@@ -187,6 +189,9 @@ fun SettingsScreen(
     var vehicleNameDraft by rememberSaveable { mutableStateOf("") }
     var vehicleNameError by rememberSaveable { mutableStateOf<String?>(null) }
     var isSavingVehicle by remember { mutableStateOf(false) }
+    var showBluetoothDevicePicker by rememberSaveable { mutableStateOf(false) }
+    var isSavingBluetoothDevice by remember { mutableStateOf(false) }
+    var bluetoothPickerError by remember { mutableStateOf<String?>(null) }
     var showSpreadsheetIdEditor by rememberSaveable { mutableStateOf(false) }
     var spreadsheetIdInput by rememberSaveable { mutableStateOf("") }
     var spreadsheetIdError by rememberSaveable { mutableStateOf(false) }
@@ -243,107 +248,86 @@ fun SettingsScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(shape = RoundedCornerShape(15.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
-                        Box(Modifier.size(50.dp), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.DirectionsCar, contentDescription = null,
-                                tint = SucculentPrimary, modifier = Modifier.size(24.dp))
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+                        VehicleSettingsIcon(Icons.Default.DirectionsCar)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("Vehicle", style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(3.dp))
+                            Text(state.defaultVehicle, style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis)
                         }
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Vehicle", style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.height(3.dp))
-                        Text(state.defaultVehicle, style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    Surface(shape = RoundedCornerShape(14.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
-                        IconButton(
-                            onClick = {
-                                vehicleNameDraft = state.defaultVehicle
-                                vehicleNameError = null
-                                showEditVehicle = true
-                            },
-                            modifier = Modifier.size(48.dp)
-                        ) {
-                            Icon(Icons.Default.Edit, contentDescription = "Edit vehicle name",
-                                tint = SucculentPrimary, modifier = Modifier.size(21.dp))
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            var bluetoothMenuExpanded by remember { mutableStateOf(false) }
-            SettingsSection(
-                title = "Bluetooth auto-stop",
-                icon = Icons.Default.DirectionsCar,
-                trailing = {
-                    SettingsToggle(
-                    checked = state.bluetoothAutoStopEnabled,
-                    onCheckedChange = { enabled ->
-                        if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-                            ContextCompat.checkSelfPermission(
-                                context,
-                                Manifest.permission.BLUETOOTH_CONNECT
-                            ) != PackageManager.PERMISSION_GRANTED
-                        ) {
-                            bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                        } else {
-                            viewModel.setBluetoothAutoStopEnabled(enabled)
-                            if (enabled) viewModel.refreshPairedBluetoothDevices()
-                        }
-                    },
-                    label = "Bluetooth auto-stop"
-                    )
-                }
-            ) {
-
-                if (state.bluetoothAutoStopEnabled) {
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(
-                            onClick = {
-                                viewModel.refreshPairedBluetoothDevices()
-                                bluetoothMenuExpanded = true
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            Text(
-                                state.vehicleBluetoothName.takeIf { it.isNotBlank() }
-                                    ?: "Choose paired car"
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = bluetoothMenuExpanded,
-                            onDismissRequest = { bluetoothMenuExpanded = false }
-                        ) {
-                            if (state.pairedBluetoothDevices.isEmpty()) {
-                                DropdownMenuItem(
-                                    text = { Text("No paired devices found") },
-                                    onClick = {},
-                                    enabled = false
-                                )
-                            } else {
-                                state.pairedBluetoothDevices.forEach { device ->
-                                    DropdownMenuItem(
-                                        text = { Text(device.name) },
-                                        onClick = {
-                                            viewModel.selectVehicleBluetoothDevice(device)
-                                            bluetoothMenuExpanded = false
-                                        }
-                                    )
-                                }
+                        Spacer(Modifier.width(8.dp))
+                        Surface(shape = RoundedCornerShape(14.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
+                            IconButton(
+                                onClick = {
+                                    vehicleNameDraft = state.defaultVehicle
+                                    vehicleNameError = null
+                                    showEditVehicle = true
+                                },
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit vehicle name",
+                                    tint = SucculentPrimary, modifier = Modifier.size(21.dp))
                             }
                         }
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                    )
+
+                    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+                        VehicleSettingsIcon(Icons.Default.Bluetooth)
+                        Spacer(Modifier.width(12.dp))
+                        Column(
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    bluetoothPickerError = null
+                                    viewModel.refreshPairedBluetoothDevices()
+                                    showBluetoothDevicePicker = true
+                                },
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text("Bluetooth auto-stop", style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold, maxLines = 2,
+                                overflow = TextOverflow.Ellipsis)
+                            Spacer(Modifier.height(3.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    state.vehicleBluetoothName.ifBlank { "Select Bluetooth device" },
+                                    modifier = Modifier.weight(1f, fill = false),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                                )
+                                Icon(Icons.Default.ExpandMore, contentDescription = "Select Bluetooth device",
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        SettingsToggle(
+                            checked = state.bluetoothAutoStopEnabled,
+                            onCheckedChange = { enabled ->
+                                if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                                    ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT)
+                                    != PackageManager.PERMISSION_GRANTED
+                                ) {
+                                    bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                                } else {
+                                    viewModel.setBluetoothAutoStopEnabled(enabled)
+                                    if (enabled) viewModel.refreshPairedBluetoothDevices()
+                                }
+                            },
+                            label = "Bluetooth auto-stop"
+                        )
                     }
                 }
             }
@@ -647,6 +631,75 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        }
+    }
+
+    if (showBluetoothDevicePicker) {
+        AppFloatingBottomSheet(
+            onDismissRequest = { if (!isSavingBluetoothDevice) showBluetoothDevicePicker = false },
+            title = "Select Bluetooth Device",
+            onClose = { if (!isSavingBluetoothDevice) showBluetoothDevicePicker = false },
+            isDismissible = !isSavingBluetoothDevice
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (state.pairedBluetoothDevices.isEmpty()) {
+                    val needsPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) !=
+                        PackageManager.PERMISSION_GRANTED
+                    Text(
+                        if (needsPermission) "Allow Nearby devices access to see paired devices."
+                        else "No paired Bluetooth devices found. Pair a device in Android settings first.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (needsPermission) TextButton(
+                        onClick = { bluetoothPickerPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT) },
+                        modifier = Modifier.heightIn(min = 48.dp)
+                    ) { Text("Allow access") }
+                } else {
+                    state.pairedBluetoothDevices.forEach { device ->
+                        val selected = device.address.equals(state.vehicleBluetoothAddress, ignoreCase = true)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(
+                                    if (selected) SucculentPrimary.copy(alpha = 0.10f)
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                )
+                                .clickable(enabled = !isSavingBluetoothDevice) {
+                                    isSavingBluetoothDevice = true
+                                    bluetoothPickerError = null
+                                    coroutineScope.launch {
+                                        val result = viewModel.selectVehicleBluetoothDevice(device)
+                                        isSavingBluetoothDevice = false
+                                        if (result.isSuccess) showBluetoothDevicePicker = false
+                                        else bluetoothPickerError = result.exceptionOrNull()?.localizedMessage
+                                            ?: "Could not save device. Try again."
+                                    }
+                                }.padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(device.name, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium)
+                                Text(device.address, style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            if (selected) Icon(Icons.Default.CheckCircle, contentDescription = "Selected",
+                                tint = SucculentPrimary, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                }
+                bluetoothPickerError?.let { error ->
+                    Text(error, color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -1291,6 +1344,16 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun VehicleSettingsIcon(icon: ImageVector) {
+    Surface(shape = RoundedCornerShape(14.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
+        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, tint = SucculentPrimary,
+                modifier = Modifier.size(22.dp))
         }
     }
 }

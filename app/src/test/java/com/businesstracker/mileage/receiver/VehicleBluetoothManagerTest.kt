@@ -24,7 +24,9 @@ class VehicleBluetoothManagerTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         preferencesManager = TrackingPreferencesManager(context)
-        bluetoothManager = VehicleBluetoothManager(context, preferencesManager)
+        bluetoothManager = object : VehicleBluetoothManager(context, preferencesManager) {
+            override fun refreshConnectionState() = Unit
+        }
     }
 
     @Test

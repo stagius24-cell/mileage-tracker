@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 152
-        versionName = "1.0.151"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Compact Vehicle settings row and edit sheet.\"")
+        versionCode = 153
+        versionName = "1.0.152"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Inline Bluetooth auto-stop and device picker in Vehicle card.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

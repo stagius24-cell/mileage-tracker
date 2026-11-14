@@ -566,11 +566,8 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun selectVehicleBluetoothDevice(device: VehicleBluetoothDevice) {
-        viewModelScope.launch {
-            preferencesManager.setVehicleBluetoothDevice(device.address, device.name)
-        }
-    }
+    suspend fun selectVehicleBluetoothDevice(device: VehicleBluetoothDevice): Result<Unit> =
+        runCatching { preferencesManager.setVehicleBluetoothDevice(device.address, device.name) }
 
     @SuppressLint("MissingPermission")
     fun refreshPairedBluetoothDevices() {
