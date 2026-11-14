@@ -248,7 +248,7 @@ fun SettingsScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
                     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
                         VehicleSettingsIcon(Icons.Default.DirectionsCar)
                         Spacer(Modifier.width(12.dp))
@@ -1350,10 +1350,10 @@ fun SettingsScreen(
 
 @Composable
 private fun VehicleSettingsIcon(icon: ImageVector) {
-    Surface(shape = RoundedCornerShape(14.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
-        Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
+    Surface(shape = RoundedCornerShape(12.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
+        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
             Icon(icon, contentDescription = null, tint = SucculentPrimary,
-                modifier = Modifier.size(22.dp))
+                modifier = Modifier.size(21.dp))
         }
     }
 }

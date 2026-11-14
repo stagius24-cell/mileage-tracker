@@ -12,6 +12,8 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 class VehicleBluetoothManagerTest {
@@ -24,9 +26,12 @@ class VehicleBluetoothManagerTest {
     fun setUp() {
         context = ApplicationProvider.getApplicationContext()
         preferencesManager = TrackingPreferencesManager(context)
+        val initialized = CountDownLatch(1)
         bluetoothManager = object : VehicleBluetoothManager(context, preferencesManager) {
-            override fun refreshConnectionState() = Unit
+            override fun refreshConnectionState() { initialized.countDown() }
         }
+        // Let the constructor load its initial persisted state before setConnected tests run.
+        assertTrue(initialized.await(5, TimeUnit.SECONDS))
     }
 
     @Test
