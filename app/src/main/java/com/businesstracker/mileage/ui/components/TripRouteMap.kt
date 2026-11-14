@@ -184,7 +184,7 @@ fun TripRouteMap(trip: TripEntity, modifier: Modifier = Modifier) {
                             state = MarkerState(position = LatLng(point.latitude, point.longitude)),
                             title = if (isStart) "Start" else "End",
                             icon = markerIcon,
-                            anchor = if (isStart) androidx.compose.ui.geometry.Offset(0.5f, 0.5f) else androidx.compose.ui.geometry.Offset(0.30f, 0.90f)
+                            anchor = if (isStart) androidx.compose.ui.geometry.Offset(0.5f, 0.5f) else androidx.compose.ui.geometry.Offset(0.5f, 0.95f)
                         )
                     } else {
                         Marker(
@@ -244,12 +244,12 @@ internal fun createRouteMap(context: Context, data: RouteMapData, allowNetwork: 
                 position = GeoPoint(point.latitude, point.longitude)
                 title = if (index == 0) "Start" else "End"
                 setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                icon = GradientDrawable().apply {
+                icon = if (index == 0) GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(if (index == 0) SucculentPrimary.toArgb() else AndroidColor.RED)
+                    setColor(SucculentPrimary.toArgb())
                     setStroke(2, AndroidColor.WHITE)
                     setSize((14 * resources.displayMetrics.density).toInt(), (14 * resources.displayMetrics.density).toInt())
-                }
+                } else android.graphics.drawable.BitmapDrawable(resources, MapMarkerFactory.createEndPinBitmap())
                 infoWindow = null
             })
         }

@@ -75,87 +75,34 @@ object MapMarkerFactory {
         }
     }
 
-    fun createEndFlagBitmapDescriptor(): BitmapDescriptor {
-        return try {
-            val width = 76
-            val height = 76
-            val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bitmap)
-
-            // Drop shadow for flagpole anchor
-            val shadowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.argb(80, 0, 0, 0)
-                style = Paint.Style.FILL
-            }
-            canvas.drawOval(14f, 66f, 32f, 74f, shadowPaint)
-
-            // Pole (dark slate)
-            val polePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.rgb(51, 65, 85)
-                strokeWidth = 6f
-                strokeCap = Paint.Cap.ROUND
-            }
-            canvas.drawLine(23f, 10f, 23f, 68f, polePaint)
-
-            // Ball top of flagpole
-            val ballPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.rgb(239, 68, 68) // SpeedRed
-                style = Paint.Style.FILL
-            }
-            canvas.drawCircle(23f, 9f, 6f, ballPaint)
-
-            // Waving Flag Path (Red background)
-            val flagPath = Path().apply {
-                moveTo(23f, 14f)
-                cubicTo(36f, 11f, 50f, 19f, 66f, 15f)
-                lineTo(66f, 42f)
-                cubicTo(50f, 46f, 36f, 38f, 23f, 41f)
-                close()
-            }
-
-            val flagBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.rgb(239, 68, 68) // SpeedRed
-                style = Paint.Style.FILL
-            }
-            canvas.drawPath(flagPath, flagBgPaint)
-
-            // White checkered squares on waving flag
-            val whiteCheckPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.WHITE
-                style = Paint.Style.FILL
-            }
-
-            // Draw checkered boxes
-            canvas.save()
-            canvas.clipPath(flagPath)
-            val cols = 4
-            val rows = 3
-            val colWidth = 44f / cols
-            val rowHeight = 28f / rows
-            for (r in 0 until rows) {
-                for (c in 0 until cols) {
-                    if ((r + c) % 2 == 0) {
-                        val left = 23f + c * colWidth
-                        val top = 13f + r * rowHeight
-                        canvas.drawRect(left, top, left + colWidth, top + rowHeight, whiteCheckPaint)
-                    }
-                }
-            }
-            canvas.restore()
-
-            // Border around flag
-            val flagBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.rgb(185, 28, 28)
-                style = Paint.Style.STROKE
-                strokeWidth = 2f
-            }
-            canvas.drawPath(flagPath, flagBorderPaint)
-
-            BitmapDescriptorFactory.fromBitmap(bitmap)
-        } catch (_: Throwable) {
-            BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
-        }
+    fun createEndFlagBitmapDescriptor(): BitmapDescriptor = try {
+        BitmapDescriptorFactory.fromBitmap(createEndPinBitmap())
+    } catch (_: Throwable) {
+        BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ROSE)
     }
+
+    fun createEndPinBitmap(): Bitmap {
+        val bitmap = Bitmap.createBitmap(72, 88, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = android.graphics.Color.rgb(204, 91, 119)
+            style = Paint.Style.STROKE
+            strokeWidth = 6f
+            strokeJoin = Paint.Join.ROUND
+        }
+        val path = Path().apply {
+            moveTo(36f, 79f)
+            cubicTo(27f, 63f, 14f, 48f, 14f, 34f)
+            cubicTo(14f, 21f, 24f, 11f, 36f, 11f)
+            cubicTo(48f, 11f, 58f, 21f, 58f, 34f)
+            cubicTo(58f, 48f, 45f, 63f, 36f, 79f)
+            close()
+        }
+        canvas.drawPath(path, outline)
+        canvas.drawCircle(36f, 34f, 8f, outline)
+        return bitmap
+    }
+
 }
 
 /**
@@ -197,59 +144,19 @@ fun StartBeaconIcon(
 fun EndFlagIcon(
     modifier: Modifier = Modifier,
     size: Dp = 22.dp,
-    tint: Color = SpeedRed
+    tint: Color = Color(0xFFCC5B77)
 ) {
-    Box(
-        modifier = modifier
-            .size(size)
-            .background(tint.copy(alpha = 0.16f), CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        androidx.compose.foundation.Canvas(modifier = Modifier.size(size * 0.70f)) {
-            val w = this.size.width
-            val h = this.size.height
-            val poleX = w * 0.28f
-
-            // Draw flagpole
-            drawLine(
-                color = Color(0xFF334155),
-                start = Offset(poleX, h * 0.12f),
-                end = Offset(poleX, h * 0.92f),
-                strokeWidth = 2.dp.toPx()
-            )
-
-            // Draw flag pole finial (top circle)
-            drawCircle(
-                color = tint,
-                radius = 1.5.dp.toPx(),
-                center = Offset(poleX, h * 0.10f)
-            )
-
-            // Draw flag
-            val flagWidth = w * 0.60f
-            val flagHeight = h * 0.45f
-            val flagTop = h * 0.14f
-
-            val flagPath = androidx.compose.ui.graphics.Path().apply {
-                moveTo(poleX, flagTop)
-                lineTo(poleX + flagWidth, flagTop)
-                lineTo(poleX + flagWidth * 0.85f, flagTop + flagHeight / 2f)
-                lineTo(poleX + flagWidth, flagTop + flagHeight)
-                lineTo(poleX, flagTop + flagHeight)
-                close()
-            }
-
-            drawPath(
-                path = flagPath,
-                color = tint
-            )
-
-            // Inner checkered square
-            drawRect(
-                color = Color.White,
-                topLeft = Offset(poleX + 1.dp.toPx(), flagTop + 1.dp.toPx()),
-                size = androidx.compose.ui.geometry.Size(flagWidth * 0.45f, flagHeight * 0.45f)
-            )
+    androidx.compose.foundation.Canvas(modifier = modifier.size(size)) {
+        val w = this.size.width
+        val h = this.size.height
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * .5f, h * .94f)
+            cubicTo(w * .34f, h * .70f, w * .13f, h * .50f, w * .13f, h * .36f)
+            cubicTo(w * .13f, h * .12f, w * .29f, h * .05f, w * .5f, h * .05f)
+            cubicTo(w * .71f, h * .05f, w * .87f, h * .12f, w * .87f, h * .36f)
+            cubicTo(w * .87f, h * .50f, w * .66f, h * .70f, w * .5f, h * .94f)
         }
+        drawPath(path, tint, style = Stroke(width = 2.dp.toPx()))
+        drawCircle(tint, radius = w * .10f, center = Offset(w * .5f, h * .36f))
     }
 }

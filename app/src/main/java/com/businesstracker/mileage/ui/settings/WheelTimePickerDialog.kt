@@ -84,7 +84,7 @@ fun WheelTimePickerDialog(
     var selectedHourIndex by remember { mutableIntStateOf(initialHourIndex) }
     var selectedMinuteIndex by remember { mutableIntStateOf(initialMinuteIndex) }
     var selectedAmPmIndex by remember { mutableIntStateOf(initialAmPmIndex) }
-    val dismissDragThreshold = with(LocalDensity.current) { 64.dp.toPx() }
+    val dismissDragThreshold = with(LocalDensity.current) { 24.dp.toPx() }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -104,7 +104,7 @@ fun WheelTimePickerDialog(
         ) {
             Surface(
                 modifier = Modifier
-                    .fillMaxWidth(0.88f)
+                    .fillMaxWidth(0.704f)
                     .widthIn(max = 400.dp)
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
@@ -121,9 +121,8 @@ fun WheelTimePickerDialog(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp)
-                            .semantics { contentDescription = "Swipe down or tap to close time picker" }
-                            .clickable(onClick = onDismiss)
+                            .height(64.dp)
+                            .semantics { contentDescription = "Swipe down to close time picker" }
                             .pointerInput(onDismiss, dismissDragThreshold) {
                                 var dragDistance = 0f
                                 detectVerticalDragGestures(

@@ -1130,10 +1130,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
-                "Version 1.0.133 (Build 134)" to "Unified design system with consistent bottom sheets, dialogs, and tokens.",
-                "Version 1.0.131 (Build 132)" to "Grouped Settings into compact floating cards.",
-                "Version 1.0.128 (Build 129)" to "Added time picker swipe and outside-tap dismissal.",
-                "Version 1.0.127 (Build 128)" to "Refined the work schedule time picker layout and controls.",
+                "Version 1.0.137 (Build 138)" to "Added monthly mileage chart and route destination pin.",
+                "Version 1.0.136 (Build 137)" to "Refined Trip History and navigation.",
+                "Version 1.0.135 (Build 136)" to "Updated the app design system."
             )
         }
 

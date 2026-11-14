@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 137
-        versionName = "1.0.136"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix Trip History header overlap, back arrow alignment, and bottom navigation routing.\"")
+        versionCode = 138
+        versionName = "1.0.137"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Add monthly mileage chart and update trip route markers.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
