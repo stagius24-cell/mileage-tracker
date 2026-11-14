@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 155
-        versionName = "1.0.154"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Compact collapsible Drive Tracking settings.\"")
+        versionCode = 156
+        versionName = "1.0.155"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix automatic motion detection: protect candidate start from walking transitions and enable Bluetooth-assisted drive detection.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
