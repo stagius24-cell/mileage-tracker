@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 141
-        versionName = "1.0.140"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Make Google Sheets primary sync engine with automatic trip sync and Sheet1 trip restore.\"")
+        versionCode = 142
+        versionName = "1.0.141"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Back up and restore full GPS routes and coordinates to Google Sheets.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

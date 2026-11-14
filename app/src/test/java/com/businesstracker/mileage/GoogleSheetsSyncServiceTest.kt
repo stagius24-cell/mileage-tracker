@@ -248,12 +248,12 @@ class GoogleSheetsSyncServiceTest {
     }
 
     @Test
-    fun formatTripToRow_hasExact16ColumnsInCorrectOrder() {
+    fun formatTripToRow_hasExact19ColumnsInCorrectOrder() {
         val service = createService()
         val trip = createTrip("trip_abc_123", "BUSINESS", 12.5)
         val row = service.formatTripToRow(trip)
 
-        assertEquals(16, row.size)
+        assertEquals(19, row.size)
         assertEquals("trip_abc_123", row[0])         // 1. Trip ID
         assertEquals("2026-11-06", row[1])            // 2. Date
         assertTrue(row[2].isNotBlank())               // 3. Start Time
@@ -270,6 +270,8 @@ class GoogleSheetsSyncServiceTest {
         assertEquals("Test note", row[13])            // 14. Notes
         assertEquals("AUTO_DETECTED", row[14])        // 15. Tracking Method
         assertTrue(row[15].isNotBlank())              // 16. Last Updated
+        // 17. Start Coordinates, 18. End Coordinates, 19. Route Polyline
+        assertEquals(19, row.size)
     }
 
     @Test
@@ -379,7 +381,7 @@ class GoogleSheetsSyncServiceTest {
                     Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                         .body(body.toResponseBody("application/json".toMediaType())).build()
                 } else if (req.method == "PUT") {
-                    if (req.url.toString().contains("A3:P3")) {
+                    if (req.url.toString().contains("A3:S3")) {
                         Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(400).message("Bad Request")
                             .body("Cell error".toResponseBody("text/plain".toMediaType())).build()
                     } else {
@@ -825,7 +827,7 @@ class GoogleSheetsSyncServiceTest {
         assertEquals(0, success.insertedCount)
         assertEquals(1, success.updatedCount)
         assertFalse("Should NOT append duplicate row when trip already exists in sheet", postCalled)
-        assertTrue(putUrlCalled?.contains("Sheet1!A4:P4") == true)
+        assertTrue(putUrlCalled?.contains("Sheet1!A4:S4") == true)
         assertEquals("SYNCED", tripsList[0].syncStatus)
     }
 
@@ -1010,7 +1012,7 @@ class GoogleSheetsSyncServiceTest {
                     val body = "{\"range\":\"Sheet1!A:A\",\"majorDimension\":\"ROWS\"}"
                     Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                         .body(body.toResponseBody("application/json".toMediaType())).build()
-                } else if (req.method == "PUT" && req.url.toString().contains("A1:P1")) {
+                } else if (req.method == "PUT" && req.url.toString().contains("A1:S1")) {
                     headerPutCalled = true
                     Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
                         .body("{\"updatedRows\":1}".toResponseBody("application/json".toMediaType())).build()
@@ -1187,5 +1189,51 @@ class GoogleSheetsSyncServiceTest {
         assertTrue("Explicit failure status must fail closed", result is SheetsSyncResult.HttpError)
         assertEquals(0, markedSyncedTripIds.size)
         assertEquals("PENDING", tripsList[0].syncStatus)
+    }
+
+    @Test
+    fun restoreTripsFromSheets_withEncodedPolyline_restoresWaypointsAndCoordinates() = runTest {
+        configureSheetsApi("test_sheet", "valid_tok")
+        val service = createService()
+
+        // 3 points in California
+        val points = listOf(
+            com.businesstracker.mileage.util.LatLngPoint(37.3382, -121.8863),
+            com.businesstracker.mileage.util.LatLngPoint(37.3482, -121.8963),
+            com.businesstracker.mileage.util.LatLngPoint(37.3582, -121.9063)
+        )
+        val polyline = com.businesstracker.mileage.util.PolylineUtil.encode(points)
+
+        val sheetJson = """
+        {
+            "values": [
+                ["Trip ID", "Date", "Start Time", "End Time", "Start Address", "End Address", "Total Miles", "Business Miles", "Classification", "Business Entity", "Purpose", "Mileage Rate", "Estimated Deduction", "Notes", "Tracking Method", "Last Updated", "Start Coordinates", "End Coordinates", "Route Polyline"],
+                ["trip_with_gps", "2026-11-06", "8:14 PM", "8:37 PM", "Start St", "End St", "8.40", "8.40", "BUSINESS", "MyCompany", "Client Visit", "0.670", "5.63", "Restored note", "AUTO_DETECTED", "2026-11-14 02:00:00", "37.338200, -121.886300", "37.358200, -121.906300", "$polyline"]
+            ]
+        }
+        """.trimIndent()
+
+        service.client = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                val req = chain.request()
+                Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                    .body(sheetJson.toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+
+        val restoreResult = service.restoreTripsFromSheets()
+        assertTrue(restoreResult is GoogleSheetsSyncService.TripRestoreResult.Success)
+        val success = restoreResult as GoogleSheetsSyncService.TripRestoreResult.Success
+        assertEquals(1, success.importedCount)
+
+        val restoredTrip = tripsList.first { it.id == "trip_with_gps" }
+        assertEquals(37.3382, restoredTrip.startLatitude, 0.0001)
+        assertEquals(-121.8863, restoredTrip.startLongitude, 0.0001)
+        assertEquals(37.3582, restoredTrip.endLatitude, 0.0001)
+        assertEquals(-121.9063, restoredTrip.endLongitude, 0.0001)
+        assertTrue(restoredTrip.waypointsJson.contains("37.3382"))
+        assertTrue(restoredTrip.waypointsJson.contains("37.3482"))
+        assertTrue(restoredTrip.waypointsJson.contains("37.3582"))
     }
 }

@@ -5,10 +5,13 @@ import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.data.security.GoogleAuthManager
 import com.businesstracker.mileage.data.security.SecureStorageManager
 import com.businesstracker.mileage.domain.repository.TripRepository
+import com.businesstracker.mileage.util.LatLngPoint
+import com.businesstracker.mileage.util.PolylineUtil
 import com.google.gson.Gson
 import com.google.gson.JsonArray
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import org.json.JSONArray
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -111,7 +114,10 @@ open class GoogleSheetsSyncService @Inject constructor(
             "Estimated Deduction",
             "Notes",
             "Tracking Method",
-            "Last Updated"
+            "Last Updated",
+            "Start Coordinates",
+            "End Coordinates",
+            "Route Polyline"
         )
     }
 
@@ -304,7 +310,7 @@ open class GoogleSheetsSyncService @Inject constructor(
             // Step 2: Ensure header row exists
             if (!isHeaderPresent) {
                 val headerPayload = JsonObject().apply {
-                    addProperty("range", "Sheet1!A1:P1")
+                    addProperty("range", "Sheet1!A1:S1")
                     addProperty("majorDimension", "ROWS")
                     val rowsArray = JsonArray()
                     val headerRow = JsonArray()
@@ -313,7 +319,7 @@ open class GoogleSheetsSyncService @Inject constructor(
                     add("values", rowsArray)
                 }
 
-                val putHeaderUrl = "https://sheets.googleapis.com/v4/spreadsheets/$spreadsheetId/values/Sheet1!A1:P1?valueInputOption=USER_ENTERED"
+                val putHeaderUrl = "https://sheets.googleapis.com/v4/spreadsheets/$spreadsheetId/values/Sheet1!A1:S1?valueInputOption=USER_ENTERED"
                 val headerReq = Request.Builder()
                     .url(putHeaderUrl)
                     .addHeader("Authorization", "Bearer $authToken")
@@ -363,9 +369,9 @@ open class GoogleSheetsSyncService @Inject constructor(
 
                 if (existingRowIndex != null) {
                     // Update existing row (idempotent, avoids duplicate)
-                    val updateUrl = "https://sheets.googleapis.com/v4/spreadsheets/$spreadsheetId/values/Sheet1!A$existingRowIndex:P$existingRowIndex?valueInputOption=USER_ENTERED"
+                    val updateUrl = "https://sheets.googleapis.com/v4/spreadsheets/$spreadsheetId/values/Sheet1!A$existingRowIndex:S$existingRowIndex?valueInputOption=USER_ENTERED"
                     val payload = JsonObject().apply {
-                        addProperty("range", "Sheet1!A$existingRowIndex:P$existingRowIndex")
+                        addProperty("range", "Sheet1!A$existingRowIndex:S$existingRowIndex")
                         addProperty("majorDimension", "ROWS")
                         val rows = JsonArray()
                         val row = JsonArray()
@@ -436,9 +442,9 @@ open class GoogleSheetsSyncService @Inject constructor(
                     }
                 } else {
                     // Append new row
-                    val appendUrl = "https://sheets.googleapis.com/v4/spreadsheets/$spreadsheetId/values/Sheet1!A:P:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS"
+                    val appendUrl = "https://sheets.googleapis.com/v4/spreadsheets/$spreadsheetId/values/Sheet1!A:S:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS"
                     val payload = JsonObject().apply {
-                        addProperty("range", "Sheet1!A:P")
+                        addProperty("range", "Sheet1!A:S")
                         addProperty("majorDimension", "ROWS")
                         val rows = JsonArray()
                         val row = JsonArray()
@@ -739,6 +745,16 @@ open class GoogleSheetsSyncService @Inject constructor(
         val endTimeStr = if (trip.endTime > 0) timeFmt.format(Date(trip.endTime)) else ""
         val updatedStr = dateFmt.format(Date())
 
+        val startCoordsStr = if (trip.startLatitude != 0.0 || trip.startLongitude != 0.0) {
+            String.format(Locale.US, "%.6f, %.6f", trip.startLatitude, trip.startLongitude)
+        } else ""
+
+        val endCoordsStr = if (trip.endLatitude != 0.0 || trip.endLongitude != 0.0) {
+            String.format(Locale.US, "%.6f, %.6f", trip.endLatitude, trip.endLongitude)
+        } else ""
+
+        val polylineStr = extractPolyline(trip)
+
         return listOf(
             trip.id,
             trip.date,
@@ -755,8 +771,37 @@ open class GoogleSheetsSyncService @Inject constructor(
             String.format(Locale.US, "%.2f", trip.calculatedDeduction),
             trip.notes.orEmpty(),
             trip.trackingMethod,
-            updatedStr
+            updatedStr,
+            startCoordsStr,
+            endCoordsStr,
+            polylineStr
         )
+    }
+
+    private fun extractPolyline(trip: TripEntity): String {
+        val points = mutableListOf<LatLngPoint>()
+        if (!trip.waypointsJson.isNullOrBlank() && trip.waypointsJson != "[]") {
+            try {
+                val array = JSONArray(trip.waypointsJson)
+                for (i in 0 until array.length()) {
+                    val obj = array.optJSONObject(i) ?: continue
+                    val lat = obj.optDouble("latitude", Double.NaN)
+                    val lng = obj.optDouble("longitude", Double.NaN)
+                    if (lat.isFinite() && lng.isFinite()) {
+                        points.add(LatLngPoint(lat, lng))
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        if (points.isEmpty()) {
+            if (trip.startLatitude != 0.0 || trip.startLongitude != 0.0) {
+                points.add(LatLngPoint(trip.startLatitude, trip.startLongitude))
+            }
+            if (trip.endLatitude != 0.0 || trip.endLongitude != 0.0) {
+                points.add(LatLngPoint(trip.endLatitude, trip.endLongitude))
+            }
+        }
+        return PolylineUtil.encode(points)
     }
 
     /**
@@ -782,7 +827,7 @@ open class GoogleSheetsSyncService @Inject constructor(
         authToken: String,
         isRetryAfterRefresh: Boolean
     ): TripRestoreResult {
-        val readUrl = "https://sheets.googleapis.com/v4/spreadsheets/$spreadsheetId/values/Sheet1!A2:P"
+        val readUrl = "https://sheets.googleapis.com/v4/spreadsheets/$spreadsheetId/values/Sheet1!A2:S"
         val request = Request.Builder()
             .url(readUrl)
             .addHeader("Authorization", "Bearer $authToken")
@@ -866,6 +911,42 @@ open class GoogleSheetsSyncService @Inject constructor(
                             val notes = row.getOrNull(13)?.asString?.trim()?.ifBlank { null }
                             val trackingMethod = row.getOrNull(14)?.asString?.trim()?.ifBlank { "AUTO_DETECTED" } ?: "AUTO_DETECTED"
 
+                            // Columns Q, R, S: GPS Coordinates & Route Polyline
+                            val startCoordsStr = row.getOrNull(16)?.asString?.trim().orEmpty()
+                            val endCoordsStr = row.getOrNull(17)?.asString?.trim().orEmpty()
+                            val polylineStr = row.getOrNull(18)?.asString?.trim().orEmpty()
+
+                            val decodedPoints = if (polylineStr.isNotBlank()) {
+                                PolylineUtil.decode(polylineStr)
+                            } else emptyList()
+
+                            var startLat = parseCoord(startCoordsStr)?.first ?: 0.0
+                            var startLng = parseCoord(startCoordsStr)?.second ?: 0.0
+                            var endLat = parseCoord(endCoordsStr)?.first ?: 0.0
+                            var endLng = parseCoord(endCoordsStr)?.second ?: 0.0
+
+                            if (startLat == 0.0 && startLng == 0.0 && decodedPoints.isNotEmpty()) {
+                                startLat = decodedPoints.first().latitude
+                                startLng = decodedPoints.first().longitude
+                            }
+                            if (endLat == 0.0 && endLng == 0.0 && decodedPoints.isNotEmpty()) {
+                                endLat = decodedPoints.last().latitude
+                                endLng = decodedPoints.last().longitude
+                            }
+
+                            val waypointsJson = if (decodedPoints.isNotEmpty()) {
+                                val arr = JsonArray()
+                                decodedPoints.forEach { pt ->
+                                    val obj = JsonObject()
+                                    obj.addProperty("latitude", pt.latitude)
+                                    obj.addProperty("longitude", pt.longitude)
+                                    arr.add(obj)
+                                }
+                                gson.toJson(arr)
+                            } else {
+                                "[]"
+                            }
+
                             val parsedStartTime = parseTime(date, startTimeStr)
                             val parsedEndTime = parseTime(date, endTimeStr).takeIf { it > parsedStartTime }
                                 ?: (parsedStartTime + 15 * 60 * 1000L)
@@ -879,10 +960,10 @@ open class GoogleSheetsSyncService @Inject constructor(
                                     endTime = parsedEndTime,
                                     startAddress = startAddress,
                                     endAddress = endAddress,
-                                    startLatitude = 0.0,
-                                    startLongitude = 0.0,
-                                    endLatitude = 0.0,
-                                    endLongitude = 0.0,
+                                    startLatitude = startLat,
+                                    startLongitude = startLng,
+                                    endLatitude = endLat,
+                                    endLongitude = endLng,
                                     totalDistanceMiles = totalMiles,
                                     businessMiles = businessMiles,
                                     businessEntity = businessEntity,
@@ -892,12 +973,23 @@ open class GoogleSheetsSyncService @Inject constructor(
                                     applicableRate = rate,
                                     calculatedDeduction = deduction,
                                     notes = notes,
-                                    waypointsJson = "[]",
+                                    waypointsJson = waypointsJson,
                                     syncStatus = "SYNCED",
                                     syncedAt = System.currentTimeMillis()
                                 )
                                 tripRepository.insertTrip(newTrip)
                                 importedCount++
+                            } else if ((existing.waypointsJson == "[]" || existing.waypointsJson.isBlank()) && decodedPoints.isNotEmpty()) {
+                                // Enrich existing trip with restored GPS route & coordinates
+                                val enriched = existing.copy(
+                                    startLatitude = if (existing.startLatitude == 0.0) startLat else existing.startLatitude,
+                                    startLongitude = if (existing.startLongitude == 0.0) startLng else existing.startLongitude,
+                                    endLatitude = if (existing.endLatitude == 0.0) endLat else existing.endLatitude,
+                                    endLongitude = if (existing.endLongitude == 0.0) endLng else existing.endLongitude,
+                                    waypointsJson = waypointsJson
+                                )
+                                tripRepository.updateTrip(enriched)
+                                existingCount++
                             } else {
                                 existingCount++
                             }
@@ -917,6 +1009,17 @@ open class GoogleSheetsSyncService @Inject constructor(
         } catch (e: Exception) {
             return TripRestoreResult.Failed(e.localizedMessage ?: "Unexpected error restoring trips")
         }
+    }
+
+    private fun parseCoord(str: String): Pair<Double, Double>? {
+        if (str.isBlank()) return null
+        val parts = str.split(",")
+        if (parts.size >= 2) {
+            val lat = parts[0].trim().toDoubleOrNull()
+            val lng = parts[1].trim().toDoubleOrNull()
+            if (lat != null && lng != null) return lat to lng
+        }
+        return null
     }
 
     private fun JsonArray.getOrNull(index: Int): JsonElement? {
