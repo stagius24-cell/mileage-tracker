@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 
@@ -126,14 +127,23 @@ fun MileageBottomBar(
                                 .fillMaxHeight()
                                 .clip(RoundedCornerShape(14.dp))
                                 .clickable {
-                                    if (currentBaseRoute != screen.route) {
+                                    val isCurrent = currentBaseRoute == screen.route
+                                    val startDestId = navController.graph.findStartDestination().id
+                                    if (!isCurrent) {
                                         navController.navigate(screen.route) {
-                                            popUpTo(Screen.Dashboard.route) {
+                                            popUpTo(startDestId) {
                                                 saveState = true
                                             }
                                             launchSingleTop = true
-                                            // A saved History stack can include Settings opened from a trip.
                                             restoreState = screen != Screen.History
+                                        }
+                                    } else if (screen == Screen.History) {
+                                        // Reset to top-level clean History if already on History (e.g. filtered view)
+                                        navController.navigate(Screen.History.route) {
+                                            popUpTo(startDestId) {
+                                                saveState = false
+                                            }
+                                            launchSingleTop = true
                                         }
                                     }
                                 },

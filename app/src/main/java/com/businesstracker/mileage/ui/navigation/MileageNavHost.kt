@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -28,7 +29,7 @@ fun MileageNavHost(
             DashboardScreen(
                 onNavigateToReports = {
                     navController.navigate(Screen.Reports.route) {
-                        popUpTo(Screen.Dashboard.route) {
+                        popUpTo(navController.graph.findStartDestination().id) {
                             saveState = true
                         }
                         launchSingleTop = true
@@ -40,6 +41,9 @@ fun MileageNavHost(
                     val encodedStart = Uri.encode(startDate)
                     val encodedEnd = Uri.encode(endDate)
                     navController.navigate("${Screen.History.route}?category=$encodedCat&startDate=$encodedStart&endDate=$encodedEnd") {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
                         launchSingleTop = true
                     }
                 }
@@ -93,6 +97,9 @@ fun MileageNavHost(
             ReportsExportScreen(
                 onNavigateToTrips = { monthIso ->
                     navController.navigate("${Screen.History.route}?month=$monthIso") {
+                        popUpTo(navController.graph.findStartDestination().id) {
+                            saveState = true
+                        }
                         launchSingleTop = true
                     }
                 }

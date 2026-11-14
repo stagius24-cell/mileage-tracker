@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 136
-        versionName = "1.0.135"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Pixel-perfect compact trip history cards matching reference design with custom timeline icons and inline deduction.\"")
+        versionCode = 137
+        versionName = "1.0.136"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix Trip History header overlap, back arrow alignment, and bottom navigation routing.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -52,7 +52,13 @@ android {
             )
         }
         debug {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            isDebuggable = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
             applicationIdSuffix = ".debug"
             signingConfig = signingConfigs.getByName("debug")
         }

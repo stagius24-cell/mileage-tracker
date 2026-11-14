@@ -162,14 +162,22 @@ fun TripHistoryScreen(
     }
 
     LaunchedEffect(initialMonthIso, initialCategory, initialStartDate, initialEndDate) {
-        if (initialCategory.isNotBlank()) {
-            viewModel.setClassificationFilter(initialCategory)
-        }
-        if (initialStartDate.isNotBlank() || initialEndDate.isNotBlank()) {
-            viewModel.setDateRange(initialStartDate, initialEndDate)
-        } else if (initialMonthIso.matches(Regex("\\d{4}-\\d{2}"))) {
-            val month = YearMonth.parse(initialMonthIso)
-            viewModel.setDateRange(month.atDay(1).toString(), month.atEndOfMonth().toString())
+        if (initialCategory.isNotBlank() || initialStartDate.isNotBlank() || initialEndDate.isNotBlank() || initialMonthIso.isNotBlank()) {
+            if (initialCategory.isNotBlank()) {
+                viewModel.setClassificationFilter(initialCategory)
+            } else {
+                viewModel.setClassificationFilter("ALL")
+            }
+            if (initialStartDate.isNotBlank() || initialEndDate.isNotBlank()) {
+                viewModel.setDateRange(initialStartDate, initialEndDate)
+            } else if (initialMonthIso.matches(Regex("\\d{4}-\\d{2}"))) {
+                val month = YearMonth.parse(initialMonthIso)
+                viewModel.setDateRange(month.atDay(1).toString(), month.atEndOfMonth().toString())
+            } else {
+                viewModel.setDateRange("", "")
+            }
+        } else {
+            viewModel.clearAllFilters()
         }
     }
 
@@ -318,43 +326,37 @@ private fun HistoryControls(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, top = 16.dp, end = 20.dp, bottom = 10.dp),
+            .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 48.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (onBackToReports != null) {
+                IconButton(
+                    onClick = onBackToReports,
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = primaryText,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+            }
             Text(
                 text = "Trip History",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontSize = 24.sp,
+                    fontWeight = FontWeight.Bold
+                ),
                 color = primaryText
             )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "${state.trips.size} drives · ${formatMiles(state.totalFilteredMiles)} mi",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = secondaryText
-                )
-                if (onBackToReports != null) {
-                    TextButton(onClick = onBackToReports) {
-                        Icon(
-                            Icons.Default.ArrowBack,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text("Back")
-                    }
-                }
-            }
         }
 
         // Search Bar & Sort Toggle Button
