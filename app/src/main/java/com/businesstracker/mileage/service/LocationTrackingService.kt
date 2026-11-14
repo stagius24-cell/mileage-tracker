@@ -756,6 +756,9 @@ class LocationTrackingService : Service() {
 
                 currentSpeedMph = result.speedMph
                 updateNotificationAndState(currentSpeedMph)
+                if (currentSpeedMph >= 10.0 || isDisplacementConfirmed) {
+                    onVehicleMotionResumed()
+                }
             }
             is GpsInboxProcessor.ProcessResult.AlreadyConsumed -> {
                 if (result.tripId != currentTripId) return
@@ -773,6 +776,9 @@ class LocationTrackingService : Service() {
                     }
                 }
                 updateNotificationAndState(currentSpeedMph)
+                if (currentSpeedMph >= 10.0 || isDisplacementConfirmed) {
+                    onVehicleMotionResumed()
+                }
             }
             is GpsInboxProcessor.ProcessResult.Rejected -> {
                 // Rejected: do not increase distance or waypoint count
@@ -783,6 +789,25 @@ class LocationTrackingService : Service() {
             is GpsInboxProcessor.ProcessResult.UnresolvedOrphan,
             is GpsInboxProcessor.ProcessResult.TripNotFound -> {
                 // Unresolved orphan or processing failure: preserve current recovery-required behavior
+            }
+        }
+    }
+
+    private fun onVehicleMotionResumed() {
+        if (trackingMethod == TrackingMethod.AUTO_DETECTED) {
+            try {
+                val ctx = try { applicationContext } catch (_: Throwable) { null }
+                if (ctx != null) {
+                    TripDebounceWorker.cancelDebounce(ctx)
+                }
+            } catch (_: Throwable) {}
+            if (::preferencesManager.isInitialized) {
+                val dispatcher = if (::ioDispatcher.isInitialized) ioDispatcher else Dispatchers.IO
+                serviceScope.launch(dispatcher) {
+                    try {
+                        preferencesManager.setInVehicleState(true)
+                    } catch (_: Exception) {}
+                }
             }
         }
     }

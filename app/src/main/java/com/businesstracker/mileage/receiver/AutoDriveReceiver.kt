@@ -10,6 +10,7 @@ import android.os.Build
 import androidx.core.content.ContextCompat
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.model.TrackingMethod
+import com.businesstracker.mileage.domain.repository.ActiveTripRepository
 import com.businesstracker.mileage.domain.service.BootCountProvider
 import com.businesstracker.mileage.domain.tracking.AutoDriveAction
 import com.businesstracker.mileage.domain.tracking.AutoDriveDecisionEngine
@@ -40,6 +41,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
     }
 
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
+    @Inject lateinit var activeTripRepository: ActiveTripRepository
     @Inject lateinit var decisionEngine: AutoDriveDecisionEngine
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
     @Inject lateinit var bootCountProvider: BootCountProvider
@@ -68,6 +70,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
         receiverScope.launch(ioDispatcher) {
             try {
+                // Process transition events strictly in timestamp order
                 val sortedEvents = result.transitionEvents.sortedBy { it.elapsedRealTimeNanos }
                 for (event in sortedEvents) {
                     when (event.activityType) {
@@ -81,6 +84,13 @@ class AutoDriveReceiver : BroadcastReceiver() {
                                     android.util.Log.d(TAG, "Transition IN_VEHICLE EXIT received")
                                     handleVehicleExit(context)
                                 }
+                            }
+                        }
+                        DetectedActivity.WALKING,
+                        DetectedActivity.ON_FOOT -> {
+                            if (event.transitionType == ActivityTransition.ACTIVITY_TRANSITION_ENTER) {
+                                android.util.Log.d(TAG, "Transition WALKING ENTER received")
+                                handleWalkingEnter(context, event.elapsedRealTimeNanos)
                             }
                         }
                         DetectedActivity.STILL -> {
@@ -99,10 +109,10 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
     @SuppressLint("MissingPermission")
     private suspend fun handleVehicleEnter(context: Context) {
-        // 1. Update in-vehicle state independently
+        // 1. Update in-vehicle state
         preferencesManager.setInVehicleState(true)
 
-        // 2. Strict permission verification (Foreground, Background, Activity Recognition)
+        // 2. Strict permission verification (Foreground location and Activity Recognition)
         val hasFine = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
@@ -126,12 +136,14 @@ class AutoDriveReceiver : BroadcastReceiver() {
         val isAutoTrackingEnabled = preferencesManager.isAutoTrackingEnabled.first()
         val isTracking = LocationTrackingService.serviceState.value.isTracking
         val activeTripId = preferencesManager.activeTripId.first()
-        val isCarConnected = preferencesManager.isCarBluetoothConnected()
         if (activeTripId != null) {
-            preferencesManager.recordVehicleEnter(activeTripId,
-                android.os.SystemClock.elapsedRealtime(), bootCountProvider.getBootCount())
+            preferencesManager.recordVehicleEnter(
+                activeTripId,
+                android.os.SystemClock.elapsedRealtime(),
+                bootCountProvider.getBootCount()
+            )
         }
-        val isWithinSchedule = if (isCarConnected) true else preferencesManager.isWithinWorkSchedule()
+        val isWithinSchedule = preferencesManager.isWithinWorkSchedule()
         val outsideBehavior = preferencesManager.getOutsideScheduleBehavior()
 
         val action = decisionEngine.evaluateVehicleEnter(
@@ -144,7 +156,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
             isWithinSchedule = isWithinSchedule,
             outsideScheduleBehavior = outsideBehavior
         )
-        android.util.Log.d(TAG, "evaluateVehicleEnter result: $action (autoTrack=$isAutoTrackingEnabled, isTracking=$isTracking, carConnected=$isCarConnected)")
+        android.util.Log.d(TAG, "evaluateVehicleEnter result: $action (autoTrack=$isAutoTrackingEnabled, isTracking=$isTracking)")
 
         when (action) {
             is AutoDriveAction.CancelDebounce -> {
@@ -157,6 +169,13 @@ class AutoDriveReceiver : BroadcastReceiver() {
             is AutoDriveAction.StartCandidateDrive -> {
                 TripDebounceWorker.cancelDebounce(context)
                 val newTripId = UUID.randomUUID().toString()
+                // Persist newTripId and vehicle enter evidence immediately
+                preferencesManager.setActiveTripId(newTripId)
+                preferencesManager.recordVehicleEnter(
+                    newTripId,
+                    android.os.SystemClock.elapsedRealtime(),
+                    bootCountProvider.getBootCount()
+                )
                 startTrackingService(context, newTripId, action.suggestedBusiness)
             }
             is AutoDriveAction.ScheduleDebounce -> {
@@ -169,6 +188,12 @@ class AutoDriveReceiver : BroadcastReceiver() {
     }
 
     private suspend fun handleVehicleExit(context: Context) {
+        val activeTrip = activeTripRepository.getActiveTrip()
+        if (activeTrip != null && activeTrip.trackingMethod != TrackingMethod.AUTO_DETECTED.value) {
+            android.util.Log.d(TAG, "Vehicle exit ignored: active trip is not AUTO_DETECTED (${activeTrip.trackingMethod})")
+            return
+        }
+
         preferencesManager.setInVehicleState(false)
 
         val isTracking = LocationTrackingService.serviceState.value.isTracking
@@ -183,6 +208,34 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
         if (action == AutoDriveAction.ScheduleDebounce) {
             activeTripId?.let { TripDebounceWorker.scheduleDebounce(context, it) }
+        }
+    }
+
+    private suspend fun handleWalkingEnter(context: Context, eventElapsedRealtimeNanos: Long) {
+        val isTracking = LocationTrackingService.serviceState.value.isTracking
+        val activeTripId = preferencesManager.activeTripId.first()
+        if (!isTracking && activeTripId == null) {
+            android.util.Log.d(TAG, "Walking transition ignored: not tracking")
+            return
+        }
+
+        val activeTrip = activeTripRepository.getActiveTrip()
+        val method = activeTrip?.let { TrackingMethod.fromString(it.trackingMethod) }
+        val speedMph = LocationTrackingService.serviceState.value.currentSpeedMph
+
+        val action = decisionEngine.evaluateWalkingEnter(
+            isServiceTracking = isTracking,
+            hasActiveTrip = activeTripId != null,
+            trackingMethod = method,
+            currentSpeedMph = speedMph
+        )
+        android.util.Log.d(TAG, "evaluateWalkingEnter result: $action (speed=$speedMph, method=$method, tripId=$activeTripId)")
+
+        if (action == AutoDriveAction.ScheduleDebounce) {
+            preferencesManager.setInVehicleState(false)
+            activeTripId?.let { tripId ->
+                TripDebounceWorker.scheduleDebounce(context, tripId)
+            }
         }
     }
 

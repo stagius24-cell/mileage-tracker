@@ -43,6 +43,8 @@ data class SettingsUiState(
     val autoTrackingEnabled: Boolean = true,
     val hasBackgroundLocationPermission: Boolean = true,
     val isAutoTrackingReady: Boolean = true,
+    val isTransitionsRegistered: Boolean = false,
+    val transitionRegistrationError: String? = null,
     val scheduleFilteringEnabled: Boolean = true,
     val workDays: Set<String> = setOf("MON", "TUE", "WED", "THU", "FRI"),
     val workHoursStart: String = "08:00",
@@ -291,12 +293,15 @@ class SettingsViewModel @Inject constructor(
         val hasFine = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarse = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
         val hasActivity = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ContextCompat.checkSelfPermission(
                 context, Manifest.permission.ACTIVITY_RECOGNITION
             ) == PackageManager.PERMISSION_GRANTED
         } else true
-        return hasFine && hasActivity && hasBackgroundLocationPermission()
+        return (hasFine || hasCoarse) && hasActivity
     }
 
     private data class ConfigState(
@@ -434,9 +439,12 @@ class SettingsViewModel @Inject constructor(
             )
         },
         savedLocationRepository.getAllSavedLocations(),
-        locationBackupStatusFlow
-    ) { baseState, savedLocations, backupStatus ->
+        locationBackupStatusFlow,
+        activityTransitionManager.registrationState
+    ) { baseState, savedLocations, backupStatus, regState ->
         baseState.copy(
+            isTransitionsRegistered = regState.isRegistered,
+            transitionRegistrationError = regState.lastError,
             savedLocations = savedLocations,
             savedLocationsLastBackupTime = backupStatus.lastBackupTime,
             savedLocationsLastBackupError = backupStatus.lastBackupError,
@@ -461,10 +469,18 @@ class SettingsViewModel @Inject constructor(
             preferencesManager.setAutoTrackingEnabled(enabled)
             try {
                 if (enabled) {
-                    activityTransitionManager.registerTransitions()
+                    activityTransitionManager.registerTransitions(force = true)
                 } else {
                     activityTransitionManager.unregisterTransitions()
                 }
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun retryRegisterTransitions() {
+        viewModelScope.launch {
+            try {
+                activityTransitionManager.registerTransitions(force = true)
             } catch (_: Exception) {}
         }
     }

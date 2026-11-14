@@ -126,6 +126,29 @@ class AutoDriveDecisionEngine @Inject constructor() {
     }
 
     /**
+     * Evaluates a WALKING ENTER transition event.
+     * Prevents brief conflicting walking events from ending candidate drives when speed >= 5.0 mph
+     * or when tracking manual trips, while allowing debounce for real walking-away events.
+     */
+    fun evaluateWalkingEnter(
+        isServiceTracking: Boolean,
+        hasActiveTrip: Boolean,
+        trackingMethod: com.businesstracker.mileage.domain.model.TrackingMethod?,
+        currentSpeedMph: Double
+    ): AutoDriveAction {
+        if (!isServiceTracking && !hasActiveTrip) {
+            return AutoDriveAction.Ignore
+        }
+        if (trackingMethod != null && trackingMethod != com.businesstracker.mileage.domain.model.TrackingMethod.AUTO_DETECTED) {
+            return AutoDriveAction.Ignore
+        }
+        if (currentSpeedMph >= 5.0) {
+            return AutoDriveAction.Ignore
+        }
+        return AutoDriveAction.ScheduleDebounce
+    }
+
+    /**
      * Evaluates a STILL ENTER transition event.
      * STILL ENTER while in a vehicle (traffic light, congestion) does NOT stop or debounce the trip.
      */

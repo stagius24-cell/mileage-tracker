@@ -404,6 +404,13 @@ fun SettingsScreen(
                             }
                         )
                     }
+                    if (state.autoTrackingEnabled && !state.isTransitionsRegistered && state.transitionRegistrationError != null) {
+                        CompactAlert(
+                            text = "Activity detection failed: ${state.transitionRegistrationError}",
+                            actionLabel = "Retry",
+                            onAction = { viewModel.retryRegisterTransitions() }
+                        )
+                    }
                     CompactSettingsDivider()
                     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(
@@ -1318,6 +1325,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.157 (Build 158)" to "Audited and restored motion auto-detection: clean activity transitions (excluding unsupported ON_FOOT), failure feedback with retry, and motion-based drive confirmation.",
                 "Version 1.0.156 (Build 157)" to "Audited and restored motion auto-detection: clean activity transitions, immediate Tesla Model Y Bluetooth drive trigger, unblocked foreground location permissions, and schedule filter default fix.",
                 "Version 1.0.155 (Build 156)" to "Restored automatic drive detection with walking transition protection and Tesla Model Y Bluetooth motion trigger.",
                 "Version 1.0.150 (Build 151)" to "Refined vertical route connector lines with thinner 1dp stroke and lighter color.",
