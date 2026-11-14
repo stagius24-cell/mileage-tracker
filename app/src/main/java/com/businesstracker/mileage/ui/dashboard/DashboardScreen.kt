@@ -90,6 +90,7 @@ import java.util.concurrent.TimeUnit
 fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
     onNavigateToReports: (() -> Unit)? = null,
+    onNavigateToHistory: ((category: String, startDate: String, endDate: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -213,7 +214,23 @@ fun DashboardScreen(
             }
 
             item {
-                MileageBreakdownCard(summary = state.summary, onDeductionClick = onNavigateToReports)
+                val (startDate, endDate) = state.timeFilter.toDateRange(
+                    customStartDate = state.customStartDate,
+                    customEndDate = state.customEndDate
+                )
+                val periodLabel = if (state.timeFilter == TimeFilter.CUSTOM && state.selectedMonthName.isNotBlank()) {
+                    state.selectedMonthName
+                } else {
+                    state.timeFilter.displayName
+                }
+                MileageBreakdownCard(
+                    summary = state.summary,
+                    periodLabel = periodLabel,
+                    onCategoryClick = if (onNavigateToHistory != null) {
+                        { category -> onNavigateToHistory(category, startDate, endDate) }
+                    } else null,
+                    onDeductionClick = onNavigateToReports
+                )
             }
 
             // Section: Drive Tracking Table (Single Table incorporated from Track tab)

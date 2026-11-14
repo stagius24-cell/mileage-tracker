@@ -53,25 +53,11 @@ class GetDashboardSummaryUseCase @Inject constructor() {
         customEndDate: String? = null,
         referenceDate: LocalDate = LocalDate.now()
     ): List<TripEntity> {
-        val todayStr = referenceDate.toString()
-        val yearStr = referenceDate.year.toString()
-        val monthPrefix = String.format(java.util.Locale.US, "%04d-%02d", referenceDate.year, referenceDate.monthValue)
-
-        val monday = referenceDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString()
-        val sunday = referenceDate.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).toString()
-
+        val (startDate, endDate) = timeFilter.toDateRange(customStartDate, customEndDate, referenceDate)
         return trips.filter { trip ->
-            when (timeFilter) {
-                TimeFilter.TODAY -> trip.date == todayStr
-                TimeFilter.THIS_WEEK -> trip.date in monday..sunday
-                TimeFilter.THIS_MONTH -> trip.date.startsWith(monthPrefix)
-                TimeFilter.THIS_YEAR -> trip.date.startsWith(yearStr)
-                TimeFilter.CUSTOM -> {
-                    val afterStart = customStartDate.isNullOrBlank() || trip.date >= customStartDate
-                    val beforeEnd = customEndDate.isNullOrBlank() || trip.date <= customEndDate
-                    afterStart && beforeEnd
-                }
-            }
+            val afterStart = startDate.isBlank() || trip.date >= startDate
+            val beforeEnd = endDate.isBlank() || trip.date <= endDate
+            afterStart && beforeEnd
         }
     }
 

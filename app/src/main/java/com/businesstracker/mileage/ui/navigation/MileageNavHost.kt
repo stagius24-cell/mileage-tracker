@@ -34,6 +34,14 @@ fun MileageNavHost(
                         launchSingleTop = true
                         restoreState = true
                     }
+                },
+                onNavigateToHistory = { category, startDate, endDate ->
+                    val encodedCat = Uri.encode(category)
+                    val encodedStart = Uri.encode(startDate)
+                    val encodedEnd = Uri.encode(endDate)
+                    navController.navigate("${Screen.History.route}?category=$encodedCat&startDate=$encodedStart&endDate=$encodedEnd") {
+                        launchSingleTop = true
+                    }
                 }
             )
         }
@@ -41,27 +49,44 @@ fun MileageNavHost(
             TrackTripScreen()
         }
         composable(
-            route = "${Screen.History.route}?month={month}",
+            route = "${Screen.History.route}?month={month}&category={category}&startDate={startDate}&endDate={endDate}",
             arguments = listOf(
                 navArgument("month") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("category") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("startDate") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("endDate") {
                     type = NavType.StringType
                     defaultValue = ""
                 }
             )
         ) { backStackEntry ->
             val monthIso = backStackEntry.arguments?.getString("month").orEmpty()
+            val category = backStackEntry.arguments?.getString("category").orEmpty()
+            val startDate = backStackEntry.arguments?.getString("startDate").orEmpty()
+            val endDate = backStackEntry.arguments?.getString("endDate").orEmpty()
+            val hasNavigatedFilter = monthIso.isNotBlank() || category.isNotBlank() || startDate.isNotBlank() || endDate.isNotBlank()
             TripHistoryScreen(
                 initialMonthIso = monthIso,
+                initialCategory = category,
+                initialStartDate = startDate,
+                initialEndDate = endDate,
                 onNavigateToSavedLocations = { locationId ->
                     navController.navigate("${Screen.Settings.route}?editLocationId=${Uri.encode(locationId)}") {
                         launchSingleTop = true
                     }
                 },
-                onBackToReports = if (monthIso.isNotBlank()) {
+                onBackToReports = if (hasNavigatedFilter) {
                     { navController.popBackStack() }
-                } else {
-                    null
-                }
+                } else null
             )
         }
         composable(Screen.Reports.route) {

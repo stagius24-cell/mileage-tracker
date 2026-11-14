@@ -92,9 +92,12 @@ import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import java.text.SimpleDateFormat
+import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
+import java.time.temporal.TemporalAdjusters
 import java.util.Date
 import java.util.Locale
 
@@ -104,6 +107,9 @@ private data class HistoryFilterOption(val value: String, val label: String)
 fun TripHistoryScreen(
     viewModel: TripHistoryViewModel = hiltViewModel(),
     initialMonthIso: String = "",
+    initialCategory: String = "",
+    initialStartDate: String = "",
+    initialEndDate: String = "",
     onBackToReports: (() -> Unit)? = null,
     onNavigateToSavedLocations: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
@@ -154,8 +160,13 @@ fun TripHistoryScreen(
         }
     }
 
-    LaunchedEffect(initialMonthIso) {
-        if (initialMonthIso.matches(Regex("\\d{4}-\\d{2}"))) {
+    LaunchedEffect(initialMonthIso, initialCategory, initialStartDate, initialEndDate) {
+        if (initialCategory.isNotBlank()) {
+            viewModel.setClassificationFilter(initialCategory)
+        }
+        if (initialStartDate.isNotBlank() || initialEndDate.isNotBlank()) {
+            viewModel.setDateRange(initialStartDate, initialEndDate)
+        } else if (initialMonthIso.matches(Regex("\\d{4}-\\d{2}"))) {
             val month = YearMonth.parse(initialMonthIso)
             viewModel.setDateRange(month.atDay(1).toString(), month.atEndOfMonth().toString())
         }
@@ -208,6 +219,7 @@ fun TripHistoryScreen(
                 onEntityChange = viewModel::setBusinessEntityFilter,
                 onSyncChange = viewModel::setSyncStatusFilter,
                 onClearDateFilter = { viewModel.setDateRange("", "") },
+                onDateRangeChange = viewModel::setDateRange,
                 onMonthChange = { month ->
                     if (month.isBlank()) viewModel.setDateRange("", "")
                     else {
@@ -281,10 +293,15 @@ private fun HistoryControls(
     onEntityChange: (String) -> Unit,
     onSyncChange: (String) -> Unit,
     onClearDateFilter: () -> Unit,
+    onDateRangeChange: (String, String) -> Unit,
     onMonthChange: (String) -> Unit,
     onBackToReports: (() -> Unit)?
 ) {
-    var isSortExpanded by remember { mutableStateOf(false) }
+    val hasActiveFilter = state.selectedClassificationFilter != "ALL" ||
+        state.startDateFilter.isNotBlank() ||
+        state.endDateFilter.isNotBlank() ||
+        state.searchQuery.isNotBlank()
+    var isSortExpanded by remember(hasActiveFilter) { mutableStateOf(hasActiveFilter) }
     var openPicker by remember { mutableStateOf<String?>(null) }
     var choseAllMonths by remember { mutableStateOf(false) }
     var choseAllCategories by remember { mutableStateOf(false) }
@@ -307,22 +324,26 @@ private fun HistoryControls(
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold
             )
-            if (onBackToReports != null) {
-                TextButton(onClick = onBackToReports) {
-                    Icon(
-                        Icons.Default.ArrowBack,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    Text("Back to Reports")
-                }
-            } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = "${state.trips.size} drives  •  ${formatMiles(state.totalFilteredMiles)} mi",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                if (onBackToReports != null) {
+                    TextButton(onClick = onBackToReports) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text("Back")
+                    }
+                }
             }
         }
 
@@ -425,8 +446,13 @@ private fun HistoryControls(
             ) {
                 listOf("Months", "Category", "Sort").forEach { picker ->
                     val label = when (picker) {
-                        "Months" -> state.startDateFilter.takeIf { it.isNotBlank() }?.let(::formatMonthFilter)
-                            ?: if (choseAllMonths) "All months" else "Months"
+                        "Months" -> {
+                            if (state.startDateFilter.isNotBlank() || state.endDateFilter.isNotBlank()) {
+                                formatDateRangeFilter(state.startDateFilter, state.endDateFilter)
+                            } else {
+                                if (choseAllMonths) "All dates" else "Dates"
+                            }
+                        }
                         "Category" -> state.selectedClassificationFilter.takeIf { it != "ALL" }
                             ?.lowercase()?.replaceFirstChar { it.uppercase() }
                             ?: if (choseAllCategories) "All" else "Category"
@@ -460,8 +486,19 @@ private fun HistoryControls(
 
         if (openPicker != null) {
             val picker = openPicker!!
+            val todayStr = LocalDate.now().toString()
+            val mondayStr = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString()
+            val sundayStr = LocalDate.now().with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).toString()
+            val monthStart = LocalDate.now().withDayOfMonth(1).toString()
+            val monthEnd = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth()).toString()
+
             val options: List<Pair<String, String>> = when (picker) {
-                "Months" -> listOf("All months" to "") + state.availableMonths.map { formatMonthFilter("$it-01") to it }
+                "Months" -> listOf(
+                    "All dates" to "ALL",
+                    "Today" to "TODAY",
+                    "This Week" to "THIS_WEEK",
+                    "This Month" to "THIS_MONTH"
+                ) + state.availableMonths.map { formatMonthFilter("$it-01") to it }
                 "Category" -> listOf("All" to "ALL", "Business" to "BUSINESS", "Personal" to "PERSONAL")
                 else -> listOf(
                     "High to low" to SortOrder.HIGHEST_MILEAGE.name,
@@ -472,7 +509,7 @@ private fun HistoryControls(
             }
             AppFloatingBottomSheet(
                 onDismissRequest = { openPicker = null },
-                title = picker,
+                title = if (picker == "Months") "Filter by date" else if (picker == "Category") "Filter by category" else "Sort trips",
                 onClose = { openPicker = null }
             ) {
                 LazyColumn(
@@ -483,7 +520,13 @@ private fun HistoryControls(
                     items(options.size) { index ->
                         val (label, value) = options[index]
                         val selected = when (picker) {
-                            "Months" -> state.startDateFilter.startsWith(value) && (value.isNotEmpty() || state.startDateFilter.isBlank())
+                            "Months" -> when (value) {
+                                "ALL", "" -> state.startDateFilter.isBlank() && state.endDateFilter.isBlank()
+                                "TODAY" -> state.startDateFilter == todayStr && state.endDateFilter == todayStr
+                                "THIS_WEEK" -> state.startDateFilter == mondayStr && state.endDateFilter == sundayStr
+                                "THIS_MONTH" -> state.startDateFilter == monthStart && state.endDateFilter == monthEnd
+                                else -> state.startDateFilter.startsWith(value) && value.isNotEmpty()
+                            }
                             "Category" -> state.selectedClassificationFilter == value
                             else -> state.sortOrder.name == value
                         }
@@ -493,7 +536,15 @@ private fun HistoryControls(
                                 .heightIn(min = 52.dp)
                                 .clickable {
                                     when (picker) {
-                                        "Months" -> { choseAllMonths = value.isBlank(); onMonthChange(value) }
+                                        "Months" -> {
+                                            when (value) {
+                                                "ALL", "" -> { choseAllMonths = true; onClearDateFilter() }
+                                                "TODAY" -> { choseAllMonths = false; onDateRangeChange(todayStr, todayStr) }
+                                                "THIS_WEEK" -> { choseAllMonths = false; onDateRangeChange(mondayStr, sundayStr) }
+                                                "THIS_MONTH" -> { choseAllMonths = false; onDateRangeChange(monthStart, monthEnd) }
+                                                else -> { choseAllMonths = false; onMonthChange(value) }
+                                            }
+                                        }
                                         "Category" -> { choseAllCategories = value == "ALL"; onClassificationChange(value) }
                                         else -> onSortChange(SortOrder.valueOf(value))
                                     }
@@ -810,4 +861,51 @@ private fun formatMonthFilter(startDate: String): String {
         val month = YearMonth.parse(startDate.take(7), DateTimeFormatter.ofPattern("yyyy-MM"))
         "${month.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())} ${month.year}"
     }.getOrDefault(startDate.take(7))
+}
+
+internal fun formatDateRangeFilter(startDate: String, endDate: String): String {
+    if (startDate.isBlank() && endDate.isBlank()) return "Dates"
+    val now = LocalDate.now()
+    val todayStr = now.toString()
+    val yesterdayStr = now.minusDays(1).toString()
+    val mondayStr = now.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).toString()
+    val sundayStr = now.with(TemporalAdjusters.nextOrSame(DayOfWeek.SUNDAY)).toString()
+    val monthStart = now.withDayOfMonth(1).toString()
+    val monthEnd = now.withDayOfMonth(now.lengthOfMonth()).toString()
+    val yearStart = "${now.year}-01-01"
+    val yearEnd = "${now.year}-12-31"
+
+    if (startDate == endDate && startDate.isNotBlank()) {
+        if (startDate == todayStr) return "Today"
+        if (startDate == yesterdayStr) return "Yesterday"
+        return runCatching {
+            val d = LocalDate.parse(startDate)
+            "${d.month.getDisplayName(TextStyle.SHORT, Locale.US)} ${d.dayOfMonth}"
+        }.getOrDefault(startDate)
+    }
+
+    if (startDate == mondayStr && endDate == sundayStr) return "This Week"
+    if (startDate == monthStart && endDate == monthEnd) return "This Month"
+    if (startDate == yearStart && endDate == yearEnd) return "This Year"
+
+    // Check if it's a full calendar month
+    if (startDate.endsWith("-01") && startDate.take(7) == endDate.take(7)) {
+        return runCatching {
+            val ym = YearMonth.parse(startDate.take(7))
+            "${ym.month.getDisplayName(TextStyle.SHORT, Locale.US)} ${ym.year}"
+        }.getOrDefault(startDate.take(7))
+    }
+
+    return runCatching {
+        val s = LocalDate.parse(startDate)
+        val e = LocalDate.parse(endDate)
+        val sMonth = s.month.getDisplayName(TextStyle.SHORT, Locale.US)
+        val eMonth = e.month.getDisplayName(TextStyle.SHORT, Locale.US)
+        if (s.year == e.year) {
+            if (s.month == e.month) "$sMonth ${s.dayOfMonth}–${e.dayOfMonth}"
+            else "$sMonth ${s.dayOfMonth} – $eMonth ${e.dayOfMonth}"
+        } else {
+            "$sMonth ${s.dayOfMonth}, ${s.year} – $eMonth ${e.dayOfMonth}, ${e.year}"
+        }
+    }.getOrDefault(if (startDate == endDate) startDate else "$startDate to $endDate")
 }

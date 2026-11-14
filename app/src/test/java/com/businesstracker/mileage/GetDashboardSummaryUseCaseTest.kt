@@ -223,4 +223,44 @@ class GetDashboardSummaryUseCaseTest {
         assertEquals(0, summary.totalTripsCount)
         assertEquals(0, summary.unreviewedTripsCount)
     }
+
+    @Test
+    fun timeFilter_toDateRange_matchesFilterTripsByTime() {
+        val refDate = LocalDate.of(2026, 11, 13) // Friday
+        val trips = listOf(
+            createTrip("1", "2026-11-13", 10.0, TripClassification.BUSINESS), // Today & This Week
+            createTrip("2", "2026-11-09", 15.0, TripClassification.BUSINESS), // Monday this week
+            createTrip("3", "2026-11-01", 20.0, TripClassification.PERSONAL), // This month
+            createTrip("4", "2026-05-15", 30.0, TripClassification.BUSINESS), // This year
+            createTrip("5", "2025-12-31", 50.0, TripClassification.BUSINESS)  // Prior year
+        )
+
+        // TODAY
+        val (todayStart, todayEnd) = TimeFilter.TODAY.toDateRange(referenceDate = refDate)
+        assertEquals("2026-11-13", todayStart)
+        assertEquals("2026-11-13", todayEnd)
+        val todayTrips = useCase.filterTripsByTime(trips, TimeFilter.TODAY, referenceDate = refDate)
+        assertEquals(listOf("1"), todayTrips.map { it.id })
+
+        // THIS_WEEK (Mon Nov 9 to Sun Nov 15)
+        val (weekStart, weekEnd) = TimeFilter.THIS_WEEK.toDateRange(referenceDate = refDate)
+        assertEquals("2026-11-09", weekStart)
+        assertEquals("2026-11-15", weekEnd)
+        val weekTrips = useCase.filterTripsByTime(trips, TimeFilter.THIS_WEEK, referenceDate = refDate)
+        assertEquals(listOf("1", "2"), weekTrips.map { it.id })
+
+        // THIS_MONTH (Nov 1 to Nov 30)
+        val (monthStart, monthEnd) = TimeFilter.THIS_MONTH.toDateRange(referenceDate = refDate)
+        assertEquals("2026-11-01", monthStart)
+        assertEquals("2026-11-30", monthEnd)
+        val monthTrips = useCase.filterTripsByTime(trips, TimeFilter.THIS_MONTH, referenceDate = refDate)
+        assertEquals(listOf("1", "2", "3"), monthTrips.map { it.id })
+
+        // THIS_YEAR (Jan 1 to Dec 31)
+        val (yearStart, yearEnd) = TimeFilter.THIS_YEAR.toDateRange(referenceDate = refDate)
+        assertEquals("2026-01-01", yearStart)
+        assertEquals("2026-12-31", yearEnd)
+        val yearTrips = useCase.filterTripsByTime(trips, TimeFilter.THIS_YEAR, referenceDate = refDate)
+        assertEquals(listOf("1", "2", "3", "4"), yearTrips.map { it.id })
+    }
 }

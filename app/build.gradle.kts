@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 134
-        versionName = "1.0.133"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"App-wide UI consistency audit and unified design system refactor.\"")
+        versionCode = 135
+        versionName = "1.0.134"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Interactive Business/Personal mileage cards with date filtering and progress bar divider separator.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
