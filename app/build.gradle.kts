@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 148
-        versionName = "1.0.147"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Reliable Google Sheets restore for Custom Business Purposes with smart sheet detection and preview confirmation.\"")
+        versionCode = 149
+        versionName = "1.0.148"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Clean Backup & Restore card with inline sync timestamp and removed duplicate status line.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

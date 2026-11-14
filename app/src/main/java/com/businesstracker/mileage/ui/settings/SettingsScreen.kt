@@ -428,18 +428,6 @@ fun SettingsScreen(
             val isRestoring = state.isLoadingRestorePreview || state.isApplyingRestore
             val backupError = state.unifiedBackupError ?: state.savedLocationsLastBackupError ?: state.sheetsLastError
             val backupCurrent = state.isAllDataBackedUp && backupError.isNullOrBlank() && !isBackingUp
-            val statusText = when {
-                isBackingUp -> "Backing up…"
-                !backupError.isNullOrBlank() -> "Backup failed"
-                !state.isSheetsConnected -> "Connect Google Sheets"
-                backupCurrent -> "Backup up to date"
-                else -> "Backup pending"
-            }
-            val statusColor = when {
-                !backupError.isNullOrBlank() -> MaterialTheme.colorScheme.error
-                backupCurrent -> SucculentPrimary
-                else -> MaterialTheme.colorScheme.onSurfaceVariant
-            }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -449,7 +437,7 @@ fun SettingsScreen(
             ) {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(shape = RoundedCornerShape(12.dp), color = SucculentPrimary.copy(alpha = .10f)) {
@@ -468,28 +456,18 @@ fun SettingsScreen(
                                     tint = if (state.isSheetsConnected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text(if (state.isSheetsConnected) "Google Sheets connected" else "Google Sheets disconnected",
+                                val syncSubtitle = if (state.isSheetsConnected) {
+                                    lastBackupTime?.let { "Synced on ${timeFormat.format(Date(it))}" } ?: "Connected"
+                                } else {
+                                    "Disconnected"
+                                }
+                                Text(syncSubtitle,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (state.isSheetsConnected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
                     }
 
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        if (isBackingUp) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        else Icon(when {
-                            !backupError.isNullOrBlank() -> Icons.Default.Error
-                            backupCurrent -> Icons.Outlined.CheckCircle
-                            else -> Icons.Default.Sync
-                        }, contentDescription = null, tint = statusColor, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(7.dp))
-                        Text(statusText, modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium,
-                            color = statusColor)
-                        Text(lastBackupTime?.let { timeFormat.format(Date(it)) } ?: "Never",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
                     if (!backupError.isNullOrBlank()) {
                         Text(backupError, style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error)
@@ -1061,6 +1039,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.148 (Build 149)" to "Clean Backup & Restore card with inline sync timestamp and removed duplicate status line.",
                 "Version 1.0.147 (Build 148)" to "Reliable restore for Custom Business Purposes from Google Sheets with smart sheet detection, Sheet1 trips fallback, and preview confirmation.",
                 "Version 1.0.146 (Build 147)" to "Only display Tesla Model Y in the active drive tracker when confirmed connected with car Bluetooth 'Tesla model Y teela'.",
                 "Version 1.0.145 (Build 146)" to "Full Google Sheets backup & restore for Business Custom Purposes, plus enhanced vertical route timeline connector lines.",
