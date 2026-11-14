@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 149
-        versionName = "1.0.148"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Clean Backup & Restore card with inline sync timestamp and removed duplicate status line.\"")
+        versionCode = 150
+        versionName = "1.0.149"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Consistent Google Sheets floating modal with drag handle pull-to-close, app theme surface color, and active custom purpose sync.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

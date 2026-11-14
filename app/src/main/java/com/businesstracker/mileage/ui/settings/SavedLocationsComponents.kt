@@ -109,6 +109,8 @@ import com.businesstracker.mileage.ui.theme.AppShapes
 import com.businesstracker.mileage.ui.theme.AppSpacing
 import com.businesstracker.mileage.ui.components.AppConfirmationDialog
 import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
+import com.businesstracker.mileage.ui.components.AppPrimaryButton
+import com.businesstracker.mileage.ui.components.AppSecondaryButton
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.semantics.Role
@@ -704,45 +706,76 @@ fun SavedLocationsRestorePreviewDialog(
 ) {
     when (state) {
         is SavedLocationsRestorePreviewUi.Empty -> {
-            AppConfirmationDialog(
+            AppFloatingBottomSheet(
                 onDismissRequest = onDismiss,
                 title = "Restore from Google Sheets",
-                confirmLabel = "OK",
-                onConfirm = onDismiss,
-                dismissLabel = null,
-                content = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(state.message, style = MaterialTheme.typography.bodyMedium)
-                        if (state.localCount > 0) {
+                onClose = onDismiss
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = state.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (state.localCount > 0) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = SucculentPrimary.copy(alpha = 0.12f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
                             Text(
-                                text = "Local records (${state.localCount}) will NOT be erased.",
-                                style = MaterialTheme.typography.bodySmall,
+                                text = "Local records (${state.localCount}) will NOT be erased and remain up to date.",
+                                style = MaterialTheme.typography.labelSmall,
                                 color = SucculentPrimary,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
                             )
                         }
                     }
+                    AppPrimaryButton(
+                        text = "OK",
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-            )
+            }
         }
         is SavedLocationsRestorePreviewUi.Failure -> {
-            AppConfirmationDialog(
+            AppFloatingBottomSheet(
                 onDismissRequest = onDismiss,
                 title = "Restore Unavailable",
-                confirmLabel = "Close",
-                onConfirm = onDismiss,
-                dismissLabel = null,
-                content = {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(state.message, style = MaterialTheme.typography.bodyMedium)
-                        Text(
-                            text = "Your local Saved Locations were not modified.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                onClose = onDismiss
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = state.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Your local records were not modified.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    AppPrimaryButton(
+                        text = "Close",
+                        onClick = onDismiss,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-            )
+            }
         }
         is SavedLocationsRestorePreviewUi.Loaded -> {
             val preview = state.preview
@@ -872,29 +905,21 @@ fun SavedLocationsRestorePreviewDialog(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = onDismiss, enabled = !isApplying) {
-                            Text("Cancel")
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Button(
+                        AppSecondaryButton(
+                            text = "Cancel",
+                            onClick = onDismiss,
+                            enabled = !isApplying,
+                            modifier = Modifier.weight(1f)
+                        )
+                        AppPrimaryButton(
+                            text = if (isApplying) "Applying..." else "Apply ($selectedCount)",
                             onClick = onConfirmApply,
                             enabled = !isApplying && selectedCount > 0,
-                            colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                            shape = RoundedCornerShape(12.dp)
-                        ) {
-                            if (isApplying) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(16.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.dp
-                                )
-                                Spacer(Modifier.width(8.dp))
-                            }
-                            Text("Apply ($selectedCount)", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }

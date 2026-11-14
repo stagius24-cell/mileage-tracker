@@ -8,6 +8,9 @@ import com.businesstracker.mileage.data.local.entity.SavedLocationEntity
 import com.businesstracker.mileage.data.local.model.BusinessEntitySummary
 import com.businesstracker.mileage.data.local.model.ClassificationCount
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.data.remote.CustomPurposesRestoreResult
+import com.businesstracker.mileage.data.remote.CustomPurposesSheetsService
+import com.businesstracker.mileage.data.remote.CustomPurposesSyncResult
 import com.businesstracker.mileage.data.remote.GoogleSheetsSyncService
 import com.businesstracker.mileage.data.remote.RestoreApplyResult
 import com.businesstracker.mileage.data.remote.RestoreCandidate
@@ -126,6 +129,20 @@ class SettingsViewModelSavedLocationsBackupTest {
             gson = Gson(),
             ioDispatcher = testDispatcher
         )
+        val fakePurposesService = object : CustomPurposesSheetsService(
+            preferencesManager = preferencesManager,
+            secureStorage = secureStorageManager,
+            googleAuthManager = authManager,
+            gson = Gson(),
+            ioDispatcher = testDispatcher
+        ) {
+            override suspend fun backupCustomPurposes(): CustomPurposesSyncResult {
+                return CustomPurposesSyncResult.Success(0, System.currentTimeMillis())
+            }
+            override suspend fun restoreCustomPurposes(): CustomPurposesRestoreResult {
+                return CustomPurposesRestoreResult.Success(0, 0)
+            }
+        }
         return SettingsViewModel(
             preferencesManager = preferencesManager,
             activityTransitionManager = ActivityTransitionManager(context),
@@ -142,7 +159,8 @@ class SettingsViewModelSavedLocationsBackupTest {
                 geocodeLocationUseCase = GeocodeLocationUseCase(context, testDispatcher),
                 ioDispatcher = testDispatcher
             ),
-            context = context
+            context = context,
+            customPurposesSheetsService = fakePurposesService
         )
     }
 

@@ -142,6 +142,8 @@ import com.businesstracker.mileage.domain.model.AppThemeMode
 import com.businesstracker.mileage.ui.components.AppConfirmationDialog
 import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
 import com.businesstracker.mileage.ui.components.AppFloatingCard
+import com.businesstracker.mileage.ui.components.AppPrimaryButton
+import com.businesstracker.mileage.ui.components.AppSecondaryButton
 import com.businesstracker.mileage.ui.theme.AppDimensions
 import com.businesstracker.mileage.ui.theme.AppShapes
 import com.businesstracker.mileage.ui.theme.AppSpacing
@@ -606,58 +608,116 @@ fun SettingsScreen(
     }
 
     if (showSpreadsheetIdEditor) {
-        AlertDialog(
+        val sheetFocusRequester = remember { FocusRequester() }
+        AppFloatingBottomSheet(
             onDismissRequest = { showSpreadsheetIdEditor = false },
-            title = { Text("Spreadsheet ID") },
-            text = {
-                Column {
-                    Text("Paste the ID or the full Google Sheets link.",
-                        style = MaterialTheme.typography.bodySmall)
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = spreadsheetIdInput,
-                        onValueChange = { spreadsheetIdInput = it; spreadsheetIdError = false },
-                        label = { Text("Spreadsheet ID or link") },
-                        isError = spreadsheetIdError,
-                        supportingText = if (spreadsheetIdError) {
-                            { Text("Enter a valid Google Sheets ID or link") }
-                        } else null,
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+            title = "Spreadsheet ID",
+            onClose = { showSpreadsheetIdEditor = false }
+        ) {
+            LaunchedEffect(Unit) { sheetFocusRequester.requestFocus() }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text(
+                    text = "Paste the ID or the full Google Sheets link.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = spreadsheetIdInput,
+                    onValueChange = { spreadsheetIdInput = it; spreadsheetIdError = false },
+                    label = { Text("Spreadsheet ID or link") },
+                    isError = spreadsheetIdError,
+                    supportingText = if (spreadsheetIdError) {
+                        { Text("Enter a valid Google Sheets ID or link", color = MaterialTheme.colorScheme.error) }
+                    } else null,
+                    singleLine = true,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
+                        .focusRequester(sheetFocusRequester),
+                    shape = RoundedCornerShape(12.dp)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AppSecondaryButton(
+                        text = "Cancel",
+                        onClick = { showSpreadsheetIdEditor = false },
+                        modifier = Modifier.weight(1f)
+                    )
+                    AppPrimaryButton(
+                        text = "Save",
+                        onClick = {
+                            val entered = spreadsheetIdInput.trim()
+                            val id = if (entered.startsWith("https://")) {
+                                Regex("^https://docs\\.google\\.com/spreadsheets/d/([A-Za-z0-9_-]+)")
+                                    .find(entered)?.groupValues?.get(1).orEmpty()
+                            } else entered
+                            if (id.matches(Regex("[A-Za-z0-9_-]+"))) {
+                                viewModel.setSheetsSpreadsheetId(id)
+                                showSpreadsheetIdEditor = false
+                            } else spreadsheetIdError = true
+                        },
+                        modifier = Modifier.weight(1f)
                     )
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val entered = spreadsheetIdInput.trim()
-                    val id = if (entered.startsWith("https://")) {
-                        Regex("^https://docs\\.google\\.com/spreadsheets/d/([A-Za-z0-9_-]+)")
-                            .find(entered)?.groupValues?.get(1).orEmpty()
-                    } else entered
-                    if (id.matches(Regex("[A-Za-z0-9_-]+"))) {
-                        viewModel.setSheetsSpreadsheetId(id)
-                        showSpreadsheetIdEditor = false
-                    } else spreadsheetIdError = true
-                }) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSpreadsheetIdEditor = false }) { Text("Cancel") }
             }
-        )
+        }
     }
 
-
-    if (showDisconnectConfirmation) AppConfirmationDialog(
-        onDismissRequest = { showDisconnectConfirmation = false },
-        title = "Disconnect Google Sheets?",
-        message = "Backup and sync will stop until you connect an account again.",
-        confirmLabel = "Disconnect",
-        onConfirm = { viewModel.disconnectSheets(); showDisconnectConfirmation = false },
-        dismissLabel = "Cancel",
-        onDismiss = { showDisconnectConfirmation = false },
-        isDestructive = true
-    )
+    if (showDisconnectConfirmation) {
+        AppFloatingBottomSheet(
+            onDismissRequest = { showDisconnectConfirmation = false },
+            title = "Disconnect Google Sheets?",
+            onClose = { showDisconnectConfirmation = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "Backup and sync will stop until you connect an account again.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AppSecondaryButton(
+                        text = "Cancel",
+                        onClick = { showDisconnectConfirmation = false },
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        onClick = {
+                            viewModel.disconnectSheets()
+                            showDisconnectConfirmation = false
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = AppDimensions.PrimaryButtonHeight),
+                        shape = AppShapes.Button,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SpeedRed,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text("Disconnect", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+                }
+            }
+        }
+    }
 
     // Edit Purpose Dialog
     if (editingPurpose != null) {
@@ -1039,6 +1099,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.149 (Build 150)" to "Consistent Google Sheets floating modal with drag handle pull-to-close, app theme surface color, and active custom purpose sync.",
                 "Version 1.0.148 (Build 149)" to "Clean Backup & Restore card with inline sync timestamp and removed duplicate status line.",
                 "Version 1.0.147 (Build 148)" to "Reliable restore for Custom Business Purposes from Google Sheets with smart sheet detection, Sheet1 trips fallback, and preview confirmation.",
                 "Version 1.0.146 (Build 147)" to "Only display Tesla Model Y in the active drive tracker when confirmed connected with car Bluetooth 'Tesla model Y teela'.",

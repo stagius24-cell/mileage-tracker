@@ -194,6 +194,15 @@ class SettingsViewModel @Inject constructor(
     private val customPurposesSheetsService: CustomPurposesSheetsService? = null
 ) : ViewModel() {
 
+    private val activeCustomPurposesService: CustomPurposesSheetsService by lazy {
+        customPurposesSheetsService ?: CustomPurposesSheetsService(
+            preferencesManager = preferencesManager,
+            secureStorage = secureStorageManager,
+            googleAuthManager = googleAuthManager,
+            gson = com.google.gson.Gson()
+        )
+    }
+
     private val _isSyncing = MutableStateFlow(false)
     private val _sheetsSyncMessage = MutableStateFlow<String?>(null)
     private val _pairedBluetoothDevices = MutableStateFlow<List<VehicleBluetoothDevice>>(emptyList())
@@ -476,7 +485,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             preferencesManager.addCustomPurpose(purpose)
             if (preferencesManager.isSheetsConnected()) {
-                customPurposesSheetsService?.backupCustomPurposes()
+                activeCustomPurposesService.backupCustomPurposes()
             }
         }
     }
@@ -485,7 +494,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             preferencesManager.removeCustomPurpose(purpose)
             if (preferencesManager.isSheetsConnected()) {
-                customPurposesSheetsService?.backupCustomPurposes()
+                activeCustomPurposesService.backupCustomPurposes()
             }
         }
     }
@@ -494,7 +503,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             preferencesManager.updateCustomPurpose(oldPurpose, newPurpose)
             if (preferencesManager.isSheetsConnected()) {
-                customPurposesSheetsService?.backupCustomPurposes()
+                activeCustomPurposesService.backupCustomPurposes()
             }
         }
     }
@@ -860,7 +869,7 @@ class SettingsViewModel @Inject constructor(
             try {
                 val tripRestoreResult = sheetsSyncService.restoreTripsFromSheets()
                 val locResult = savedLocationsSheetsService.previewRestoreFromSheets()
-                val purpRestoreResult = customPurposesSheetsService?.restoreCustomPurposes()
+                val purpRestoreResult = activeCustomPurposesService.restoreCustomPurposes()
 
                 val tripsRestored = if (tripRestoreResult is GoogleSheetsSyncService.TripRestoreResult.Success) {
                     tripRestoreResult.importedCount
@@ -890,7 +899,7 @@ class SettingsViewModel @Inject constructor(
                         else "All $purpCloudTotal custom purposes are already up to date locally."
                     is CustomPurposesRestoreResult.Empty -> "No custom purposes found on Google Sheets."
                     is CustomPurposesRestoreResult.Failure -> "Purposes restore: ${purpRestoreResult.message}"
-                    is CustomPurposesRestoreResult.NotConfigured, null -> ""
+                    is CustomPurposesRestoreResult.NotConfigured -> ""
                 }
 
                 when (locResult) {
@@ -1014,19 +1023,19 @@ class SettingsViewModel @Inject constructor(
                 // 2. Back up all Saved Locations (full snapshot)
                 val locResult = savedLocationsSheetsService.backupSavedLocations(fullSnapshot = true)
                 // 3. Back up all Custom Business Purposes
-                val purpResult = customPurposesSheetsService?.backupCustomPurposes()
+                val purpResult = activeCustomPurposesService.backupCustomPurposes()
 
                 val tripSuccess = tripResult is SheetsSyncResult.Success
                 val locSuccess = locResult is SavedLocationsSyncResult.Success
-                val purpSuccess = purpResult == null || purpResult is CustomPurposesSyncResult.Success
+                val purpSuccess = purpResult is CustomPurposesSyncResult.Success
 
                 if (tripSuccess && locSuccess && purpSuccess) {
                     _unifiedBackupMessage.value = "All data backed up"
                     _unifiedBackupError.value = null
                 } else if (tripSuccess && locSuccess && !purpSuccess) {
-                    _unifiedBackupError.value = "Trips & Locations backed up, but Custom Purposes failed: ${purpResult?.toMessage()}"
+                    _unifiedBackupError.value = "Trips & Locations backed up, but Custom Purposes failed: ${purpResult.toMessage()}"
                 } else if (tripSuccess && !locSuccess) {
-                    val purpSuffix = if (!purpSuccess) " (and Custom Purposes failed: ${purpResult?.toMessage()})" else ""
+                    val purpSuffix = if (!purpSuccess) " (and Custom Purposes failed: ${purpResult.toMessage()})" else ""
                     _unifiedBackupError.value = "Trips up to date, but Saved Locations backup failed: ${locResult.toMessage()}$purpSuffix"
                 } else if (!tripSuccess && locSuccess) {
                     val tripMsg = when (tripResult) {
