@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 138
-        versionName = "1.0.137"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Add monthly mileage chart and update trip route markers.\"")
+        versionCode = 139
+        versionName = "1.0.138"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Compact Backup & Restore settings.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
