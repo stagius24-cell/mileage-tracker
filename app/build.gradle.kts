@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 128
-        versionName = "1.0.127"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings: compact, accessible work schedule time picker.\"")
+        versionCode = 129
+        versionName = "1.0.128"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings: dismissible time picker handle and outside tap.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

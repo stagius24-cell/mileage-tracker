@@ -1,6 +1,10 @@
 package com.businesstracker.mileage.ui.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +27,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -34,6 +37,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -77,6 +84,7 @@ fun WheelTimePickerDialog(
     var selectedHourIndex by remember { mutableIntStateOf(initialHourIndex) }
     var selectedMinuteIndex by remember { mutableIntStateOf(initialMinuteIndex) }
     var selectedAmPmIndex by remember { mutableIntStateOf(initialAmPmIndex) }
+    val dismissDragThreshold = with(LocalDensity.current) { 64.dp.toPx() }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -86,19 +94,61 @@ fun WheelTimePickerDialog(
             usePlatformDefaultWidth = false
         )
     ) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier.fillMaxSize().clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onDismiss
+            ),
+            contentAlignment = Alignment.Center
+        ) {
             Surface(
                 modifier = Modifier
                     .fillMaxWidth(0.88f)
-                    .widthIn(max = 400.dp),
+                    .widthIn(max = 400.dp)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {},
                 shape = RoundedCornerShape(24.dp),
                 color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 0.dp
             ) {
                 Column(
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 18.dp),
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .semantics { contentDescription = "Swipe down or tap to close time picker" }
+                            .clickable(onClick = onDismiss)
+                            .pointerInput(onDismiss, dismissDragThreshold) {
+                                var dragDistance = 0f
+                                detectVerticalDragGestures(
+                                    onDragStart = { dragDistance = 0f },
+                                    onVerticalDrag = { change, amount ->
+                                        dragDistance += amount
+                                        change.consume()
+                                    },
+                                    onDragEnd = {
+                                        if (dragDistance > dismissDragThreshold) onDismiss()
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            Modifier
+                                .width(32.dp)
+                                .height(4.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f),
+                                    RoundedCornerShape(2.dp)
+                                )
+                        )
+                    }
                     // Dialog Title
                     Text(
                         text = "Select Time",
@@ -177,24 +227,12 @@ fun WheelTimePickerDialog(
 
                     Spacer(Modifier.height(16.dp))
 
-                    // Buttons row with compacted spacing
+                    // Confirm remains the only action; outside tap, Back, and the handle dismiss.
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.End,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(
-                            onClick = onDismiss,
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            modifier = Modifier.heightIn(min = 48.dp)
-                        ) {
-                            Text(
-                                text = "Cancel",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
-                            )
-                        }
-                        Spacer(Modifier.width(8.dp))
                         Button(
                             onClick = {
                                 val hour12 = hoursList.getOrElse(selectedHourIndex) { "08" }.toInt()
