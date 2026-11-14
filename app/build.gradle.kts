@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 154
-        versionName = "1.0.153"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Aligned Vehicle and Bluetooth rows with the Settings text column.\"")
+        versionCode = 155
+        versionName = "1.0.154"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Compact collapsible Drive Tracking settings.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

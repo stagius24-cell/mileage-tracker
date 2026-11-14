@@ -14,6 +14,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -84,7 +86,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -93,7 +94,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -110,6 +110,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.RadioButtonChecked
+import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
@@ -192,6 +194,7 @@ fun SettingsScreen(
     var showBluetoothDevicePicker by rememberSaveable { mutableStateOf(false) }
     var isSavingBluetoothDevice by remember { mutableStateOf(false) }
     var bluetoothPickerError by remember { mutableStateOf<String?>(null) }
+    var isScheduleExpanded by rememberSaveable { mutableStateOf(false) }
     var showSpreadsheetIdEditor by rememberSaveable { mutableStateOf(false) }
     var spreadsheetIdInput by rememberSaveable { mutableStateOf("") }
     var spreadsheetIdError by rememberSaveable { mutableStateOf(false) }
@@ -350,72 +353,112 @@ fun SettingsScreen(
         }
 
         item {
-            SettingsSection(
-                title = "Drive tracking",
-                icon = Icons.Outlined.LocationOn,
-                trailing = {
-                    TextButton(
-                        onClick = {
-                            try {
-                                context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                            } catch (_: Exception) {
-                                context.startActivity(
-                                    Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            ) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                        VehicleSettingsIcon(Icons.Outlined.LocationOn)
+                        Spacer(Modifier.width(12.dp))
+                        Text("Drive tracking", modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        TextButton(
+                            onClick = {
+                                try {
+                                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                } catch (_: Exception) {
+                                    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
                                         data = Uri.fromParts("package", context.packageName, null)
-                                    }
+                                    })
+                                }
+                            },
+                            modifier = Modifier.defaultMinSize(minHeight = 48.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp)
+                        ) {
+                            Icon(Icons.Default.BatterySaver, contentDescription = null,
+                                modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Battery", style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                    CompactSettingsDivider()
+                    SettingsSwitchRow(
+                        title = "Automatic detection",
+                        checked = state.autoTrackingEnabled,
+                        onCheckedChange = { enabled ->
+                            if (!enabled) isScheduleExpanded = false
+                            viewModel.setAutoTrackingEnabled(enabled)
+                        }
+                    )
+                    if (state.autoTrackingEnabled && !state.hasBackgroundLocationPermission) {
+                        CompactAlert(
+                            text = "Allow location all the time for automatic tracking.",
+                            actionLabel = "Open settings",
+                            onAction = {
+                                context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = Uri.fromParts("package", context.packageName, null)
+                                })
+                            }
+                        )
+                    }
+                    CompactSettingsDivider()
+                    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(
+                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable(enabled = state.autoTrackingEnabled && state.scheduleFilteringEnabled) {
+                                    isScheduleExpanded = !isScheduleExpanded
+                                },
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Work schedule", style = MaterialTheme.typography.bodyLarge,
+                                    fontWeight = FontWeight.Medium, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis)
+                                Icon(
+                                    if (isScheduleExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = if (isScheduleExpanded) "Collapse work schedule" else "Expand work schedule",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
-                        },
-                        modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) {
-                        Icon(Icons.Default.BatterySaver, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Battery", style = MaterialTheme.typography.labelLarge)
-                    }
-                }
-            ) {
-                SettingsSwitchRow(
-                    title = "Automatic detection",
-                    checked = state.autoTrackingEnabled,
-                    onCheckedChange = viewModel::setAutoTrackingEnabled
-                )
-
-                if (state.autoTrackingEnabled && !state.hasBackgroundLocationPermission) {
-                    CompactAlert(
-                        text = "Allow location all the time for automatic tracking.",
-                        actionLabel = "Open settings",
-                        onAction = {
-                            context.startActivity(
-                                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                    data = Uri.fromParts("package", context.packageName, null)
-                                }
+                            Text(
+                                formatScheduleSummary(state.workDays, state.workHoursStart, state.workHoursEnd),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                         }
-                    )
-                }
-
-                SectionDivider()
-                SettingsSwitchRow(
-                    title = "Work schedule",
-                    checked = state.scheduleFilteringEnabled,
-                    enabled = state.autoTrackingEnabled,
-                    onCheckedChange = viewModel::setScheduleFilteringEnabled
-                )
-
-                if (state.autoTrackingEnabled && state.scheduleFilteringEnabled) {
-                    ScheduleControls(
-                        state = state,
-                        onToggleDay = viewModel::toggleWorkDay,
-                        onStartChange = viewModel::setWorkHoursStart,
-                        onEndChange = viewModel::setWorkHoursEnd,
-                        onBehaviorChange = viewModel::setOutsideScheduleBehavior,
-                        onFieldFocus = {
-                            coroutineScope.launch {
-                                listState.animateScrollToItem(index = 3, scrollOffset = 0)
-                            }
+                        Spacer(Modifier.width(8.dp))
+                        SettingsToggle(
+                            checked = state.scheduleFilteringEnabled,
+                            enabled = state.autoTrackingEnabled,
+                            onCheckedChange = { enabled ->
+                                if (!enabled) isScheduleExpanded = false
+                                viewModel.setScheduleFilteringEnabled(enabled)
+                            },
+                            label = "Work schedule"
+                        )
+                    }
+                    AnimatedVisibility(
+                        visible = isScheduleExpanded && state.autoTrackingEnabled && state.scheduleFilteringEnabled,
+                        enter = expandVertically(animationSpec = tween(180)),
+                        exit = shrinkVertically(animationSpec = tween(180))
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Spacer(Modifier.height(2.dp))
+                            ScheduleControls(
+                                state = state,
+                                onToggleDay = viewModel::toggleWorkDay,
+                                onStartChange = viewModel::setWorkHoursStart,
+                                onEndChange = viewModel::setWorkHoursEnd,
+                                onBehaviorChange = viewModel::setOutsideScheduleBehavior
+                            )
                         }
-                    )
+                    }
                 }
             }
         }
@@ -1359,6 +1402,14 @@ private fun VehicleSettingsIcon(icon: ImageVector) {
 }
 
 @Composable
+private fun CompactSettingsDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(vertical = 6.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    )
+}
+
+@Composable
 private fun SettingsSection(
     title: String,
     icon: ImageVector,
@@ -1486,20 +1537,34 @@ private fun formatDisplayTime(time24: String): String {
     }
 }
 
+internal fun formatScheduleSummary(days: Set<String>, start: String, end: String): String {
+    val orderedDays = listOf(
+        "MON" to "Mon", "TUE" to "Tue", "WED" to "Wed", "THU" to "Thu",
+        "FRI" to "Fri", "SAT" to "Sat", "SUN" to "Sun"
+    )
+    val selected = orderedDays.filter { it.first in days }.map { it.second }
+    val daySummary = when {
+        selected.size == 7 -> "Every day"
+        selected == listOf("Mon", "Tue", "Wed", "Thu", "Fri") -> "Mon–Fri"
+        selected.isEmpty() -> "No work days"
+        else -> selected.joinToString(", ")
+    }
+    return "$daySummary · ${formatDisplayTime(start).removePrefix("0")} – ${formatDisplayTime(end).removePrefix("0")}"
+}
+
 @Composable
 private fun ScheduleControls(
     state: SettingsUiState,
     onToggleDay: (String) -> Unit,
     onStartChange: (String) -> Unit,
     onEndChange: (String) -> Unit,
-    onBehaviorChange: (String) -> Unit,
-    onFieldFocus: () -> Unit = {}
+    onBehaviorChange: (String) -> Unit
 ) {
     val days = listOf(
         "MON" to "M", "TUE" to "T", "WED" to "W", "THU" to "T",
         "FRI" to "F", "SAT" to "S", "SUN" to "S"
     )
-    var pickingTimeFor by remember { mutableStateOf<String?>(null) } // "START", "END", or null
+    var pickingTimeFor by rememberSaveable { mutableStateOf<String?>(null) }
 
     if (pickingTimeFor != null) {
         val isStart = pickingTimeFor == "START"
@@ -1518,169 +1583,101 @@ private fun ScheduleControls(
         )
     }
 
-    Text("Work days", style = MaterialTheme.typography.labelLarge)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
+    Text("Work days", style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         days.forEach { (code, label) ->
-            FilterChip(
-                selected = code in state.workDays,
-                onClick = { onToggleDay(code) },
-                modifier = Modifier.weight(1f),
-                label = { Text(label) }
-            )
-        }
-    }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        // Start Time Card (clickable, opens Wheel Time Picker Dialog)
-        Surface(
-            modifier = Modifier
-                .weight(1f)
-                .heightIn(min = 48.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { pickingTimeFor = "START" },
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            val selected = code in state.workDays
+            Box(
+                modifier = Modifier.weight(1f).height(48.dp)
+                    .clip(RoundedCornerShape(11.dp)).clickable { onToggleDay(code) },
+                contentAlignment = Alignment.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "Start",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = formatDisplayTime(state.workHoursStart),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    )
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(38.dp)
+                        .background(
+                            if (selected) SucculentPrimary.copy(alpha = 0.12f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f),
+                            RoundedCornerShape(11.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(label, style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (selected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Icon(
-                    imageVector = Icons.Default.ExpandMore,
-                    contentDescription = "Pick start time",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-        }
-
-        // End Time Card (clickable, opens Wheel Time Picker Dialog)
-        Surface(
-            modifier = Modifier
-                .weight(1f)
-                .heightIn(min = 48.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { pickingTimeFor = "END" },
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
-            )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "End",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        text = formatDisplayTime(state.workHoursEnd),
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    )
-                }
-                Icon(
-                    imageVector = Icons.Default.ExpandMore,
-                    contentDescription = "Pick end time",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
             }
         }
     }
 
-    Text("Outside work hours", style = MaterialTheme.typography.labelLarge)
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ScheduleTimeField("Start", state.workHoursStart, Modifier.weight(1f)) { pickingTimeFor = "START" }
+        ScheduleTimeField("End", state.workHoursEnd, Modifier.weight(1f)) { pickingTimeFor = "END" }
+    }
+
+    Text("Outside work hours", style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold)
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ScheduleBehaviorOption(
+            label = "Personal",
+            selected = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
+            modifier = Modifier.weight(1f),
+            onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL) }
+        )
+        ScheduleBehaviorOption(
+            label = "Do not track",
+            selected = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY,
+            modifier = Modifier.weight(1f),
+            onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) }
+        )
+    }
+}
+
+@Composable
+private fun ScheduleTimeField(label: String, time: String, modifier: Modifier, onClick: () -> Unit) {
+    Surface(
+        modifier = modifier.heightIn(min = 56.dp).clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
     ) {
-        val isPersonal = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL
-        val isDoNotTrack = state.outsideScheduleBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY
-
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .heightIn(min = 40.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL) },
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            RadioButton(
-                selected = isPersonal,
-                onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL) }
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = "Personal",
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(label, style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(formatDisplayTime(time).removePrefix("0"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Icon(Icons.Default.ExpandMore, contentDescription = "Pick $label time",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
         }
+    }
+}
 
-        Row(
-            modifier = Modifier
-                .weight(1f)
-                .heightIn(min = 40.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .clickable { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) },
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            RadioButton(
-                selected = isDoNotTrack,
-                onClick = { onBehaviorChange(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) }
-            )
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = "Do not track",
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+@Composable
+private fun ScheduleBehaviorOption(label: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Row(
+        modifier = modifier.heightIn(min = 48.dp).clip(RoundedCornerShape(12.dp))
+            .background(
+                if (selected) SucculentPrimary.copy(alpha = 0.12f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
+            ).clickable(onClick = onClick).padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            if (selected) Icons.Default.RadioButtonChecked else Icons.Default.RadioButtonUnchecked,
+            contentDescription = null, modifier = Modifier.size(18.dp),
+            tint = if (selected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.width(5.dp))
+        Text(label, style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = if (selected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1847,11 +1844,6 @@ private fun MetaText(
         )
         Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
     }
-}
-
-@Composable
-private fun SectionDivider() {
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 @Composable
