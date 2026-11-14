@@ -556,9 +556,8 @@ class TrackingPreferencesManager @Inject constructor(
                 addedCount++
             }
         }
-        if (addedCount > 0) {
-            setCustomPurposes(current)
-        }
+        // Always persist to ensure DataStore has explicit KEY_CUSTOM_PURPOSES set
+        setCustomPurposes(current)
         return addedCount
     }
 

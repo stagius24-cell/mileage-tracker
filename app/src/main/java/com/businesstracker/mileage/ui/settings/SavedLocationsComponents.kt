@@ -775,9 +775,9 @@ fun SavedLocationsRestorePreviewDialog(
                         color = SucculentPrimary.copy(alpha = 0.12f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             val tripText = if (state.tripsRestoredCount > 0) {
                                 "✓ Restored ${state.tripsRestoredCount} trip(s) from Sheet1 into your history."
@@ -786,6 +786,18 @@ fun SavedLocationsRestorePreviewDialog(
                             }
                             Text(
                                 text = tripText,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = SucculentPrimary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            val purpText = if (state.purposesRestoredCount > 0) {
+                                "✓ Restored ${state.purposesRestoredCount} custom business purpose(s)."
+                            } else {
+                                "Custom business purposes are already up to date."
+                            }
+                            Text(
+                                text = purpText,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = SucculentPrimary,
                                 fontWeight = FontWeight.SemiBold

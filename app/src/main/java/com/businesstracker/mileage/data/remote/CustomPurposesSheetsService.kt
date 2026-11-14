@@ -155,6 +155,35 @@ open class CustomPurposesSheetsService(
         data class Failure(val result: CustomPurposesSyncResult) : EnsureOutcome()
     }
 
+    private data class SheetPropertyInfo(
+        val sheetId: Int,
+        val title: String
+    )
+
+    private fun extractSheetProperties(metadataJson: String): List<SheetPropertyInfo> {
+        return try {
+            val root = gson.fromJson(metadataJson, JsonObject::class.java) ?: return emptyList()
+            val sheets = root.getAsJsonArray("sheets") ?: return emptyList()
+            val list = mutableListOf<SheetPropertyInfo>()
+            for (i in 0 until sheets.size()) {
+                val sheetObj = sheets.get(i).asJsonObject ?: continue
+                val props = sheetObj.getAsJsonObject("properties") ?: continue
+                val title = props.get("title")?.asString?.trim() ?: continue
+                val id = props.get("sheetId")?.asInt ?: continue
+                list.add(SheetPropertyInfo(id, title))
+            }
+            list
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun findCustomPurposesSheet(sheets: List<SheetPropertyInfo>): SheetPropertyInfo? {
+        return sheets.firstOrNull { it.title.equals(WORKSHEET_NAME, ignoreCase = true) }
+            ?: sheets.firstOrNull { it.title.startsWith("Custom Purpose", ignoreCase = true) }
+            ?: sheets.firstOrNull { it.title.contains("purpose", ignoreCase = true) }
+    }
+
     private suspend fun ensureWorksheetAndHeaders(spreadsheetId: String, initialToken: String): EnsureOutcome {
         var token = initialToken
         val metaUrl = baseHttpUrlBuilder(spreadsheetId)
@@ -167,14 +196,18 @@ open class CustomPurposesSheetsService(
         )
         token = tokenAfterMeta
 
-        var sheetId: Int? = null
+        var existingSheet: SheetPropertyInfo? = null
         metaResp.use { resp ->
             val bodyStr = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
                 return EnsureOutcome.Failure(mapHttpFailure(resp.code, bodyStr))
             }
-            sheetId = findWorksheetId(bodyStr, WORKSHEET_NAME)
+            val sheets = extractSheetProperties(bodyStr)
+            existingSheet = findCustomPurposesSheet(sheets)
         }
+
+        var sheetId = existingSheet?.sheetId
+        val sheetTitle = existingSheet?.title ?: WORKSHEET_NAME
 
         if (sheetId == null) {
             val addSheetJson = JsonObject().apply {
@@ -209,14 +242,20 @@ open class CustomPurposesSheetsService(
             CustomPurposesSyncResult.UnexpectedError("Unable to resolve worksheet ID for '$WORKSHEET_NAME'")
         )
 
-        // Ensure header row A1:B1 matches expected headers
-        val headerUrl = baseHttpUrlBuilder(spreadsheetId)
-            .addPathSegment("values")
-            .addPathSegment("'$WORKSHEET_NAME'!A1:B1")
-            .build()
+        val headerRange = if (sheetTitle.contains(" ") && !sheetTitle.startsWith("'")) {
+            "'$sheetTitle'!A1:B1"
+        } else {
+            "$sheetTitle!A1:B1"
+        }
 
+        // Ensure header row A1:B1 matches expected headers
         val (headerResp, tokenAfterHeader) = executeWithAuthRetry(
-            Request.Builder().url(headerUrl).get(),
+            Request.Builder().url(
+                baseHttpUrlBuilder(spreadsheetId)
+                    .addPathSegment("values")
+                    .addPathSegment(headerRange)
+                    .build()
+            ).get(),
             token
         )
         token = tokenAfterHeader
@@ -240,7 +279,7 @@ open class CustomPurposesSheetsService(
         if (!headerMatches) {
             val writeOutcome = writeRange(
                 spreadsheetId = spreadsheetId,
-                rangeA1 = "'$WORKSHEET_NAME'!A1:B1",
+                rangeA1 = headerRange,
                 values = listOf(EXPECTED_HEADERS),
                 token = token
             )
@@ -257,21 +296,9 @@ open class CustomPurposesSheetsService(
     }
 
     private fun findWorksheetId(metadataJson: String, targetTitle: String): Int? {
-        return try {
-            val root = gson.fromJson(metadataJson, JsonObject::class.java) ?: return null
-            val sheets = root.getAsJsonArray("sheets") ?: return null
-            for (i in 0 until sheets.size()) {
-                val sheetObj = sheets.get(i).asJsonObject ?: continue
-                val props = sheetObj.getAsJsonObject("properties") ?: continue
-                val title = props.get("title")?.asString ?: continue
-                if (title.equals(targetTitle, ignoreCase = true)) {
-                    return props.get("sheetId")?.asInt
-                }
-            }
-            null
-        } catch (_: Exception) {
-            null
-        }
+        val sheets = extractSheetProperties(metadataJson)
+        return sheets.firstOrNull { it.title.equals(targetTitle, ignoreCase = true) }?.sheetId
+            ?: sheets.firstOrNull { it.title.contains(targetTitle, ignoreCase = true) }?.sheetId
     }
 
     private fun extractAddedSheetId(batchUpdateResponseJson: String): Int? {
@@ -328,9 +355,13 @@ open class CustomPurposesSheetsService(
     }
 
     private suspend fun readSheetValues(spreadsheetId: String, token: String): ReadValuesOutcome {
+        return readRangeSafely(spreadsheetId, "'$WORKSHEET_NAME'!A2:B", token)
+    }
+
+    private suspend fun readRangeSafely(spreadsheetId: String, rangeA1: String, token: String): ReadValuesOutcome {
         val valuesUrl = baseHttpUrlBuilder(spreadsheetId)
             .addPathSegment("values")
-            .addPathSegment("'$WORKSHEET_NAME'!A2:B")
+            .addPathSegment(rangeA1)
             .build()
 
         val (resp, finalToken) = executeWithAuthRetry(
@@ -340,20 +371,59 @@ open class CustomPurposesSheetsService(
         resp.use {
             val bodyStr = it.body?.string().orEmpty()
             if (!it.isSuccessful) {
+                // If it failed with 400 and range was quoted with single quotes, retry without quotes (or vice-versa)
+                if (it.code == 400 && rangeA1.startsWith("'") && rangeA1.contains("'!")) {
+                    val unquoted = rangeA1.removeSurrounding("'").substringBefore("'!") + "!" + rangeA1.substringAfter("'!")
+                    val fallbackUrl = baseHttpUrlBuilder(spreadsheetId)
+                        .addPathSegment("values")
+                        .addPathSegment(unquoted)
+                        .build()
+                    val (fbResp, fbToken) = executeWithAuthRetry(
+                        Request.Builder().url(fallbackUrl).get(),
+                        finalToken
+                    )
+                    fbResp.use { fb ->
+                        val fbBody = fb.body?.string().orEmpty()
+                        if (fb.isSuccessful) {
+                            return parseValuesResponse(fbBody, fbToken)
+                        }
+                    }
+                }
                 throw NonRetryableSyncException(mapHttpFailure(it.code, bodyStr))
             }
-            val root = gson.fromJson(bodyStr, JsonObject::class.java)
-            val jsonValues = root?.getAsJsonArray("values")
-            val rows = mutableListOf<List<Any?>>()
-            if (jsonValues != null) {
-                for (i in 0 until jsonValues.size()) {
-                    val rowArr = jsonValues.get(i).asJsonArray
-                    val rowList = (0 until rowArr.size()).map { colIdx -> rowArr.get(colIdx).asString }
+            return parseValuesResponse(bodyStr, finalToken)
+        }
+    }
+
+    private fun parseValuesResponse(bodyStr: String, token: String): ReadValuesOutcome {
+        val root = try {
+            gson.fromJson(bodyStr, JsonObject::class.java)
+        } catch (_: Exception) {
+            null
+        }
+        val jsonValues = root?.getAsJsonArray("values")
+        val rows = mutableListOf<List<Any?>>()
+        if (jsonValues != null) {
+            for (i in 0 until jsonValues.size()) {
+                val rowElem = jsonValues.get(i)
+                if (rowElem != null && rowElem.isJsonArray) {
+                    val rowArr = rowElem.asJsonArray
+                    val rowList = mutableListOf<Any?>()
+                    for (colIdx in 0 until rowArr.size()) {
+                        val elem = rowArr.get(colIdx)
+                        if (elem == null || elem.isJsonNull) {
+                            rowList.add(null)
+                        } else if (elem.isJsonPrimitive) {
+                            rowList.add(elem.asString)
+                        } else {
+                            rowList.add(elem.toString())
+                        }
+                    }
                     rows.add(rowList)
                 }
             }
-            return ReadValuesOutcome(rows, finalToken)
         }
+        return ReadValuesOutcome(rows, token)
     }
 
     private suspend fun executeWriteCall(builder: Request.Builder, token: String): HttpWriteOutcome {
@@ -532,7 +602,8 @@ open class CustomPurposesSheetsService(
     }
 
     /**
-     * Reads custom purposes from 'Custom Purposes'!A2:B on Google Sheets and merges them into local preferences.
+     * Reads custom business purposes from the spreadsheet (from 'Custom Purposes' tab and/or Sheet1 trips)
+     * and merges them into local preferences.
      */
     open suspend fun restoreCustomPurposes(): CustomPurposesRestoreResult = withContext(ioDispatcher) {
         syncMutex.withLock {
@@ -553,30 +624,74 @@ open class CustomPurposesSheetsService(
                 )
                 token = tokenAfterMeta
 
-                var sheetExists = false
-                metaResp.use { resp ->
+                val allSheets = metaResp.use { resp ->
                     val bodyStr = resp.body?.string().orEmpty()
                     if (resp.isSuccessful) {
-                        sheetExists = findWorksheetId(bodyStr, WORKSHEET_NAME) != null
+                        extractSheetProperties(bodyStr)
+                    } else emptyList()
+                }
+
+                val targetSheet = findCustomPurposesSheet(allSheets)
+                val discoveredPurposes = mutableSetOf<String>()
+
+                // 1. Read from dedicated Purposes worksheet (e.g. 'Custom Purposes'!A:B)
+                if (targetSheet != null) {
+                    try {
+                        val rangeA1 = if (targetSheet.title.contains(" ") && !targetSheet.title.startsWith("'")) {
+                            "'${targetSheet.title}'!A:B"
+                        } else {
+                            "${targetSheet.title}!A:B"
+                        }
+                        val currentRowsState = readRangeSafely(config.spreadsheetId, rangeA1, token)
+                        token = currentRowsState.activeToken
+                        currentRowsState.rows
+                            .mapNotNull { it.firstOrNull()?.toString()?.trim() }
+                            .filter { it.isNotEmpty() }
+                            .filterNot { it.equals("Purpose", ignoreCase = true) }
+                            .filterNot { it.equals("Last Updated", ignoreCase = true) }
+                            .filterNot { it.equals("Personal", ignoreCase = true) }
+                            .filterNot { it.equals("Unreviewed", ignoreCase = true) }
+                            .forEach { discoveredPurposes.add(it) }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed reading custom purposes tab: ${e.message}")
                     }
                 }
 
-                if (!sheetExists) {
-                    return@withLock CustomPurposesRestoreResult.Empty("No 'Custom Purposes' sheet tab found.")
+                // 2. Also inspect the primary trips sheet (e.g. 'Sheet1'!A2:K or first sheet) for recorded trip purposes
+                val tripSheet = allSheets.firstOrNull { it.title.equals("Sheet1", ignoreCase = true) }
+                    ?: allSheets.firstOrNull { it != targetSheet }
+                if (tripSheet != null) {
+                    try {
+                        val tripRange = if (tripSheet.title.contains(" ") && !tripSheet.title.startsWith("'")) {
+                            "'${tripSheet.title}'!A2:K"
+                        } else {
+                            "${tripSheet.title}!A2:K"
+                        }
+                        val tripRowsState = readRangeSafely(config.spreadsheetId, tripRange, token)
+                        token = tripRowsState.activeToken
+                        tripRowsState.rows.forEach { row ->
+                            // Column K (index 10) is Purpose in Sheet1
+                            val purpose = if (row.size > 10) row[10]?.toString()?.trim() else null
+                            if (!purpose.isNullOrBlank() &&
+                                !purpose.equals("Purpose", ignoreCase = true) &&
+                                !purpose.equals("Personal", ignoreCase = true) &&
+                                !purpose.equals("Unreviewed", ignoreCase = true)
+                            ) {
+                                discoveredPurposes.add(purpose)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed reading trips sheet for custom purposes: ${e.message}")
+                    }
                 }
 
-                val currentRowsState = readSheetValues(config.spreadsheetId, token)
-                val cloudPurposes = currentRowsState.rows
-                    .mapNotNull { it.firstOrNull()?.toString()?.trim() }
-                    .filter { it.isNotEmpty() }
-                    .distinct()
-
-                if (cloudPurposes.isEmpty()) {
+                val finalPurposesList = discoveredPurposes.toList()
+                if (finalPurposesList.isEmpty()) {
                     return@withLock CustomPurposesRestoreResult.Empty("No custom purposes found on Google Sheets.")
                 }
 
-                val addedCount = preferencesManager.mergeCustomPurposes(cloudPurposes)
-                CustomPurposesRestoreResult.Success(addedCount = addedCount, totalCloudCount = cloudPurposes.size)
+                val addedCount = preferencesManager.mergeCustomPurposes(finalPurposesList)
+                CustomPurposesRestoreResult.Success(addedCount = addedCount, totalCloudCount = finalPurposesList.size)
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.e(TAG, "Restore failed", e)

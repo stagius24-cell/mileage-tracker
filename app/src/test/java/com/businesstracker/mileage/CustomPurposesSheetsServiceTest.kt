@@ -129,11 +129,35 @@ class CustomPurposesSheetsServiceTest {
                 return jsonResponse(req, 200, """{"updatedRows":1}""")
             }
 
-            if (req.method == "GET" && decodedUrl.contains("/values/'Custom Purposes'!A2:B")) {
+            if (req.method == "GET" && (decodedUrl.contains("Custom Purposes'!A:B") || decodedUrl.contains("Custom Purposes!A:B"))) {
+                val allRows = sheetValues["Custom Purposes"].orEmpty()
+                val valuesArr = JsonArray()
+                allRows.forEach { row ->
+                    val rowArr = JsonArray()
+                    row.forEach { rowArr.add(it?.toString().orEmpty()) }
+                    valuesArr.add(rowArr)
+                }
+                val root = JsonObject().apply { add("values", valuesArr) }
+                return jsonResponse(req, 200, gson.toJson(root))
+            }
+
+            if (req.method == "GET" && (decodedUrl.contains("Custom Purposes'!A2:B") || decodedUrl.contains("Custom Purposes!A2:B"))) {
                 val allRows = sheetValues["Custom Purposes"].orEmpty()
                 val dataRows = if (allRows.size > 1) allRows.subList(1, allRows.size) else emptyList()
                 val valuesArr = JsonArray()
                 dataRows.forEach { row ->
+                    val rowArr = JsonArray()
+                    row.forEach { rowArr.add(it?.toString().orEmpty()) }
+                    valuesArr.add(rowArr)
+                }
+                val root = JsonObject().apply { add("values", valuesArr) }
+                return jsonResponse(req, 200, gson.toJson(root))
+            }
+
+            if (req.method == "GET" && (decodedUrl.contains("Sheet1!A2:K") || decodedUrl.contains("Sheet1!A:K"))) {
+                val allRows = sheetValues["Sheet1"].orEmpty()
+                val valuesArr = JsonArray()
+                allRows.forEach { row ->
                     val rowArr = JsonArray()
                     row.forEach { rowArr.add(it?.toString().orEmpty()) }
                     valuesArr.add(rowArr)
@@ -310,5 +334,24 @@ class CustomPurposesSheetsServiceTest {
 
         val result = service.restoreCustomPurposes()
         assertTrue(result is CustomPurposesRestoreResult.Empty)
+    }
+
+    @Test
+    fun restoreCustomPurposes_whenPurposesOnlyInSheet1Trips_restoresThem() = runBlocking {
+        val interceptor = FakeSheetsInterceptor(gson)
+        interceptor.sheets["Sheet1"] = 0
+        // Header + row where column K (index 10) is "Succulent Pop-up Sale"
+        val tripRow = (0..18).map { "" }.toMutableList<Any?>()
+        tripRow[0] = "trip-1"
+        tripRow[8] = "BUSINESS"
+        tripRow[10] = "Succulent Pop-up Sale"
+        interceptor.sheetValues["Sheet1"] = mutableListOf(tripRow)
+
+        val service = createService(interceptor)
+        val result = service.restoreCustomPurposes()
+        assertTrue(result is CustomPurposesRestoreResult.Success)
+        val success = result as CustomPurposesRestoreResult.Success
+        assertEquals(1, success.addedCount)
+        assertTrue(preferencesManager.getCustomPurposesList().contains("Succulent Pop-up Sale"))
     }
 }
