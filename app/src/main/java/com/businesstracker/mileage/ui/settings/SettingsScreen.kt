@@ -1088,9 +1088,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.135 (Build 136)" to "Updated trip route destination icons.",
                 "Version 1.0.134 (Build 135)" to "Added interactive monthly mileage chart to Reports.",
-                "Version 1.0.133 (Build 134)" to "Improved the time picker drag handle and width.",
-                "Version 1.0.132 (Build 133)" to "Removed Settings card edges and navigation shadow."
+                "Version 1.0.133 (Build 134)" to "Improved the time picker drag handle and width."
             )
         }
 

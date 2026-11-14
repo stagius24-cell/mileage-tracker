@@ -14,8 +14,8 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 135
-        versionName = "1.0.134"
+        versionCode = 136
+        versionName = "1.0.135"
         buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings: grouped floating cards and compact controls.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

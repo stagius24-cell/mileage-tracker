@@ -743,7 +743,7 @@ private fun TripHistoryItem(
                     verticalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     HistoryLocationLine(address = start, tint = SucculentPrimary, isStart = true)
-                    HistoryLocationLine(address = end, tint = SpeedRed, isStart = false)
+                    HistoryLocationLine(address = end, tint = Color(0xFFCC5B77), isStart = false)
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     if (isBusiness && trip.purpose.isBlank()) {

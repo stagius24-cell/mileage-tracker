@@ -772,12 +772,11 @@ private fun RouteDetailsTab(
             locationActionLabel = startLocationActionLabel,
             onSaveLocation = onSaveStartLocation
         )
-        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         DestinationRow(
             primaryName = smartEndName,
             address = endAddress,
             time = endTime,
-            color = SpeedRed,
+            color = Color(0xFFCC5B77),
             isStart = false,
             locationActionLabel = endLocationActionLabel,
             onSaveLocation = onSaveEndLocation
