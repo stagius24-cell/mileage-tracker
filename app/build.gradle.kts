@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 139
-        versionName = "1.0.138"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Compact Backup & Restore settings.\"")
+        versionCode = 140
+        versionName = "1.0.139"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Allow editing the Google Sheets spreadsheet ID.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -574,10 +574,17 @@ class SettingsViewModel @Inject constructor(
     // Google Sheets Actions
     fun setSheetsSpreadsheetId(id: String) {
         viewModelScope.launch {
-            preferencesManager.setSheetsSpreadsheetId(id)
+            val trimmedId = id.trim()
+            preferencesManager.setSheetsSpreadsheetId(trimmedId)
             val hasOAuth = secureStorageManager.hasOAuthToken()
-            val isConn = (hasOAuth && id.trim().isNotBlank()) || uiState.value.sheetsWebhookUrl.isNotBlank()
+            val isConn = (hasOAuth && trimmedId.isNotBlank()) || uiState.value.sheetsWebhookUrl.isNotBlank()
             preferencesManager.setSheetsConnected(isConn)
+            if (hasOAuth && trimmedId.isNotBlank()) {
+                preferencesManager.setSheetsLastError(null)
+                GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
+                GoogleSheetsSyncWorker.enqueuePeriodicSync(context)
+                SavedLocationBackupWorker.enqueueOneTimeBackup(context)
+            }
         }
     }
 

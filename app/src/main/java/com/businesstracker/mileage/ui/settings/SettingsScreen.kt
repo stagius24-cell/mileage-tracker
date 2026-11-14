@@ -178,6 +178,9 @@ fun SettingsScreen(
 
     var showVersionHistoryDialog by rememberSaveable { mutableStateOf(false) }
     var showDisconnectConfirmation by rememberSaveable { mutableStateOf(false) }
+    var showSpreadsheetIdEditor by rememberSaveable { mutableStateOf(false) }
+    var spreadsheetIdInput by rememberSaveable { mutableStateOf("") }
+    var spreadsheetIdError by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -560,6 +563,14 @@ fun SettingsScreen(
                                     modifier = Modifier.weight(1f), maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                     style = MaterialTheme.typography.bodyMedium)
+                                IconButton(onClick = {
+                                    spreadsheetIdInput = state.sheetsSpreadsheetId
+                                    spreadsheetIdError = false
+                                    showSpreadsheetIdEditor = true
+                                }, modifier = Modifier.size(48.dp)) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit Spreadsheet ID",
+                                        modifier = Modifier.size(18.dp))
+                                }
                                 if (state.sheetsSpreadsheetId.isNotBlank()) IconButton(
                                     onClick = {
                                         clipboardManager.setText(AnnotatedString(state.sheetsSpreadsheetId))
@@ -614,6 +625,48 @@ fun SettingsScreen(
                 }
             }
         }
+    }
+
+    if (showSpreadsheetIdEditor) {
+        AlertDialog(
+            onDismissRequest = { showSpreadsheetIdEditor = false },
+            title = { Text("Spreadsheet ID") },
+            text = {
+                Column {
+                    Text("Paste the ID or the full Google Sheets link.",
+                        style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = spreadsheetIdInput,
+                        onValueChange = { spreadsheetIdInput = it; spreadsheetIdError = false },
+                        label = { Text("Spreadsheet ID or link") },
+                        isError = spreadsheetIdError,
+                        supportingText = if (spreadsheetIdError) {
+                            { Text("Enter a valid Google Sheets ID or link") }
+                        } else null,
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val entered = spreadsheetIdInput.trim()
+                    val id = if (entered.startsWith("https://")) {
+                        Regex("^https://docs\\.google\\.com/spreadsheets/d/([A-Za-z0-9_-]+)")
+                            .find(entered)?.groupValues?.get(1).orEmpty()
+                    } else entered
+                    if (id.matches(Regex("[A-Za-z0-9_-]+"))) {
+                        viewModel.setSheetsSpreadsheetId(id)
+                        showSpreadsheetIdEditor = false
+                    } else spreadsheetIdError = true
+                }) { Text("Save") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSpreadsheetIdEditor = false }) { Text("Cancel") }
+            }
+        )
     }
 
 
