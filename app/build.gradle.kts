@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 129
-        versionName = "1.0.128"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings: dismissible time picker handle and outside tap.\"")
+        versionCode = 130
+        versionName = "1.0.129"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings: grouped floating cards and compact controls.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
