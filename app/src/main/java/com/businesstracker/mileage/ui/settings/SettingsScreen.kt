@@ -193,8 +193,8 @@ fun SettingsScreen(
             .fillMaxSize()
             .then(if (showVersionHistoryDialog || showPurposeList || showSavedLocationsList) Modifier.blur(8.dp) else Modifier)
             .background(if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.background else Color(0xFFF3F6FA)),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
             Text(
@@ -485,18 +485,10 @@ fun SettingsScreen(
                 )
             }
 
-            SettingsSection(
-                title = "Business purposes",
-                icon = Icons.Default.BusinessCenter,
-                trailing = {
-                    IconButton(onClick = { purposeError = null; showAddPurpose = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add business purpose", tint = SucculentPrimary)
-                    }
-                    IconButton(onClick = { showPurposeList = true }) {
-                        Icon(Icons.Default.ChevronRight, contentDescription = "Show business purposes",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
+            SettingsManagementRow(
+                title = "Business purposes", icon = Icons.Default.BusinessCenter,
+                onAdd = { purposeError = null; showAddPurpose = true },
+                onOpen = { showPurposeList = true }
             )
 
             if (showAddPurpose) {
@@ -504,7 +496,7 @@ fun SettingsScreen(
                 SettingsBottomSheet(onDismissRequest = { showAddPurpose = false }) {
                     LaunchedEffect(Unit) { purposeFocusRequester.requestFocus() }
                         Column(
-                            modifier = Modifier.fillMaxWidth().imePadding().padding(horizontal = 20.dp).padding(bottom = 16.dp),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -599,41 +591,12 @@ fun SettingsScreen(
         }
 
         item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 76.dp)
-                        .padding(horizontal = 14.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(shape = RoundedCornerShape(12.dp),
-                        color = SucculentPrimary.copy(alpha = 0.10f)) {
-                        Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Default.LocationOn, contentDescription = null,
-                                tint = SucculentPrimary, modifier = Modifier.size(22.dp))
-                        }
-                    }
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Saved Locations", style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis)
-                        Text("${state.savedLocations.size} saved places",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    IconButton(onClick = { editingLocation = null; showLocationDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Add saved location", tint = SucculentPrimary)
-                    }
-                    IconButton(onClick = { showSavedLocationsList = true }) {
-                        Icon(Icons.Default.ChevronRight, contentDescription = "Show saved locations",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
+            SettingsManagementRow(
+                title = "Saved Locations", icon = Icons.Default.LocationOn,
+                subtitle = "${state.savedLocations.size} saved places",
+                onAdd = { editingLocation = null; showLocationDialog = true },
+                onOpen = { showSavedLocationsList = true }
+            )
         }
 
         item {
@@ -1105,9 +1068,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.126 (Build 127)" to "Corrected sheet insets, slider thumb, and Settings row alignment.",
                 "Version 1.0.125 (Build 126)" to "Refined Settings cards and navigation bar.",
-                "Version 1.0.124 (Build 125)" to "Purpose and saved location forms now use bottom sheets.",
-                "Version 1.0.123 (Build 124)" to "Business purpose input is brighter and easier to read."
+                "Version 1.0.124 (Build 125)" to "Purpose and saved location forms now use bottom sheets."
             )
         }
 
@@ -1925,6 +1888,39 @@ private fun CombinedBackupStatusBox(
                     style = MaterialTheme.typography.labelSmall,
                     color = SpeedRed
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsManagementRow(
+    title: String,
+    icon: ImageVector,
+    subtitle: String? = null,
+    onAdd: () -> Unit,
+    onOpen: () -> Unit
+) {
+    Card(shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Surface(shape = RoundedCornerShape(12.dp), color = SucculentPrimary.copy(alpha = 0.1f)) {
+                Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
+                    Icon(icon, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(20.dp))
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+                subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+            IconButton(onClick = onAdd) {
+                Icon(Icons.Default.Add, contentDescription = "Add $title", tint = SucculentPrimary)
+            }
+            IconButton(onClick = onOpen) {
+                Icon(Icons.Default.ChevronRight, contentDescription = "Show $title")
             }
         }
     }

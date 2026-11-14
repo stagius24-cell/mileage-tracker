@@ -92,6 +92,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
@@ -321,9 +322,6 @@ fun SavedLocationDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = (LocalConfiguration.current.screenHeightDp.dp - 64.dp).coerceAtLeast(320.dp))
-                    .imePadding()
-                    .navigationBarsPadding()
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 12.dp)
             ) {
@@ -335,8 +333,8 @@ fun SavedLocationDialog(
                 ) {
                     Text(
                         text = if (initialLocation != null) "Edit Saved Location" else "Add Saved Location",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
+                        style = MaterialTheme.typography.titleLarge.copy(fontSize = 20.sp),
+                        fontWeight = FontWeight.SemiBold
                     )
                     IconButton(
                         onClick = onDismiss,
@@ -352,13 +350,13 @@ fun SavedLocationDialog(
                     }
                 }
 
-                Spacer(Modifier.height(0.dp))
+                Spacer(Modifier.height(16.dp))
 
                 Column(
                     modifier = Modifier
                         .weight(1f, fill = false)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     // Search Address + Inline GPS button
                     Row(
@@ -420,7 +418,7 @@ fun SavedLocationDialog(
                                 }
                             },
                             singleLine = true,
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(12.dp)
                         )
 
                         // Inline Use GPS button on the right
@@ -451,8 +449,8 @@ fun SavedLocationDialog(
                             },
                             enabled = !isLocating && !isSaving,
                             modifier = Modifier
-                                .defaultMinSize(minHeight = 48.dp),
-                            shape = RoundedCornerShape(10.dp),
+                                .heightIn(min = 56.dp),
+                            shape = RoundedCornerShape(12.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                         ) {
                             if (isLocating) {
@@ -476,7 +474,7 @@ fun SavedLocationDialog(
                     if (searchResults.isNotEmpty()) {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(10.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
                             Column(modifier = Modifier.padding(8.dp)) {
@@ -528,7 +526,7 @@ fun SavedLocationDialog(
                         placeholder = { Text("e.g. Home, Succulent Nursery, Warehouse", style = MaterialTheme.typography.bodySmall) },
                         textStyle = MaterialTheme.typography.bodyMedium,
                         singleLine = true,
-                        shape = RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     // Compact Address Field (resolved)
@@ -539,9 +537,8 @@ fun SavedLocationDialog(
                         label = { Text("Address *", style = MaterialTheme.typography.labelMedium) },
                         placeholder = { Text("123 Example Street, San Jose, CA", style = MaterialTheme.typography.bodySmall) },
                         textStyle = MaterialTheme.typography.bodyMedium,
-                        singleLine = false,
-                        maxLines = 2,
-                        shape = RoundedCornerShape(10.dp)
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
                     )
 
                     if (latitude != 0.0 || longitude != 0.0) {
@@ -595,6 +592,8 @@ fun SavedLocationDialog(
                             onValueChange = { radiusMeters = it },
                             valueRange = 50f..500f,
                             steps = 8,
+                            modifier = Modifier.heightIn(min = 48.dp),
+                            thumb = { Box(Modifier.size(20.dp).background(SucculentPrimary, CircleShape)) },
                             colors = SliderDefaults.colors(
                                 thumbColor = SucculentPrimary,
                                 activeTrackColor = SucculentPrimary
@@ -644,7 +643,7 @@ fun SavedLocationDialog(
                     }
                 }
 
-                Spacer(Modifier.height(0.dp))
+                Spacer(Modifier.height(16.dp))
 
                 // Footer stays outside the scrolling form and above the keyboard.
                 Row(
@@ -684,7 +683,7 @@ fun SavedLocationDialog(
                         },
                         enabled = !isSaving,
                         colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp)
                     ) {
                         if (isSaving) {
