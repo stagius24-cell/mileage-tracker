@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 159
-        versionName = "1.0.158"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Wrap work schedule time period to second line when more than 4 days are selected, avoiding text overflow in settings.\"")
+        versionCode = 160
+        versionName = "1.0.159"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Shift plus and chevron action icons further right with 20% tighter spacing in Settings management cards.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

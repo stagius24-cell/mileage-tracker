@@ -83,6 +83,10 @@ import androidx.compose.ui.text.AnnotatedString
 import android.widget.Toast
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.unit.Dp
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -1858,6 +1862,7 @@ private fun MetaText(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsManagementRow(
     title: String,
@@ -1867,7 +1872,10 @@ private fun SettingsManagementRow(
     onOpen: () -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(horizontal = 12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 72.dp)
+            .padding(start = 12.dp, end = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
@@ -1891,14 +1899,16 @@ private fun SettingsManagementRow(
                 }
             }
         }
-        IconButton(onClick = onAdd, modifier = Modifier.size(48.dp)) {
-            Box(Modifier.size(32.dp).background(SucculentPrimary.copy(alpha = 0.10f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                Icon(Icons.Default.Add, contentDescription = "Add $title", tint = SucculentPrimary, modifier = Modifier.size(20.dp))
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+            IconButton(onClick = onAdd, modifier = Modifier.size(38.dp)) {
+                Box(Modifier.size(32.dp).background(SucculentPrimary.copy(alpha = 0.10f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Add, contentDescription = "Add $title", tint = SucculentPrimary, modifier = Modifier.size(20.dp))
+                }
             }
-        }
-        IconButton(onClick = onOpen, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.Default.ChevronRight, contentDescription = "Show $title",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            IconButton(onClick = onOpen, modifier = Modifier.size(38.dp)) {
+                Icon(Icons.Default.ChevronRight, contentDescription = "Show $title",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
 }
