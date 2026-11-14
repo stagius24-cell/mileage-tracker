@@ -118,7 +118,14 @@ class SettingsViewModelSavedLocationsBackupTest {
         fakeTripsService: GoogleSheetsSyncService? = null
     ): SettingsViewModel {
         val authManager = GoogleAuthManager(context, secureStorageManager, preferencesManager)
-        val tripsSyncService = fakeTripsService ?: GoogleSheetsSyncService(preferencesManager, emptyTripRepo, secureStorageManager, authManager, Gson())
+        val tripsSyncService = fakeTripsService ?: GoogleSheetsSyncService(
+            preferencesManager = preferencesManager,
+            tripRepository = emptyTripRepo,
+            secureStorageManager = secureStorageManager,
+            googleAuthManager = authManager,
+            gson = Gson(),
+            ioDispatcher = testDispatcher
+        )
         return SettingsViewModel(
             preferencesManager = preferencesManager,
             activityTransitionManager = ActivityTransitionManager(context),
@@ -221,6 +228,14 @@ class SettingsViewModelSavedLocationsBackupTest {
 
         // 2. Restore opens preview with ONLY new item checked, conflict unchecked by default
         viewModel.restoreSavedLocationsFromSheets()
+        withContext(Dispatchers.Default) {
+            withTimeout(5000) {
+                while (viewModel.uiState.value.restorePreviewState == null) {
+                    advanceUntilIdle()
+                    delay(10)
+                }
+            }
+        }
         advanceUntilIdle()
         val loaded = viewModel.uiState.value.restorePreviewState as SavedLocationsRestorePreviewUi.Loaded
         assertEquals(setOf("cloud-new"), loaded.selectedIds)

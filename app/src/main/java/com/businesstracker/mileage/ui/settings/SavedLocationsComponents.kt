@@ -772,17 +772,23 @@ fun SavedLocationsRestorePreviewDialog(
 
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        color = SucculentPrimary.copy(alpha = 0.12f),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
+                            val tripText = if (state.tripsRestoredCount > 0) {
+                                "✓ Restored ${state.tripsRestoredCount} trip(s) from Sheet1 into your history."
+                            } else {
+                                "Trips on Sheet1 are already synced locally."
+                            }
                             Text(
-                                text = "Trip sync is upload-only (restore unavailable). Saved Locations are ready to restore.",
+                                text = tripText,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = SucculentPrimary,
+                                fontWeight = FontWeight.SemiBold
                             )
                         }
                     }

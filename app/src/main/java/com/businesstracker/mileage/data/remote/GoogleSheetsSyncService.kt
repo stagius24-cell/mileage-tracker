@@ -115,8 +115,15 @@ open class GoogleSheetsSyncService @Inject constructor(
         )
     }
 
+    sealed class TripRestoreResult {
+        data class Success(val importedCount: Int, val existingCount: Int) : TripRestoreResult()
+        data class Empty(val message: String) : TripRestoreResult()
+        data class Failed(val message: String) : TripRestoreResult()
+    }
+
     /**
      * Executes synchronization of all pending reviewed trips with Google Sheets.
+     * Also detects and syncs any classified trips missing from the remote spreadsheet.
      * Serialized with an in-process Mutex to eliminate local race conditions.
      */
     // Safe for both Settings' main-thread coroutine and background workers.
@@ -134,10 +141,9 @@ open class GoogleSheetsSyncService @Inject constructor(
             }
 
             val pendingTrips = tripRepository.getPendingSyncTrips()
-            // Strict business rule: Never sync UNREVIEWED trips as confirmed mileage
-            val eligibleTrips = pendingTrips.filter { it.classification != "UNREVIEWED" }
+            val eligiblePending = pendingTrips.filter { it.classification != "UNREVIEWED" }
 
-            if (eligibleTrips.isEmpty()) {
+            if (eligiblePending.isEmpty()) {
                 val now = System.currentTimeMillis()
                 preferencesManager.setSheetsLastSyncTime(now)
                 preferencesManager.setSheetsLastError(null)
@@ -145,14 +151,14 @@ open class GoogleSheetsSyncService @Inject constructor(
             }
 
             return@withLock if (webhookUrl.isNotBlank()) {
-                syncViaWebhook(webhookUrl, eligibleTrips)
+                syncViaWebhook(webhookUrl, eligiblePending)
             } else {
                 if (authToken.isBlank()) {
                     val err = "Google Sheets authentication token missing. Please connect your account."
                     preferencesManager.setSheetsLastError(err)
                     return@withLock SheetsSyncResult.TokenExpired(err)
                 }
-                syncViaSheetsApi(spreadsheetId, authToken, eligibleTrips, isRetryAfterRefresh = false)
+                syncViaSheetsApi(spreadsheetId, authToken, eligiblePending, isRetryAfterRefresh = false)
             }
         }
     }
@@ -331,6 +337,18 @@ open class GoogleSheetsSyncService @Inject constructor(
                 if (maxRowFound < 1) maxRowFound = 1
             }
 
+            // Step 3: Identify trips needing write (missing remotely, or pending local updates)
+            val tripsToSync = trips.filter { trip ->
+                !existingRows.containsKey(trip.id) || trip.syncStatus == "PENDING"
+            }
+
+            if (tripsToSync.isEmpty()) {
+                val now = System.currentTimeMillis()
+                preferencesManager.setSheetsLastSyncTime(now)
+                preferencesManager.setSheetsLastError(null)
+                return SheetsSyncResult.Success(0, 0)
+            }
+
             var insertedCount = 0
             var updatedCount = 0
             var nextAvailableRow = maxOf(maxRowFound + 1, 2)
@@ -338,8 +356,8 @@ open class GoogleSheetsSyncService @Inject constructor(
             var authExpiredMidSync = false
             var primaryFailureResult: SheetsSyncResult? = null
 
-            // Step 3: Process each individual trip and confirm remote write
-            for (trip in trips) {
+            // Process each individual trip and confirm remote write
+            for (trip in tripsToSync) {
                 val rowData = formatTripToRow(trip)
                 val existingRowIndex = existingRows[trip.id]
 
@@ -739,5 +757,197 @@ open class GoogleSheetsSyncService @Inject constructor(
             trip.trackingMethod,
             updatedStr
         )
+    }
+
+    /**
+     * Restores historical trips from Sheet1 on Google Sheets into the local database.
+     * Prevents duplicates by checking existing trip IDs before inserting.
+     */
+    open suspend fun restoreTripsFromSheets(): TripRestoreResult = withContext(ioDispatcher) {
+        syncMutex.withLock {
+            val spreadsheetId = preferencesManager.sheetsSpreadsheetId.first().trim()
+            preferencesManager.migrateLegacyAuthToken(secureStorageManager)
+            val authToken = secureStorageManager.getOAuthToken()?.trim().orEmpty()
+
+            if (spreadsheetId.isBlank() || authToken.isBlank()) {
+                return@withLock TripRestoreResult.Failed("Google Sheets is not connected. Please connect your account in Settings.")
+            }
+
+            executeTripRestore(spreadsheetId, authToken, isRetryAfterRefresh = false)
+        }
+    }
+
+    private suspend fun executeTripRestore(
+        spreadsheetId: String,
+        authToken: String,
+        isRetryAfterRefresh: Boolean
+    ): TripRestoreResult {
+        val readUrl = "https://sheets.googleapis.com/v4/spreadsheets/$spreadsheetId/values/Sheet1!A2:P"
+        val request = Request.Builder()
+            .url(readUrl)
+            .addHeader("Authorization", "Bearer $authToken")
+            .get()
+            .build()
+
+        try {
+            client.newCall(request).execute().use { response ->
+                when (response.code) {
+                    401 -> {
+                        if (!isRetryAfterRefresh) {
+                            val refreshed = googleAuthManager?.refreshOAuthToken()
+                            if (refreshed != null && refreshed != authToken) {
+                                return executeTripRestore(spreadsheetId, refreshed, isRetryAfterRefresh = true)
+                            }
+                        }
+                        val msg = "Google authorization expired (401). Please reconnect your account."
+                        preferencesManager.setSheetsLastError(msg)
+                        return TripRestoreResult.Failed(msg)
+                    }
+                    403 -> {
+                        val msg = "Access denied (403). Check spreadsheet sharing permissions."
+                        preferencesManager.setSheetsLastError(msg)
+                        return TripRestoreResult.Failed(msg)
+                    }
+                    404 -> {
+                        val msg = "Spreadsheet not found (404). Verify the Spreadsheet ID."
+                        preferencesManager.setSheetsLastError(msg)
+                        return TripRestoreResult.Failed(msg)
+                    }
+                    in 200..299 -> {
+                        val body = response.body?.string().orEmpty()
+                        if (body.isBlank()) {
+                            return TripRestoreResult.Empty("No data returned from Sheet1")
+                        }
+
+                        val jsonElement = try {
+                            gson.fromJson(body, JsonElement::class.java)
+                        } catch (_: Exception) {
+                            null
+                        }
+
+                        val json = jsonElement?.asJsonObject
+                        if (json == null || !json.has("values")) {
+                            return TripRestoreResult.Empty("No trips found on Sheet1")
+                        }
+
+                        val valuesElem = json.get("values")
+                        if (!valuesElem.isJsonArray) {
+                            return TripRestoreResult.Empty("No trips found on Sheet1")
+                        }
+                        val values = valuesElem.asJsonArray
+                        if (values.size() == 0) {
+                            return TripRestoreResult.Empty("No trips found on Sheet1")
+                        }
+
+                        var importedCount = 0
+                        var existingCount = 0
+
+                        for (i in 0 until values.size()) {
+                            val rowElem = values.get(i)
+                            if (!rowElem.isJsonArray) continue
+                            val row = rowElem.asJsonArray
+                            if (row.size() == 0) continue
+
+                            val tripId = row.getOrNull(0)?.asString?.trim().orEmpty()
+                            if (tripId.isBlank() || tripId.equals("Trip ID", ignoreCase = true)) continue
+
+                            val date = row.getOrNull(1)?.asString?.trim().orEmpty()
+                            val startTimeStr = row.getOrNull(2)?.asString?.trim().orEmpty()
+                            val endTimeStr = row.getOrNull(3)?.asString?.trim().orEmpty()
+                            val startAddress = row.getOrNull(4)?.asString?.trim()?.ifBlank { null }
+                            val endAddress = row.getOrNull(5)?.asString?.trim()?.ifBlank { null }
+                            val totalMiles = row.getOrNull(6)?.asString?.toDoubleOrNull() ?: 0.0
+                            val businessMiles = row.getOrNull(7)?.asString?.toDoubleOrNull() ?: 0.0
+                            val classification = row.getOrNull(8)?.asString?.trim()?.ifBlank { "BUSINESS" } ?: "BUSINESS"
+                            val businessEntity = row.getOrNull(9)?.asString?.trim()?.ifBlank { "Personal" } ?: "Personal"
+                            val purpose = row.getOrNull(10)?.asString?.trim().orEmpty()
+                            val rate = row.getOrNull(11)?.asString?.toDoubleOrNull() ?: 0.67
+                            val deduction = row.getOrNull(12)?.asString?.toDoubleOrNull() ?: (businessMiles * rate)
+                            val notes = row.getOrNull(13)?.asString?.trim()?.ifBlank { null }
+                            val trackingMethod = row.getOrNull(14)?.asString?.trim()?.ifBlank { "AUTO_DETECTED" } ?: "AUTO_DETECTED"
+
+                            val parsedStartTime = parseTime(date, startTimeStr)
+                            val parsedEndTime = parseTime(date, endTimeStr).takeIf { it > parsedStartTime }
+                                ?: (parsedStartTime + 15 * 60 * 1000L)
+
+                            val existing = tripRepository.getTripById(tripId)
+                            if (existing == null) {
+                                val newTrip = TripEntity(
+                                    id = tripId,
+                                    date = date.ifBlank { SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(parsedStartTime)) },
+                                    startTime = parsedStartTime,
+                                    endTime = parsedEndTime,
+                                    startAddress = startAddress,
+                                    endAddress = endAddress,
+                                    startLatitude = 0.0,
+                                    startLongitude = 0.0,
+                                    endLatitude = 0.0,
+                                    endLongitude = 0.0,
+                                    totalDistanceMiles = totalMiles,
+                                    businessMiles = businessMiles,
+                                    businessEntity = businessEntity,
+                                    purpose = purpose,
+                                    trackingMethod = trackingMethod,
+                                    classification = classification,
+                                    applicableRate = rate,
+                                    calculatedDeduction = deduction,
+                                    notes = notes,
+                                    waypointsJson = "[]",
+                                    syncStatus = "SYNCED",
+                                    syncedAt = System.currentTimeMillis()
+                                )
+                                tripRepository.insertTrip(newTrip)
+                                importedCount++
+                            } else {
+                                existingCount++
+                            }
+                        }
+
+                        return TripRestoreResult.Success(importedCount, existingCount)
+                    }
+                    else -> {
+                        return TripRestoreResult.Failed("Google Sheets returned HTTP ${response.code}")
+                    }
+                }
+            }
+        } catch (e: IOException) {
+            return TripRestoreResult.Failed("Could not reach Google Sheets. Check your internet connection.")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return TripRestoreResult.Failed(e.localizedMessage ?: "Unexpected error restoring trips")
+        }
+    }
+
+    private fun JsonArray.getOrNull(index: Int): JsonElement? {
+        return if (index in 0 until size()) get(index) else null
+    }
+
+    private fun parseTime(date: String, timeStr: String): Long {
+        if (date.isNotBlank() && timeStr.isNotBlank()) {
+            val patterns = listOf(
+                "yyyy-MM-dd h:mm a",
+                "yyyy-MM-dd hh:mm a",
+                "yyyy-MM-dd H:mm",
+                "yyyy-MM-dd HH:mm"
+            )
+            for (pattern in patterns) {
+                try {
+                    val sdf = SimpleDateFormat(pattern, Locale.US)
+                    sdf.isLenient = true
+                    val d = sdf.parse("$date $timeStr")
+                    if (d != null) return d.time
+                } catch (_: Exception) {}
+            }
+        }
+        if (date.isNotBlank()) {
+            try {
+                val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+                sdf.isLenient = true
+                val d = sdf.parse(date)
+                if (d != null) return d.time
+            } catch (_: Exception) {}
+        }
+        return System.currentTimeMillis()
     }
 }

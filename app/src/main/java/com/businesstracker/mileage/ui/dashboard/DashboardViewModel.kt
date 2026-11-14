@@ -22,7 +22,7 @@ import com.businesstracker.mileage.domain.usecase.CalculateMileageRateUseCase
 import com.businesstracker.mileage.domain.usecase.GetDashboardSummaryUseCase
 import com.businesstracker.mileage.service.LocationTrackingService
 import com.businesstracker.mileage.service.TrackingServiceState
-import com.businesstracker.mileage.worker.MileageSyncWorker
+import com.businesstracker.mileage.worker.GoogleSheetsSyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -318,7 +318,7 @@ class DashboardViewModel @Inject constructor(
                 if (originalTrip != null) {
                     _lastClassifiedTrip.value = originalTrip
                 }
-                MileageSyncWorker.enqueueOneTimeSync(appContext)
+                GoogleSheetsSyncWorker.enqueueOneTimeSync(appContext)
             } finally {
                 _processingTripIds.value = _processingTripIds.value - tripId
             }
@@ -342,7 +342,7 @@ class DashboardViewModel @Inject constructor(
                 if (originalTrip != null) {
                     _lastClassifiedTrip.value = originalTrip
                 }
-                MileageSyncWorker.enqueueOneTimeSync(appContext)
+                GoogleSheetsSyncWorker.enqueueOneTimeSync(appContext)
             } finally {
                 _processingTripIds.value = _processingTripIds.value - tripId
             }
@@ -361,7 +361,7 @@ class DashboardViewModel @Inject constructor(
                 purpose = previousTrip.purpose,
                 notes = previousTrip.notes
             )
-            MileageSyncWorker.enqueueOneTimeSync(appContext)
+            GoogleSheetsSyncWorker.enqueueOneTimeSync(appContext)
         }
     }
 

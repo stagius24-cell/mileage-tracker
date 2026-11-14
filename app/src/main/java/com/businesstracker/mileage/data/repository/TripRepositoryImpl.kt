@@ -94,4 +94,8 @@ class TripRepositoryImpl @Inject constructor(
     override suspend fun markSynced(tripId: String, timestamp: Long) = withContext(ioDispatcher) {
         tripDao.updateSyncStatus(tripId, "SYNCED", timestamp)
     }
+
+    override suspend fun markAllClassifiedTripsPending() = withContext(ioDispatcher) {
+        tripDao.markAllClassifiedTripsPending()
+    }
 }

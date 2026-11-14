@@ -14,6 +14,9 @@ import com.businesstracker.mileage.domain.repository.SavedLocationRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.domain.usecase.ResolveSmartTripNamesUseCase
 import com.businesstracker.mileage.domain.usecase.SmartTripNames
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.businesstracker.mileage.worker.GoogleSheetsSyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -55,7 +58,8 @@ class TripHistoryViewModel @Inject constructor(
     private val tripRepository: TripRepository,
     private val savedLocationRepository: SavedLocationRepository? = null,
     private val resolveSmartTripNamesUseCase: ResolveSmartTripNamesUseCase? = null,
-    private val preferencesManager: TrackingPreferencesManager? = null
+    private val preferencesManager: TrackingPreferencesManager? = null,
+    @ApplicationContext private val context: Context? = null
 ) : ViewModel() {
 
     private val _searchQuery = MutableStateFlow("")
@@ -253,6 +257,7 @@ class TripHistoryViewModel @Inject constructor(
                 if (_selectedTripForDetails.value?.id == tripId) {
                     _selectedTripForDetails.value = updated
                 }
+                context?.let { GoogleSheetsSyncWorker.enqueueOneTimeSync(it) }
                 onSuccess?.invoke()
             } catch (e: Exception) {
                 android.util.Log.e("TripHistoryViewModel", "Failed to update trip details: ${e.message}", e)

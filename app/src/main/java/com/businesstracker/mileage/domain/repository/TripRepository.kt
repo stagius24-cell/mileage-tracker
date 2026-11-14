@@ -37,4 +37,5 @@ interface TripRepository {
     fun getTripsByClassification(classification: String): Flow<List<TripEntity>>
     suspend fun getPendingSyncTrips(): List<TripEntity>
     suspend fun markSynced(tripId: String, timestamp: Long)
+    suspend fun markAllClassifiedTripsPending() {}
 }

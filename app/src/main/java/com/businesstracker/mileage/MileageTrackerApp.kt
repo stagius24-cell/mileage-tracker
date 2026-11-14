@@ -48,6 +48,15 @@ class MileageTrackerApp : Application(), Configuration.Provider {
                 activityTransitionManager.registerTransitions()
             }
         }
+
+        // Schedule periodic & one-time sync if Google Sheets is connected
+        appScope.launch {
+            val isSheetsConn = preferencesManager.isSheetsConnected.first()
+            if (isSheetsConn) {
+                com.businesstracker.mileage.worker.GoogleSheetsSyncWorker.enqueuePeriodicSync(applicationContext)
+                com.businesstracker.mileage.worker.GoogleSheetsSyncWorker.enqueueOneTimeSync(applicationContext)
+            }
+        }
     }
 
     override fun onTerminate() {

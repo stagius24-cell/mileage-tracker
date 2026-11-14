@@ -178,11 +178,15 @@ class TripDebounceWorker @AssistedInject constructor(
                 return Result.retry()
             }
 
-            if (finalizedTrip != null && finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
-                notificationHelper.showTripDetectedNotification(
-                    finalizedTrip.id,
-                    finalizedTrip.totalDistanceMiles
-                )
+            if (finalizedTrip != null) {
+                if (finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
+                    notificationHelper.showTripDetectedNotification(
+                        finalizedTrip.id,
+                        finalizedTrip.totalDistanceMiles
+                    )
+                } else {
+                    GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
+                }
             }
 
             // Only clear preferences after confirmed finalization

@@ -105,7 +105,8 @@ sealed interface SavedLocationsRestorePreviewUi {
     data class Loaded(
         val preview: RestorePreviewData,
         val selectedIds: Set<String>,
-        val approvedConflictIds: Set<String>
+        val approvedConflictIds: Set<String>,
+        val tripsRestoredCount: Int = 0
     ) : SavedLocationsRestorePreviewUi
 
     data class Empty(
@@ -843,28 +844,53 @@ class SettingsViewModel @Inject constructor(
         _savedLocationsBackupMessage.value = null
         viewModelScope.launch {
             try {
-                when (val result = savedLocationsSheetsService.previewRestoreFromSheets()) {
+                val tripRestoreResult = sheetsSyncService.restoreTripsFromSheets()
+                val locResult = savedLocationsSheetsService.previewRestoreFromSheets()
+
+                val tripsRestored = if (tripRestoreResult is GoogleSheetsSyncService.TripRestoreResult.Success) {
+                    tripRestoreResult.importedCount
+                } else 0
+                val tripsExisting = if (tripRestoreResult is GoogleSheetsSyncService.TripRestoreResult.Success) {
+                    tripRestoreResult.existingCount
+                } else 0
+
+                when (locResult) {
                     is RestorePreviewResult.Success -> {
-                        val defaultSelected = result.preview.candidates
+                        val defaultSelected = locResult.preview.candidates
                             .filter { it.selectedByDefault }
                             .map { it.cloudLocation.id }
                             .toSet()
                         _restorePreviewState.value = SavedLocationsRestorePreviewUi.Loaded(
-                            preview = result.preview,
+                            preview = locResult.preview,
                             selectedIds = defaultSelected,
-                            approvedConflictIds = emptySet()
+                            approvedConflictIds = emptySet(),
+                            tripsRestoredCount = tripsRestored
                         )
                     }
                     is RestorePreviewResult.EmptyCloudSheet -> {
+                        val tripSummary = when (tripRestoreResult) {
+                            is GoogleSheetsSyncService.TripRestoreResult.Success ->
+                                if (tripsRestored > 0) "Restored $tripsRestored trips from Sheet1 ($tripsExisting already present)."
+                                else "All $tripsExisting trips on Sheet1 are already up to date locally."
+                            is GoogleSheetsSyncService.TripRestoreResult.Empty -> "No trips found on Sheet1."
+                            is GoogleSheetsSyncService.TripRestoreResult.Failed -> "Trips restore: ${tripRestoreResult.message}"
+                        }
                         _restorePreviewState.value = SavedLocationsRestorePreviewUi.Empty(
-                            localCount = result.localCount,
-                            message = result.message
+                            localCount = locResult.localCount,
+                            message = "$tripSummary\n\nNo saved locations found on Google Sheets."
                         )
                     }
                     is RestorePreviewResult.Error -> {
-                        _restorePreviewState.value = SavedLocationsRestorePreviewUi.Failure(
-                            message = result.failure.toMessage()
-                        )
+                        if (tripRestoreResult is GoogleSheetsSyncService.TripRestoreResult.Success && tripsRestored > 0) {
+                            _restorePreviewState.value = SavedLocationsRestorePreviewUi.Empty(
+                                localCount = 0,
+                                message = "Restored $tripsRestored trips from Sheet1 ($tripsExisting already present).\n\nSaved Locations: ${locResult.failure.toMessage()}"
+                            )
+                        } else {
+                            _restorePreviewState.value = SavedLocationsRestorePreviewUi.Failure(
+                                message = locResult.failure.toMessage()
+                            )
+                        }
                     }
                 }
             } finally {
@@ -937,6 +963,8 @@ class SettingsViewModel @Inject constructor(
         _unifiedBackupError.value = null
         viewModelScope.launch {
             try {
+                // Ensure all historical classified trips are pending for Google Sheets sync
+                tripRepository.markAllClassifiedTripsPending()
                 // 1. Sync pending trips to Google Sheets
                 val tripResult = sheetsSyncService.syncPendingTrips()
                 // 2. Back up all Saved Locations (full snapshot)
@@ -996,13 +1024,17 @@ class SettingsViewModel @Inject constructor(
                 )) {
                     is RestoreApplyResult.Success -> {
                         _restorePreviewState.value = null
+                        val tripSuffix = if (current.tripsRestoredCount > 0) " & ${current.tripsRestoredCount} trips" else ""
                         _savedLocationsBackupMessage.value =
-                            "Restored ${result.importedCount} new, ${result.updatedCount} overwritten" +
+                            "Restored ${result.importedCount} new, ${result.updatedCount} overwritten locations$tripSuffix" +
                                 if (result.preservedLocalCount > 0) " (${result.preservedLocalCount} local kept)" else ""
                     }
                     is RestoreApplyResult.NothingSelected -> {
                         _restorePreviewState.value = null
-                        _savedLocationsBackupMessage.value = "No locations selected to restore. Local records preserved."
+                        val tripMsg = if (current.tripsRestoredCount > 0)
+                            "Restored ${current.tripsRestoredCount} trips from Sheet1. No locations selected."
+                        else "No locations selected to restore. Local records preserved."
+                        _savedLocationsBackupMessage.value = tripMsg
                     }
                     is RestoreApplyResult.Failed -> {
                         _restorePreviewState.value = SavedLocationsRestorePreviewUi.Failure(result.message)

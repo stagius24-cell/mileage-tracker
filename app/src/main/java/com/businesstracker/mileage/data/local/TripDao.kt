@@ -133,6 +133,9 @@ interface TripDao {
     @Query("SELECT * FROM trips WHERE syncStatus = 'PENDING' ORDER BY startTime ASC")
     suspend fun getPendingSyncTrips(): List<TripEntity>
 
+    @Query("UPDATE trips SET syncStatus = 'PENDING' WHERE classification != 'UNREVIEWED'")
+    suspend fun markAllClassifiedTripsPending()
+
     @Query("UPDATE trips SET syncStatus = :status, syncedAt = :syncedAt WHERE id = :tripId")
     suspend fun updateSyncStatus(tripId: String, status: String, syncedAt: Long?)
 
