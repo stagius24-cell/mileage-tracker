@@ -153,6 +153,9 @@ class MainActivity : ComponentActivity() {
         val hasFine = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
+        val hasCoarse = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
         val hasActivity = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ContextCompat.checkSelfPermission(
                 this,
@@ -161,15 +164,7 @@ class MainActivity : ComponentActivity() {
         } else {
             true
         }
-        val hasBackground = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED
-        } else {
-            true
-        }
-        return hasFine && hasActivity && hasBackground
+        return (hasFine || hasCoarse) && hasActivity
     }
 
     private fun hasActivityRecognitionPermission(): Boolean {

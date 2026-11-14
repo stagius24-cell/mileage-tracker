@@ -182,7 +182,7 @@ class TrackingPreferencesManager @Inject constructor(
 
     // Work Schedule & Drive Filtering
     val isScheduleFilteringEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[KEY_SCHEDULE_FILTERING_ENABLED] ?: true
+        prefs[KEY_SCHEDULE_FILTERING_ENABLED] ?: false
     }
 
     suspend fun setScheduleFilteringEnabled(enabled: Boolean) {
@@ -233,7 +233,7 @@ class TrackingPreferencesManager @Inject constructor(
 
     suspend fun isWithinWorkSchedule(): Boolean {
         val prefs = context.dataStore.data.first()
-        val filteringEnabled = prefs[KEY_SCHEDULE_FILTERING_ENABLED] ?: true
+        val filteringEnabled = prefs[KEY_SCHEDULE_FILTERING_ENABLED] ?: false
         if (!filteringEnabled) return true
 
         val now = java.time.LocalDateTime.now()

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.businesstracker.mileage.receiver.AutoDriveReceiver
 import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.ActivityRecognitionClient
@@ -19,6 +20,10 @@ import javax.inject.Singleton
 class ActivityTransitionManager @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+
+    companion object {
+        private const val TAG = "ActivityTransitionMgr"
+    }
 
     private val activityRecognitionClient: ActivityRecognitionClient =
         ActivityRecognition.getClient(context)
@@ -49,20 +54,24 @@ class ActivityTransitionManager @Inject constructor(
             context,
             android.Manifest.permission.ACCESS_FINE_LOCATION
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-        if (!fineGranted) return false
+        val coarseGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+            context,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!fineGranted && !coarseGranted) {
+            Log.w(TAG, "Cannot register transitions: Location permission not granted")
+            return false
+        }
 
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             val activityGranted = androidx.core.content.ContextCompat.checkSelfPermission(
                 context,
                 android.Manifest.permission.ACTIVITY_RECOGNITION
             ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            if (!activityGranted) return false
-
-            val bgLocationGranted = androidx.core.content.ContextCompat.checkSelfPermission(
-                context,
-                android.Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            if (!bgLocationGranted) return false
+            if (!activityGranted) {
+                Log.w(TAG, "Cannot register transitions: Activity Recognition permission not granted")
+                return false
+            }
         }
 
         val transitions = listOf(
@@ -78,18 +87,6 @@ class ActivityTransitionManager @Inject constructor(
                 .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_EXIT)
                 .build(),
 
-            // Walking enter (user exits car and walks away)
-            ActivityTransition.Builder()
-                .setActivityType(DetectedActivity.WALKING)
-                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
-                .build(),
-
-            // On foot enter (user exits car and moves on foot)
-            ActivityTransition.Builder()
-                .setActivityType(DetectedActivity.ON_FOOT)
-                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
-                .build(),
-
             // Still enter (stationary confirmation for debounce)
             ActivityTransition.Builder()
                 .setActivityType(DetectedActivity.STILL)
@@ -101,8 +98,10 @@ class ActivityTransitionManager @Inject constructor(
 
         return try {
             activityRecognitionClient.requestActivityTransitionUpdates(request, transitionPendingIntent).await()
+            Log.d(TAG, "Successfully registered activity transitions with Google Play Services")
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register activity transition updates: ${e.message}", e)
             false
         }
     }
@@ -112,8 +111,10 @@ class ActivityTransitionManager @Inject constructor(
         transitionUnregistrar?.let { return it.invoke() }
         return try {
             activityRecognitionClient.removeActivityTransitionUpdates(transitionPendingIntent).await()
+            Log.d(TAG, "Successfully unregistered activity transitions")
             true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to unregister activity transitions: ${e.message}", e)
             false
         }
     }

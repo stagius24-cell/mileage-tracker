@@ -77,12 +77,8 @@ open class VehicleBluetoothManager @Inject constructor(
         if (action == BluetoothDevice.ACTION_ACL_CONNECTED) {
             if (isCarDevice(name, address)) {
                 setConnected(true)
-                // When confirmed connected to car Bluetooth, notify AutoDriveReceiver to check
-                // and initiate candidate drive tracking if auto-tracking is enabled
-                val triggerIntent = Intent(context, AutoDriveReceiver::class.java).apply {
-                    this.action = AutoDriveReceiver.ACTION_TRIGGER_VEHICLE_ENTER
-                }
-                context.sendBroadcast(triggerIntent)
+                preferencesManager.setInVehicleState(true)
+                triggerDriveStartIfApplicable()
             }
         } else if (action == BluetoothDevice.ACTION_ACL_DISCONNECTED) {
             if (isCarDevice(name, address)) {
@@ -104,6 +100,44 @@ open class VehicleBluetoothManager @Inject constructor(
         scope.launch {
             val connected = checkLiveBluetoothConnection()
             setConnected(connected)
+            if (connected) {
+                preferencesManager.setInVehicleState(true)
+                triggerDriveStartIfApplicable()
+            }
+        }
+    }
+
+    open fun triggerDriveStartIfApplicable() {
+        scope.launch {
+            try {
+                val autoTrack = preferencesManager.isAutoTrackingEnabled.first()
+                val isTracking = com.businesstracker.mileage.service.LocationTrackingService.serviceState.value.isTracking
+                if (autoTrack && !isTracking) {
+                    val hasFine = ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                    val hasCoarse = ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.ACCESS_COARSE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (hasFine || hasCoarse) {
+                        val newTripId = java.util.UUID.randomUUID().toString()
+                        val serviceIntent = Intent(context, com.businesstracker.mileage.service.LocationTrackingService::class.java).apply {
+                            action = com.businesstracker.mileage.service.LocationTrackingService.ACTION_START
+                            putExtra(com.businesstracker.mileage.service.LocationTrackingService.EXTRA_TRIP_ID, newTripId)
+                            putExtra(com.businesstracker.mileage.service.LocationTrackingService.EXTRA_TRACKING_METHOD, com.businesstracker.mileage.domain.model.TrackingMethod.AUTO_DETECTED.value)
+                            putExtra(com.businesstracker.mileage.service.LocationTrackingService.EXTRA_SUGGESTED_BUSINESS, "MySucculentCorner")
+                        }
+                        try {
+                            ContextCompat.startForegroundService(context, serviceIntent)
+                            Log.d("VehicleBluetoothManager", "Directly started LocationTrackingService for car Bluetooth connection")
+                        } catch (e: Exception) {
+                            Log.e("VehicleBluetoothManager", "Could not start ForegroundService directly from Bluetooth: ${e.message}", e)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("VehicleBluetoothManager", "Error in triggerDriveStartIfApplicable: ${e.message}", e)
+            }
         }
     }
 

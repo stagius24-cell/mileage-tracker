@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 156
-        versionName = "1.0.155"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix automatic motion detection: protect candidate start from walking transitions and enable Bluetooth-assisted drive detection.\"")
+        versionCode = 157
+        versionName = "1.0.156"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Audit and restore motion auto-detection: clean activity transitions, direct car Bluetooth drive trigger, unblocked foreground location, and default work schedule fix.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
