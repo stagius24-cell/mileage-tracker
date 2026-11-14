@@ -384,7 +384,7 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(22.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column {
                     SettingsManagementRow(
@@ -396,7 +396,7 @@ fun SettingsScreen(
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(horizontal = 14.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
                     )
                     SettingsManagementRow(
                         title = "Saved Locations",
@@ -556,7 +556,7 @@ fun SettingsScreen(
                     }
                 }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f))
 
                 // 3. Collapsible Google Sheets (Advanced) Section
                 Column(modifier = Modifier.fillMaxWidth().animateContentSize()) {
@@ -1216,7 +1216,7 @@ private fun SettingsSection(
         modifier = Modifier.fillMaxWidth(),
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier

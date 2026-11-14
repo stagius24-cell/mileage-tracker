@@ -32,6 +32,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -56,6 +58,7 @@ fun MileageBottomBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .background(if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.background else Color(0xFFF3F6FA))
             .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 4.dp)
     ) {
@@ -63,8 +66,8 @@ fun MileageBottomBar(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 2.dp,
-            shadowElevation = 3.dp
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
         ) {
             BoxWithConstraints(
                 modifier = Modifier
