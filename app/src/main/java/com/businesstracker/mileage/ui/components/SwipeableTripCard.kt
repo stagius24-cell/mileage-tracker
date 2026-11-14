@@ -510,9 +510,9 @@ fun TripCardContent(
                     )
                     Box(
                         modifier = Modifier
-                            .width(2.5.dp)
+                            .width(1.dp)
                             .weight(1f)
-                            .background(Color(0xFF94A3B8))
+                            .background(Color(0xFFCBD5E1))
                     )
                     EndPinIcon(
                         size = 20.dp,

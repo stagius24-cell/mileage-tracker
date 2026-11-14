@@ -799,19 +799,21 @@ private fun DestinationRow(
                 .heightIn(min = 64.dp)
                 .drawBehind {
                     val cx = size.width / 2f
+                    val timelineLineColor = Color(0xFFCBD5E1)
+                    val timelineStrokeWidth = 1.dp.toPx()
                     if (isStart) {
                         drawLine(
-                            color = Color(0xFF94A3B8),
+                            color = timelineLineColor,
                             start = Offset(cx, size.height / 2f),
                             end = Offset(cx, size.height),
-                            strokeWidth = 2.5.dp.toPx()
+                            strokeWidth = timelineStrokeWidth
                         )
                     } else {
                         drawLine(
-                            color = Color(0xFF94A3B8),
+                            color = timelineLineColor,
                             start = Offset(cx, 0f),
                             end = Offset(cx, size.height / 2f),
-                            strokeWidth = 2.5.dp.toPx()
+                            strokeWidth = timelineStrokeWidth
                         )
                     }
                 },

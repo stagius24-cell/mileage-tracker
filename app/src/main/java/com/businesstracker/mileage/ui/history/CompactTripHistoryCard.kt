@@ -284,10 +284,10 @@ fun TripRouteTimeline(
         // 1. Vertical connector line
         if (endCenterY > startCenterY + 14.dp.toPx()) {
             drawLine(
-                color = Color(0xFFD9E3EB),
+                color = Color(0xFFCBD5E1),
                 start = Offset(cx, startCenterY + 7.dp.toPx()),
                 end = Offset(cx, endCenterY - 7.dp.toPx()),
-                strokeWidth = 2.dp.toPx()
+                strokeWidth = 1.dp.toPx()
             )
         }
 

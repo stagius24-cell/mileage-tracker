@@ -1099,6 +1099,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.150 (Build 151)" to "Refined vertical route connector lines with thinner 1dp stroke and lighter color.",
                 "Version 1.0.149 (Build 150)" to "Consistent Google Sheets floating modal with drag handle pull-to-close, app theme surface color, and active custom purpose sync.",
                 "Version 1.0.148 (Build 149)" to "Clean Backup & Restore card with inline sync timestamp and removed duplicate status line.",
                 "Version 1.0.147 (Build 148)" to "Reliable restore for Custom Business Purposes from Google Sheets with smart sheet detection, Sheet1 trips fallback, and preview confirmation.",

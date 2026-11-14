@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 150
-        versionName = "1.0.149"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Consistent Google Sheets floating modal with drag handle pull-to-close, app theme surface color, and active custom purpose sync.\"")
+        versionCode = 151
+        versionName = "1.0.150"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Refined vertical route connector lines with thinner 1dp stroke and lighter color.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
