@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 158
-        versionName = "1.0.157"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Audit and restore motion auto-detection: clean activity transitions excluding unsupported ON_FOOT, surfaced registration feedback with retry, and motion-based drive confirmation.\"")
+        versionCode = 159
+        versionName = "1.0.158"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Wrap work schedule time period to second line when more than 4 days are selected, avoiding text overflow in settings.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

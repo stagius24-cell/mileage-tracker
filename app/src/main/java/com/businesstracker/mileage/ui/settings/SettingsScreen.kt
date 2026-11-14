@@ -436,7 +436,7 @@ fun SettingsScreen(
                                 formatScheduleSummary(state.workDays, state.workHoursStart, state.workHoursEnd),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                                maxLines = 2, overflow = TextOverflow.Ellipsis
                             )
                         }
                         Spacer(Modifier.width(8.dp))
@@ -1559,7 +1559,9 @@ internal fun formatScheduleSummary(days: Set<String>, start: String, end: String
         selected.isEmpty() -> "No work days"
         else -> selected.joinToString(", ")
     }
-    return "$daySummary · ${formatDisplayTime(start).removePrefix("0")} – ${formatDisplayTime(end).removePrefix("0")}"
+    val timePeriod = "${formatDisplayTime(start).removePrefix("0")} – ${formatDisplayTime(end).removePrefix("0")}"
+    val separator = if (selected.size > 4 && daySummary != "Mon–Fri" && daySummary != "Every day") "\n" else " · "
+    return "$daySummary$separator$timePeriod"
 }
 
 @Composable
