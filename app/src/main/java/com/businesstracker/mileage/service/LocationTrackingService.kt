@@ -431,14 +431,21 @@ class LocationTrackingService : Service() {
                         candidateDeadlineBoot = candidateDeadline.bootCount
                         TrackingDiagnostics.logCandidateTransition(currentTripId, "RECOVERED_CANDIDATE", "Deadline in ${(candidateDeadlineElapsed - nowElapsed) / 1000}s")
                     } else {
+                        // Explicit reconciliation: expired, missing, or incompatible boot must NEVER enter a 0-deadline state that bypasses expiry
                         isCandidate = true
-                        candidateDeadlineElapsed = 0L
+                        candidateDeadlineElapsed = nowElapsed
+                        candidateDeadlineBoot = currentBoot
+                        TrackingDiagnostics.logCandidateTransition(currentTripId, "RECONCILE_RECOVERED", "Reconciling candidate session")
+                        serviceScope.launch(ioDispatcher) {
+                            expireCandidateSession()
+                        }
                     }
                 } else {
                     isCandidate = false
                     candidateDeadlineElapsed = 0L
                     candidateDeadlineBoot = 0
                 }
+                motionResumptionValidator.reset()
 
                 // Update notification with recovered metrics
                 notificationHelper.updateTrackingNotification(
@@ -564,19 +571,37 @@ class LocationTrackingService : Service() {
             trackingMethod = method
             isPaused = false
             isDisplacementConfirmed = false
+            motionResumptionValidator.reset()
             isCandidate = (method == TrackingMethod.AUTO_DETECTED)
             if (isCandidate) {
                 val nowElapsed = SystemClock.elapsedRealtime()
+                val currentBoot = safeBootCountProvider.getBootCount()
                 candidateDeadlineElapsed = nowElapsed + 240_000L
-                candidateDeadlineBoot = safeBootCountProvider.getBootCount()
+                candidateDeadlineBoot = currentBoot
                 serviceScope.launch(ioDispatcher) {
-                    preferencesManager.recordCandidateDeadline(
-                        tripId = currentTripId,
-                        deadlineElapsedMillis = candidateDeadlineElapsed,
-                        bootCount = candidateDeadlineBoot
-                    )
+                    val existingDeadline = preferencesManager.getCandidateDeadline()
+                    if (existingDeadline != null && existingDeadline.tripId == currentTripId) {
+                        // Recovering existing candidate drive via ACTION_START: preserve existing deadline
+                        if (existingDeadline.bootCount == currentBoot && existingDeadline.deadlineElapsedMillis > nowElapsed) {
+                            candidateDeadlineElapsed = existingDeadline.deadlineElapsedMillis
+                            candidateDeadlineBoot = existingDeadline.bootCount
+                            TrackingDiagnostics.logCandidateTransition(currentTripId, "PRESERVED_CANDIDATE_DEADLINE", "Deadline in ${(candidateDeadlineElapsed - nowElapsed) / 1000}s")
+                        } else {
+                            // Expired or incompatible boot: explicit reconciliation, never a 0-deadline
+                            candidateDeadlineElapsed = nowElapsed
+                            candidateDeadlineBoot = currentBoot
+                            TrackingDiagnostics.logCandidateTransition(currentTripId, "RECONCILE_ACTION_START", "Reconciling candidate on ACTION_START")
+                            expireCandidateSession()
+                        }
+                    } else {
+                        preferencesManager.recordCandidateDeadline(
+                            tripId = currentTripId,
+                            deadlineElapsedMillis = candidateDeadlineElapsed,
+                            bootCount = candidateDeadlineBoot
+                        )
+                        TrackingDiagnostics.logCandidateTransition(currentTripId, "CANDIDATE_STARTED", "4-minute window initialized")
+                    }
                 }
-                TrackingDiagnostics.logCandidateTransition(currentTripId, "CANDIDATE_STARTED", "4-minute window initialized")
             } else {
                 candidateDeadlineElapsed = 0L
                 candidateDeadlineBoot = 0
@@ -863,10 +888,10 @@ class LocationTrackingService : Service() {
 
                 // Motion resumption evaluation with fresh corroboration (>= 10 mph, 2 distinct fixes within 30s)
                 val nowElapsed = SystemClock.elapsedRealtime()
-                val fixElapsed = if (wp.elapsedRealtimeNanos > 0L) wp.elapsedRealtimeNanos / 1_000_000L else nowElapsed
+                val fixElapsed = if (wp.elapsedRealtimeNanos > 0L) wp.elapsedRealtimeNanos / 1_000_000L else 0L
                 val motionResult = motionResumptionValidator.evaluateFix(
                     speedMph = currentSpeedMph,
-                    accuracyMeters = if (wp.accuracy > 0f) wp.accuracy else 10f,
+                    accuracyMeters = wp.accuracy,
                     fixTimestampMillis = fixElapsed,
                     nowMillis = nowElapsed
                 )
@@ -930,18 +955,27 @@ class LocationTrackingService : Service() {
 
     private fun onVehicleMotionResumed() {
         if (trackingMethod == TrackingMethod.AUTO_DETECTED) {
-            try {
-                val ctx = try { applicationContext } catch (_: Throwable) { null }
-                if (ctx != null) {
-                    TripDebounceWorker.cancelDebounce(ctx)
-                }
-            } catch (_: Throwable) {}
-            if (::preferencesManager.isInitialized) {
-                val dispatcher = if (::ioDispatcher.isInitialized) ioDispatcher else Dispatchers.IO
-                serviceScope.launch(dispatcher) {
+            val tripIdAtCall = currentTripId
+            if (tripIdAtCall.isEmpty() || isStopping.get()) return
+            serviceScope.launch(safeIoDispatcher) {
+                decisionMutex.withLock {
+                    if (currentTripId != tripIdAtCall || isStopping.get()) return@withLock
                     try {
-                        preferencesManager.setInVehicleState(true)
-                    } catch (_: Exception) {}
+                        val ctx = try { applicationContext } catch (_: Throwable) { null }
+                        if (ctx != null) {
+                            TripDebounceWorker.cancelDebounce(ctx, tripIdAtCall)
+                        }
+                    } catch (_: Throwable) {}
+                    if (::preferencesManager.isInitialized) {
+                        try {
+                            preferencesManager.setInVehicleState(true)
+                            preferencesManager.recordVehicleEnter(
+                                tripIdAtCall,
+                                SystemClock.elapsedRealtime(),
+                                safeBootCountProvider.getBootCount()
+                            )
+                        } catch (_: Exception) {}
+                    }
                 }
             }
         }
@@ -950,28 +984,38 @@ class LocationTrackingService : Service() {
     private fun pauseTracking() {
         isPaused = true
         currentSpeedMph = 0.0
+        motionResumptionValidator.reset()
         evidenceRevision.incrementAndGet()
         stationaryAutoStopMonitor.reset()
         stationaryAutoStopRequested.set(false)
+        val tripIdAtCall = currentTripId
         serviceScope.launch(ioDispatcher) {
-            preferencesManager.saveStationaryEvidence(null)
-            lastPersistedStationaryEvidence = null
-            activeTripRepository.setPaused(currentTripId, true)
-            updateNotificationAndState(0.0)
+            decisionMutex.withLock {
+                if (currentTripId != tripIdAtCall) return@withLock
+                preferencesManager.saveStationaryEvidence(null)
+                lastPersistedStationaryEvidence = null
+                activeTripRepository.setPaused(tripIdAtCall, true)
+                updateNotificationAndState(0.0)
+            }
         }
     }
 
     private fun resumeTracking() {
         isPaused = false
         currentSpeedMph = 0.0
+        motionResumptionValidator.reset()
         stationaryAutoStopMonitor.reset()
         evidenceRevision.incrementAndGet()
         stationaryAutoStopRequested.set(false)
+        val tripIdAtCall = currentTripId
         serviceScope.launch(ioDispatcher) {
-            preferencesManager.saveStationaryEvidence(null)
-            lastPersistedStationaryEvidence = null
-            activeTripRepository.setPaused(currentTripId, false)
-            updateNotificationAndState(0.0)
+            decisionMutex.withLock {
+                if (currentTripId != tripIdAtCall) return@withLock
+                preferencesManager.saveStationaryEvidence(null)
+                lastPersistedStationaryEvidence = null
+                activeTripRepository.setPaused(tripIdAtCall, false)
+                updateNotificationAndState(0.0)
+            }
         }
     }
 
@@ -979,65 +1023,131 @@ class LocationTrackingService : Service() {
         if (!isStopping.compareAndSet(false, true)) {
             return
         }
+        val tripIdAtCall = currentTripId
         isDrainingGps.set(true)
         serviceScope.launch(ioDispatcher) {
-            try {
-                tripLifecycleDao.updateState(
-                    currentTripId,
-                    com.businesstracker.mileage.data.local.entity.TripLifecycleState.DRAINING.value
-                )
-            } catch (_: Exception) {}
+            decisionMutex.withLock {
+                if (tripIdAtCall.isNotEmpty() && currentTripId != tripIdAtCall && currentTripId.isNotEmpty()) {
+                    isDrainingGps.set(false)
+                    isStopping.set(false)
+                    return@withLock
+                }
 
-            try {
-                // 1. Stop receiving new location callbacks
-                fusedLocationClient.removeLocationUpdates(locationCallback)
-            } catch (e: Exception) {
-                Log.w("LocationTrackingService", "Error removing location updates: ${e.message}")
-            }
-            stopGpsHandlerThread()
-
-            // 2. Stop ticker
-            tickerJob?.cancel()
-
-            // 3. Drain all queued GPS locations before finalizing
-            try {
-                gpsLocationQueue?.drainAndClose()
-            } catch (e: Exception) {
-                Log.e("LocationTrackingService", "Waypoint persistence failed during tracking; halting finalization: ${e.message}", e)
                 try {
                     tripLifecycleDao.updateState(
                         currentTripId,
-                        com.businesstracker.mileage.data.local.entity.TripLifecycleState.RECOVERY_REQUIRED.value
+                        com.businesstracker.mileage.data.local.entity.TripLifecycleState.DRAINING.value
                     )
                 } catch (_: Exception) {}
-                isDrainingGps.set(false)
-                _serviceState.value = TrackingServiceState(isTracking = false)
-                isStartingOrRunning.set(false)
-                isStopping.set(false)
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                return@launch
-            }
-            isDrainingGps.set(false)
 
-            try {
-                tripLifecycleDao.updateState(
-                    currentTripId,
-                    com.businesstracker.mileage.data.local.entity.TripLifecycleState.READY_TO_FINALIZE.value
-                )
-            } catch (_: Exception) {}
-
-            // 4. False trip prevention: if movement is under 200m and not confirmed, discard
-            // Persisted active trip in Room is authoritative
-            val persistedActiveTrip = activeTripRepository.getActiveTrip()
-            val totalMeters = persistedActiveTrip?.totalDistanceMeters ?: totalDistanceMeters
-            if (!isDisplacementConfirmed && totalMeters < 200.0) {
-                if (currentTripId.isNotEmpty()) {
-                    tripFinalizationCoordinator.discardFalseTrip(currentTripId)
-                    preferencesManager.clearActiveTripId(currentTripId)
-                    preferencesManager.clearCandidateDeadline()
+                try {
+                    // 1. Stop receiving new location callbacks
+                    fusedLocationClient.removeLocationUpdates(locationCallback)
+                } catch (e: Exception) {
+                    Log.w("LocationTrackingService", "Error removing location updates: ${e.message}")
                 }
+                stopGpsHandlerThread()
+
+                // 2. Stop ticker
+                tickerJob?.cancel()
+
+                // 3. Drain all queued GPS locations before finalizing
+                try {
+                    gpsLocationQueue?.drainAndClose()
+                } catch (e: Exception) {
+                    Log.e("LocationTrackingService", "Waypoint persistence failed during tracking; halting finalization: ${e.message}", e)
+                    try {
+                        tripLifecycleDao.updateState(
+                            currentTripId,
+                            com.businesstracker.mileage.data.local.entity.TripLifecycleState.RECOVERY_REQUIRED.value
+                        )
+                    } catch (_: Exception) {}
+                    isDrainingGps.set(false)
+                    _serviceState.value = TrackingServiceState(isTracking = false)
+                    isStartingOrRunning.set(false)
+                    isStopping.set(false)
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return@withLock
+                }
+                isDrainingGps.set(false)
+
+                try {
+                    tripLifecycleDao.updateState(
+                        currentTripId,
+                        com.businesstracker.mileage.data.local.entity.TripLifecycleState.READY_TO_FINALIZE.value
+                    )
+                } catch (_: Exception) {}
+
+                // 4. False trip prevention: if movement is under 200m and not confirmed, discard
+                // Persisted active trip in Room is authoritative
+                val persistedActiveTrip = activeTripRepository.getActiveTrip()
+                val totalMeters = persistedActiveTrip?.totalDistanceMeters ?: totalDistanceMeters
+                if (!isDisplacementConfirmed && totalMeters < 200.0) {
+                    if (currentTripId.isNotEmpty()) {
+                        tripFinalizationCoordinator.discardFalseTrip(currentTripId)
+                        if (currentTripId == tripIdAtCall) {
+                            preferencesManager.clearActiveTripId(currentTripId)
+                            preferencesManager.clearCandidateDeadline()
+                            preferencesManager.setInVehicleState(false)
+                            preferencesManager.setBluetoothDisconnectPending(false)
+                        }
+                    }
+                    try {
+                        val ctx = try { applicationContext } catch (_: Throwable) { null }
+                        if (ctx != null) {
+                            TripDebounceWorker.cancelDebounce(ctx, tripIdAtCall)
+                        }
+                    } catch (_: Throwable) {}
+
+                    motionResumptionValidator.reset()
+                    _serviceState.value = TrackingServiceState(isTracking = false)
+                    currentTripId = ""
+                    totalDistanceMeters = 0.0
+                    waypointCount = 0
+                    lastAcceptedWaypoint = null
+                    anchorWaypoint = null
+                    isDisplacementConfirmed = false
+                    isCandidate = false
+                    candidateDeadlineElapsed = 0L
+                    candidateDeadlineBoot = 0
+                    currentSpeedMph = 0.0
+                    isStartingOrRunning.set(false)
+                    isStopping.set(false)
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                    return@withLock
+                }
+
+                // 5. Finalize trip using single-owner idempotent coordinator
+                if (currentTripId.isNotEmpty()) {
+                    val finalizedTrip = tripFinalizationCoordinator.finalizeTrip(currentTripId, trackingMethod)
+                    finalizedTrip?.let { trip ->
+                        if (trip.classification == com.businesstracker.mileage.domain.model.TripClassification.UNREVIEWED.value) {
+                            notificationHelper.showTripDetectedNotification(trip.id, trip.totalDistanceMiles)
+                        } else {
+                            // Auto-classified trip (e.g. from Saved Location), sync immediately to Google Sheets
+                            GoogleSheetsSyncWorker.enqueueOneTimeSync(applicationContext)
+                        }
+                    }
+                    if (currentTripId == tripIdAtCall) {
+                        preferencesManager.clearActiveTripId(currentTripId)
+                        preferencesManager.clearCandidateDeadline()
+                    }
+                }
+
+                try {
+                    val ctx = try { applicationContext } catch (_: Throwable) { null }
+                    if (ctx != null) {
+                        TripDebounceWorker.cancelDebounce(ctx, tripIdAtCall)
+                    }
+                } catch (_: Throwable) {}
+
+                motionResumptionValidator.reset()
                 _serviceState.value = TrackingServiceState(isTracking = false)
+                evidenceRevision.incrementAndGet()
+                preferencesManager.saveStationaryEvidence(null)
+                lastPersistedStationaryEvidence = null
                 currentTripId = ""
                 totalDistanceMeters = 0.0
                 waypointCount = 0
@@ -1052,42 +1162,7 @@ class LocationTrackingService : Service() {
                 isStopping.set(false)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
-                return@launch
             }
-
-            // 5. Finalize trip using single-owner idempotent coordinator
-            if (currentTripId.isNotEmpty()) {
-                val finalizedTrip = tripFinalizationCoordinator.finalizeTrip(currentTripId, trackingMethod)
-                finalizedTrip?.let { trip ->
-                    if (trip.classification == com.businesstracker.mileage.domain.model.TripClassification.UNREVIEWED.value) {
-                        notificationHelper.showTripDetectedNotification(trip.id, trip.totalDistanceMiles)
-                    } else {
-                        // Auto-classified trip (e.g. from Saved Location), sync immediately to Google Sheets
-                        GoogleSheetsSyncWorker.enqueueOneTimeSync(applicationContext)
-                    }
-                }
-                preferencesManager.clearActiveTripId(currentTripId)
-                preferencesManager.clearCandidateDeadline()
-            }
-
-            _serviceState.value = TrackingServiceState(isTracking = false)
-            evidenceRevision.incrementAndGet()
-            preferencesManager.saveStationaryEvidence(null)
-            lastPersistedStationaryEvidence = null
-            currentTripId = ""
-            totalDistanceMeters = 0.0
-            waypointCount = 0
-            lastAcceptedWaypoint = null
-            anchorWaypoint = null
-            isDisplacementConfirmed = false
-            isCandidate = false
-            candidateDeadlineElapsed = 0L
-            candidateDeadlineBoot = 0
-            currentSpeedMph = 0.0
-            isStartingOrRunning.set(false)
-            isStopping.set(false)
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
         }
     }
 
@@ -1107,10 +1182,9 @@ class LocationTrackingService : Service() {
                         }
                     }
 
-                    // Watchdog: check 60s GPS silence for confirmed trips
+                    // Watchdog: check 60s GPS silence for confirmed trips (works even without an existing stationary snapshot)
                     if (!isCandidate && isDisplacementConfirmed && lastLocationReceivedElapsed > 0L && (now - lastLocationReceivedElapsed >= 60_000L)) {
-                        val evidence = stationaryAutoStopMonitor.snapshot()
-                        if (evidence != null && (now - lastStationaryRecheckElapsed >= 30_000L)) {
+                        if (now - lastStationaryRecheckElapsed >= 30_000L) {
                             lastStationaryRecheckElapsed = now
                             serviceScope.launch(ioDispatcher) { recheckStationaryLocation() }
                         }
@@ -1132,16 +1206,39 @@ class LocationTrackingService : Service() {
 
     private suspend fun expireCandidateSession() {
         decisionMutex.withLock {
-            if (!isCandidate || isStopping.get() || currentTripId.isEmpty()) return
-            TrackingDiagnostics.logCandidateTransition(currentTripId, "EXPIRING_CANDIDATE", "4-minute timeout reached. Draining inbox...")
+            val tripIdAtCall = currentTripId
+            if (!isCandidate || isStopping.get() || tripIdAtCall.isEmpty()) return
+            TrackingDiagnostics.logCandidateTransition(tripIdAtCall, "EXPIRING_CANDIDATE", "Candidate timeout reached. Draining inbox...")
+
+            // Coordinated drain using admission barrier and inbox drain
+            isDrainingGps.set(true)
+            var drainSucceeded = false
             try {
-                drainPendingGpsFixesUseCase.drain(
-                    tripId = currentTripId,
-                    batchLimit = 100,
-                    onFixProcessed = { handleFixProcessed(it) }
-                )
+                var drainedCount: Int
+                do {
+                    drainedCount = drainPendingGpsFixesUseCase.drain(
+                        tripId = tripIdAtCall,
+                        batchLimit = 100,
+                        onFixProcessed = { handleFixProcessed(it) }
+                    )
+                } while (drainedCount > 0)
+
+                val pendingCount = gpsInboxDao.getPendingCount(tripIdAtCall)
+                drainSucceeded = (pendingCount == 0)
+                if (!drainSucceeded) {
+                    Log.w("LocationTrackingService", "Drain incomplete during candidate expiry: $pendingCount fixes remain")
+                }
             } catch (e: Exception) {
-                Log.w("LocationTrackingService", "Error draining inbox during candidate expiry: ${e.message}")
+                Log.e("LocationTrackingService", "Error draining inbox during candidate expiry: ${e.message}", e)
+                drainSucceeded = false
+            } finally {
+                isDrainingGps.set(false)
+            }
+
+            // Never discard after a failed or incomplete drain; preserve candidate state for safe retry
+            if (!drainSucceeded) {
+                TrackingDiagnostics.logCandidateTransition(tripIdAtCall, "DRAIN_FAILED", "Preserving candidate state for safe retry")
+                return@withLock
             }
 
             val persisted = activeTripRepository.getActiveTrip()
@@ -1149,15 +1246,16 @@ class LocationTrackingService : Service() {
             if (isDisplacementConfirmed || totalMeters >= 200.0) {
                 isCandidate = false
                 candidateDeadlineElapsed = 0L
+                candidateDeadlineBoot = 0
                 preferencesManager.clearCandidateDeadline()
                 try {
-                    tripLifecycleDao.updateState(currentTripId, TripLifecycleState.TRACKING.value)
+                    tripLifecycleDao.updateState(tripIdAtCall, TripLifecycleState.TRACKING.value)
                 } catch (_: Exception) {}
-                TrackingDiagnostics.logCandidateTransition(currentTripId, "CONFIRMED_ON_DRAIN", "Meters: $totalMeters")
-                return
+                TrackingDiagnostics.logCandidateTransition(tripIdAtCall, "CONFIRMED_ON_DRAIN", "Meters: $totalMeters")
+                return@withLock
             }
 
-            TrackingDiagnostics.logCandidateTransition(currentTripId, "DISCARDING_FALSE_CANDIDATE", "Meters: $totalMeters < 200m")
+            TrackingDiagnostics.logCandidateTransition(tripIdAtCall, "DISCARDING_FALSE_CANDIDATE", "Meters: $totalMeters < 200m")
             if (isStopping.compareAndSet(false, true)) {
                 try {
                     fusedLocationClient.removeLocationUpdates(locationCallback)
@@ -1165,18 +1263,21 @@ class LocationTrackingService : Service() {
                 stopGpsHandlerThread()
                 tickerJob?.cancel()
 
-                tripFinalizationCoordinator.discardFalseTrip(currentTripId)
-                preferencesManager.clearActiveTripId(currentTripId)
-                preferencesManager.clearCandidateDeadline()
-                preferencesManager.setInVehicleState(false)
-                preferencesManager.setBluetoothDisconnectPending(false)
+                tripFinalizationCoordinator.discardFalseTrip(tripIdAtCall)
+                if (currentTripId == tripIdAtCall) {
+                    preferencesManager.clearActiveTripId(tripIdAtCall)
+                    preferencesManager.clearCandidateDeadline()
+                    preferencesManager.setInVehicleState(false)
+                    preferencesManager.setBluetoothDisconnectPending(false)
+                }
                 try {
                     val ctx = try { applicationContext } catch (_: Throwable) { null }
                     if (ctx != null) {
-                        TripDebounceWorker.cancelDebounce(ctx)
+                        TripDebounceWorker.cancelDebounce(ctx, tripIdAtCall)
                     }
                 } catch (_: Throwable) {}
 
+                motionResumptionValidator.reset()
                 _serviceState.value = TrackingServiceState(isTracking = false)
                 currentTripId = ""
                 totalDistanceMeters = 0.0
@@ -1231,11 +1332,17 @@ class LocationTrackingService : Service() {
             null
         } finally {
             cancellation.cancel()
-        } ?: return
-        val evidence = stationaryAutoStopMonitor.snapshot() ?: return
-        if (!StationaryWatchdogPolicy.isFreshDeadlineFix(evidence,
-                location.elapsedRealtimeNanos / 1_000_000L,
-                android.os.SystemClock.elapsedRealtime())) return
+        } ?: return // Missing GPS does NOT finalize or stop a confirmed trip; preserves tracking!
+
+        val evidence = stationaryAutoStopMonitor.snapshot()
+        if (evidence != null) {
+            if (!StationaryWatchdogPolicy.isFreshDeadlineFix(
+                    evidence,
+                    location.elapsedRealtimeNanos / 1_000_000L,
+                    SystemClock.elapsedRealtime()
+                )) return
+        }
+        // If evidence was null, fresh fix establishes evidence!
         if (!isStopping.get() && !isPaused) {
             gpsLocationQueue?.enqueueBatch(listOf(location))
             evaluateStationaryAutoStop(listOf(location))

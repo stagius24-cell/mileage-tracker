@@ -16,4 +16,8 @@ open class TripDebounceScheduler @Inject constructor(
     open fun cancel() {
         TripDebounceWorker.cancelDebounce(context)
     }
+
+    open fun cancel(tripId: String?) {
+        TripDebounceWorker.cancelDebounce(context, tripId)
+    }
 }

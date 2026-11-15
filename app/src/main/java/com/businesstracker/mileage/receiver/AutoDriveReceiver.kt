@@ -137,10 +137,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
     @SuppressLint("MissingPermission")
     private suspend fun handleVehicleEnter(context: Context) {
-        // 1. Update in-vehicle state
-        preferencesManager.setInVehicleState(true)
-
-        // 2. Strict permission verification (Foreground location and Activity Recognition)
+        // 1. Strict permission verification (Foreground location and Activity Recognition)
         val hasFine = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
@@ -164,7 +161,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
         val isAutoTrackingEnabled = preferencesManager.isAutoTrackingEnabled.first()
         val isTracking = LocationTrackingService.serviceState.value.isTracking
 
-        // 3. Authoritative active trip & lifecycle validation:
+        // 2. Authoritative active trip & lifecycle validation:
         // Do not attempt to recover a trip that is null, finalized, or discarded in the database!
         val activeTripId = preferencesManager.activeTripId.first()
         var effectiveActiveTripId: String? = null
@@ -175,11 +172,8 @@ class AutoDriveReceiver : BroadcastReceiver() {
                     lifecycleState == TripLifecycleState.DISCARDED.value
             if (activeTrip != null && !isTerminal && activeTrip.id == activeTripId) {
                 effectiveActiveTripId = activeTripId
-                preferencesManager.recordVehicleEnter(
-                    activeTripId,
-                    SystemClock.elapsedRealtime(),
-                    bootCountProvider.getBootCount()
-                )
+                // Do not record vehicle enter evidence here for existing trips;
+                // motion must be corroborated before in-vehicle state or enter evidence is recorded.
             } else {
                 // Clear dangling preference ID
                 preferencesManager.clearActiveTripId(activeTripId)
@@ -203,7 +197,8 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
         when (action) {
             is AutoDriveAction.CancelDebounce -> {
-                // Request motion validation from service rather than unconditionally cancelling debounce without fresh GPS movement
+                // Request motion validation from service rather than unconditionally cancelling debounce without fresh GPS movement.
+                // Do NOT set inVehicleState(true) until motion is corroborated.
                 val validateIntent = Intent(context, LocationTrackingService::class.java).apply {
                     this.action = LocationTrackingService.ACTION_VALIDATE_MOTION
                 }
@@ -212,11 +207,13 @@ class AutoDriveReceiver : BroadcastReceiver() {
                 } catch (_: Exception) {}
             }
             is AutoDriveAction.RecoverTrip -> {
+                preferencesManager.setInVehicleState(true)
                 startTrackingService(context, action.tripId, "MySucculentCorner")
             }
             is AutoDriveAction.StartCandidateDrive -> {
                 val newTripId = UUID.randomUUID().toString()
-                // Persist newTripId and vehicle enter evidence immediately
+                // Persist newTripId, inVehicle state, and vehicle enter evidence for new candidate drive
+                preferencesManager.setInVehicleState(true)
                 preferencesManager.setActiveTripId(newTripId)
                 preferencesManager.recordVehicleEnter(
                     newTripId,

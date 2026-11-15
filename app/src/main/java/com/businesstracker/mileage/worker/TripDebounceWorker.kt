@@ -50,6 +50,8 @@ class TripDebounceWorker @AssistedInject constructor(
         internal const val TRIGGER_BLUETOOTH = "bluetooth"
         private const val DEBOUNCE_DELAY_MINUTES = 4L
 
+        fun workNameForTrip(tripId: String): String = "${WORK_NAME}_$tripId"
+
         fun scheduleDebounce(context: Context, tripId: String) {
             scheduleDebounce(context, TRIGGER_ACTIVITY, tripId)
         }
@@ -63,17 +65,28 @@ class TripDebounceWorker @AssistedInject constructor(
                 .setInitialDelay(DEBOUNCE_DELAY_MINUTES, TimeUnit.MINUTES)
                 .setInputData(Data.Builder().putString(INPUT_TRIGGER, trigger).putString(INPUT_TRIP_ID, tripId).build())
                 .addTag(WORK_NAME)
+                .addTag(workNameForTrip(tripId))
                 .build()
 
             WorkManager.getInstance(context).enqueueUniqueWork(
-                WORK_NAME,
-                ExistingWorkPolicy.KEEP, // Preserve established 4-minute timer against duplicate exit events
+                workNameForTrip(tripId),
+                ExistingWorkPolicy.KEEP, // Preserves established 4-minute timer against duplicate exit events scoped to this trip
                 debounceRequest
             )
         }
 
-        fun cancelDebounce(context: Context) {
-            WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
+        @JvmOverloads
+        fun cancelDebounce(context: Context, tripId: String? = null) {
+            val workManager = try {
+                WorkManager.getInstance(context)
+            } catch (_: Exception) {
+                return
+            }
+            if (tripId != null && tripId.isNotEmpty()) {
+                workManager.cancelUniqueWork(workNameForTrip(tripId))
+            }
+            workManager.cancelUniqueWork(WORK_NAME)
+            workManager.cancelAllWorkByTag(WORK_NAME)
         }
     }
 

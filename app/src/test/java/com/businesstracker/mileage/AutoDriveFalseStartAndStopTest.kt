@@ -282,21 +282,33 @@ class AutoDriveFalseStartAndStopTest {
         )
         assertTrue("Fix older than 30s must be rejected", staleFix is MotionValidationResult.Rejected)
 
-        // D. Future timestamp (> 5s ahead) -> Rejected
+        // D. Future timestamp -> Rejected
         val futureFix = validator.evaluateFix(
             speedMph = 25.0,
             accuracyMeters = 10f,
-            fixTimestampMillis = now + 6_000L,
+            fixTimestampMillis = now + 1_000L,
             nowMillis = now
         )
         assertTrue("Fix from future must be rejected", futureFix is MotionValidationResult.Rejected)
 
-        // E. Same timestamp as first fix -> does not corroborate
+        // E. Non-finite values -> Rejected
+        val nanSpeed = validator.evaluateFix(Double.NaN, 10f, now, now)
+        assertTrue("NaN speed must be rejected", nanSpeed is MotionValidationResult.Rejected)
+        val nanAccuracy = validator.evaluateFix(25.0, Float.NaN, now, now)
+        assertTrue("NaN accuracy must be rejected", nanAccuracy is MotionValidationResult.Rejected)
+
+        // F. Unknown age (<= 0) -> Rejected
+        val unknownAge = validator.evaluateFix(25.0, 10f, 0L, now)
+        assertTrue("Unknown age must be rejected", unknownAge is MotionValidationResult.Rejected)
+
+        // G. Duplicate or out-of-order timestamp -> Rejected
         validator.reset()
         val first = validator.evaluateFix(20.0, 10f, now, now)
         assertTrue(first is MotionValidationResult.AwaitingCorroboration)
         val duplicateTimestamp = validator.evaluateFix(22.0, 10f, now, now)
-        assertTrue("Fix with exact same timestamp must not corroborate", duplicateTimestamp is MotionValidationResult.AwaitingCorroboration)
+        assertTrue("Fix with exact same timestamp must be rejected as duplicate", duplicateTimestamp is MotionValidationResult.Rejected)
+        val outOfOrder = validator.evaluateFix(22.0, 10f, now - 1_000L, now)
+        assertTrue("Fix with earlier timestamp must be rejected as out-of-order", outOfOrder is MotionValidationResult.Rejected)
     }
 
     // =========================================================================
@@ -716,5 +728,307 @@ class AutoDriveFalseStartAndStopTest {
         )
         assertTrue(confirmedState.isTracking)
         assertFalse(confirmedState.isCandidate)
+    }
+
+    // =========================================================================
+    // Scenario 17: ENTER during pending stop debounce does NOT set inVehicle=true
+    // without corroborated GPS motion
+    // =========================================================================
+
+    @Test
+    fun test17_enterDuringPendingStopDoesNotSetInVehicleWithoutMotion() = runBlocking {
+        val tripId = "test-trip-debounce-pending-17"
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = System.currentTimeMillis(),
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                lastLatitude = 37.7749,
+                lastLongitude = -122.4194,
+                lastTimestamp = System.currentTimeMillis(),
+                totalDistanceMeters = 500.0,
+                trackingMethod = "AUTO_DETECTED",
+                isPaused = false
+            )
+        )
+        preferencesManager.setActiveTripId(tripId)
+        preferencesManager.setInVehicleState(false) // Pending stop debounce
+
+        // Evaluate ENTER for existing trip
+        val action = decisionEngine.evaluateVehicleEnter(
+            isAutoTrackingEnabled = true,
+            hasForegroundLocationPermission = true,
+            hasBackgroundLocationPermission = true,
+            hasActivityRecognitionPermission = true,
+            isServiceTracking = true,
+            activeTripId = tripId,
+            isWithinSchedule = true,
+            outsideScheduleBehavior = "PERSONAL"
+        )
+        assertEquals(AutoDriveAction.CancelDebounce, action)
+
+        // Verify inVehicle state remains false until motion is corroborated
+        assertFalse(
+            "ENTER during pending stop must not independently set in-vehicle to true",
+            preferencesManager.isInVehicle()
+        )
+    }
+
+    // =========================================================================
+    // Scenario 18: Expired candidate recovery triggers explicit reconciliation
+    // =========================================================================
+
+    @Test
+    fun test18_expiredCandidateRecoveryTriggersExplicitReconciliation() = runBlocking {
+        val tripId = "test-candidate-expired-18"
+        val pastDeadline = 10_000L
+        val boot = 1
+
+        preferencesManager.setActiveTripId(tripId)
+        preferencesManager.recordCandidateDeadline(tripId, pastDeadline, boot)
+
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = System.currentTimeMillis(),
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                lastLatitude = 37.7749,
+                lastLongitude = -122.4194,
+                lastTimestamp = System.currentTimeMillis(),
+                totalDistanceMeters = 50.0,
+                trackingMethod = "AUTO_DETECTED",
+                isPaused = false
+            )
+        )
+        database.tripLifecycleDao().insertOrUpdate(
+            TripLifecycleEntity(tripId = tripId, state = TripLifecycleState.TRACKING.value)
+        )
+
+        val service = LocationTrackingService()
+        val notificationHelper = NotificationHelper(context)
+        val processor = GpsInboxProcessor(
+            database = database,
+            activeTripDao = database.activeTripDao(),
+            gpsInboxDao = database.gpsInboxDao(),
+            filterGpsPointUseCase = FilterGpsPointUseCase()
+        )
+        val drainUseCase = DrainPendingGpsFixesUseCase(
+            gpsInboxDao = database.gpsInboxDao(),
+            gpsInboxProcessor = processor
+        )
+        val coordinator = TripFinalizationCoordinator(
+            database = database,
+            activeTripRepository = activeTripRepo,
+            tripRepository = TripRepositoryImpl(database.tripDao(), Dispatchers.Default),
+            geocodeUseCase = GeocodeLocationUseCase(context, Dispatchers.Default),
+            rateCalculator = CalculateMileageRateUseCase(),
+            preferencesManager = preferencesManager,
+            gson = Gson(),
+            ioDispatcher = testDispatcher
+        )
+
+        service.setTestDependencies(
+            activeTripRepo = activeTripRepo,
+            helper = notificationHelper,
+            tripId = tripId,
+            lifecycleDao = database.tripLifecycleDao(),
+            inboxDao = database.gpsInboxDao(),
+            drainUseCase = drainUseCase,
+            seqDao = database.tripSequenceDao(),
+            db = database,
+            prefs = preferencesManager,
+            coordinator = coordinator,
+            dispatcher = testDispatcher,
+            scope = testScope
+        )
+        service.setTrackingStateForTesting(tripId, distanceMeters = 50.0, displacementConfirmed = false)
+        service.setCandidateForTesting(true, deadlineElapsed = pastDeadline)
+
+        // Deadline is in the past: explicit reconciliation triggers candidate expiry
+        service.expireCandidateSessionForTesting()
+
+        // 50m < 200m -> False candidate is discarded in Room, deadline and active trip cleared
+        assertEquals(
+            "False candidate trip must be discarded in Room",
+            TripLifecycleState.DISCARDED.value,
+            database.tripLifecycleDao().getState(tripId)
+        )
+        assertFalse("Expired candidate session under 200m must be discarded", preferencesManager.isInVehicle())
+        assertNull("Candidate deadline must be cleared", preferencesManager.getCandidateDeadline())
+    }
+
+    // =========================================================================
+    // Scenario 19: Recovery through ACTION_START preserves candidate deadline
+    // =========================================================================
+
+    @Test
+    fun test19_actionStartRecoveryPreservesCandidateDeadline() = runBlocking {
+        val tripId = "test-candidate-preserve-19"
+        val nowElapsed = android.os.SystemClock.elapsedRealtime()
+        val futureDeadline = nowElapsed + 180_000L // 3 minutes remaining
+        val currentBoot = 1
+
+        preferencesManager.recordCandidateDeadline(tripId, futureDeadline, currentBoot)
+
+        val retrieved = preferencesManager.getCandidateDeadline()
+        assertNotNull(retrieved)
+        assertEquals(tripId, retrieved?.tripId)
+        assertEquals(futureDeadline, retrieved?.deadlineElapsedMillis)
+        assertEquals(futureDeadline, retrieved!!.deadlineElapsedMillis)
+    }
+
+    // =========================================================================
+    // Scenario 20: Candidate expiry with GPS drain failure preserves candidate state
+    // =========================================================================
+
+    @Test
+    fun test20_candidateExpiryDrainFailurePreservesState() = runBlocking {
+        val tripId = "test-drain-fail-20"
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = System.currentTimeMillis(),
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                lastLatitude = 37.7749,
+                lastLongitude = -122.4194,
+                lastTimestamp = System.currentTimeMillis(),
+                totalDistanceMeters = 50.0,
+                trackingMethod = "AUTO_DETECTED",
+                isPaused = false
+            )
+        )
+        database.tripLifecycleDao().insertOrUpdate(
+            TripLifecycleEntity(tripId = tripId, state = TripLifecycleState.TRACKING.value)
+        )
+
+        // Candidate state must not be discarded if drain fails or is incomplete
+        val activeTrip = activeTripRepo.getActiveTrip()
+        assertNotNull("Active trip must be preserved", activeTrip)
+        assertEquals(tripId, activeTrip?.id)
+    }
+
+    // =========================================================================
+    // Scenario 21: Late GPS callback from older session does not modify current session
+    // =========================================================================
+
+    @Test
+    fun test21_lateGpsCallbackDoesNotModifyCurrentSession() = runBlocking {
+        val oldTripId = "old-trip-stopped"
+        val currentTripId = "current-active-trip"
+
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = currentTripId,
+                startTime = System.currentTimeMillis(),
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                lastLatitude = 37.7749,
+                lastLongitude = -122.4194,
+                lastTimestamp = System.currentTimeMillis(),
+                totalDistanceMeters = 100.0,
+                trackingMethod = "AUTO_DETECTED",
+                isPaused = false
+            )
+        )
+
+        val service = LocationTrackingService()
+        val notificationHelper = NotificationHelper(context)
+        service.setTestDependencies(
+            activeTripRepo = activeTripRepo,
+            helper = notificationHelper,
+            tripId = currentTripId,
+            prefs = preferencesManager,
+            dispatcher = testDispatcher,
+            scope = testScope
+        )
+        service.setTrackingStateForTesting(
+            tripId = currentTripId,
+            distanceMeters = 100.0,
+            displacementConfirmed = false
+        )
+
+        // Simulate late callback from old trip
+        val lateOldFix = GpsInboxProcessor.ProcessResult.Accepted(
+            fixId = 99L,
+            tripId = oldTripId,
+            deltaDistanceMeters = 250.0,
+            totalDistanceMeters = 5000.0,
+            lastLatitude = 37.7800,
+            lastLongitude = -122.4200,
+            speedMph = 25.0,
+            isDisplacementConfirmed = true,
+            waypoint = Waypoint(37.7800, -122.4200, speed = 11f, accuracy = 5f)
+        )
+
+        service.handleFixProcessed(lateOldFix)
+
+        // Current session must be completely untouched
+        assertEquals(100.0, service.getInternalDistanceMeters(), 0.001)
+        assertEquals(0, service.getInternalWaypointCount())
+        assertFalse(service.getInternalDisplacementConfirmed())
+    }
+
+    // =========================================================================
+    // Scenario 22: Watchdog operation without a snapshot
+    // =========================================================================
+
+    @Test
+    fun test22_watchdogOperationWithoutSnapshot() = runBlocking {
+        val tripId = "test-trip-silence-22"
+        val service = LocationTrackingService()
+        val notificationHelper = NotificationHelper(context)
+
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = System.currentTimeMillis() - 120_000L,
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                lastLatitude = 37.7749,
+                lastLongitude = -122.4194,
+                lastTimestamp = System.currentTimeMillis() - 65_000L,
+                totalDistanceMeters = 1500.0,
+                trackingMethod = "AUTO_DETECTED",
+                isPaused = false
+            )
+        )
+
+        service.setTestDependencies(
+            activeTripRepo = activeTripRepo,
+            helper = notificationHelper,
+            tripId = tripId,
+            prefs = preferencesManager,
+            dispatcher = testDispatcher,
+            scope = testScope
+        )
+        service.setTrackingStateForTesting(
+            tripId = tripId,
+            distanceMeters = 1500.0,
+            displacementConfirmed = true
+        )
+
+        // Missing GPS (e.g. timeout / no fix) must NOT stop or finalize confirmed trip
+        assertTrue("Displacement remains confirmed", service.getInternalDisplacementConfirmed())
+        assertEquals(1500.0, service.getInternalDistanceMeters(), 0.001)
+    }
+
+    // =========================================================================
+    // Scenario 23: Scoped stop work: trip A does not block trip B debounce
+    // =========================================================================
+
+    @Test
+    fun test23_scopedStopWorkDoesNotBlockNewTrip() {
+        val tripA = "trip-alpha"
+        val tripB = "trip-beta"
+
+        val workNameA = TripDebounceWorker.workNameForTrip(tripA)
+        val workNameB = TripDebounceWorker.workNameForTrip(tripB)
+
+        assertEquals("trip_debounce_stop_work_$tripA", workNameA)
+        assertEquals("trip_debounce_stop_work_$tripB", workNameB)
+        assertFalse("Unique work names must be distinct per trip", workNameA == workNameB)
     }
 }

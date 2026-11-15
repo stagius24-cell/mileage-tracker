@@ -4,11 +4,12 @@ package com.businesstracker.mileage.domain.tracking
  * Validates whether GPS movement corroborates resuming an automatic drive.
  *
  * Rules:
- * - Speed must meet or exceed [speedThresholdMph] (default 10.0 mph).
- * - Accuracy must be within [maxAccuracyMeters] (default 50.0 m) and > 0.
- * - Evidence must be fresh (age <= [windowMillis], not > 5s into the future).
- * - Requires TWO qualifying fixes at distinct timestamps within [windowMillis] (default 30s)
- *   to reject isolated GPS speed spikes.
+ * - Speed must be finite, non-negative, and meet or exceed [speedThresholdMph] (default 10.0 mph).
+ * - Accuracy must be finite, positive, and <= [maxAccuracyMeters] (default 50.0 m).
+ * - Fix age must be strictly known (> 0), non-future (fixTimestamp <= nowMillis), and <= [windowMillis] (default 30s).
+ * - Duplicate (fixTimestamp <= lastQualifyingTimestamp) and out-of-order evidence is rejected.
+ * - Requires TWO qualifying fixes strictly ordered in time within [windowMillis] to corroborate motion.
+ * - Corroboration state must be reset at session boundaries.
  */
 class MotionResumptionValidator(
     val speedThresholdMph: Double = 10.0,
@@ -19,7 +20,8 @@ class MotionResumptionValidator(
 
     /**
      * Evaluates a fresh GPS fix.
-     * Returns true ONLY when a second qualifying fix arrives at a distinct timestamp within [windowMillis].
+     * Returns [MotionValidationResult.MotionCorroborated] ONLY when a second qualifying fix arrives
+     * strictly after the first qualifying fix within [windowMillis].
      */
     @Synchronized
     fun evaluateFix(
@@ -28,38 +30,51 @@ class MotionResumptionValidator(
         fixTimestampMillis: Long,
         nowMillis: Long
     ): MotionValidationResult {
-        val ageMillis = nowMillis - fixTimestampMillis
-
-        // 1. Sanity: Reject future timestamps (>5s) and stale fixes (>30s)
-        if (ageMillis < -5_000L) {
-            return MotionValidationResult.Rejected("Future timestamp (${ageMillis}ms ahead)")
+        // 1. Non-finite or negative speed check
+        if (speedMph.isNaN() || speedMph.isInfinite() || speedMph < 0.0) {
+            return MotionValidationResult.Rejected("Non-finite or negative speed: $speedMph")
         }
+
+        // 2. Non-finite or invalid accuracy check
+        if (accuracyMeters.isNaN() || accuracyMeters.isInfinite() || accuracyMeters <= 0f || accuracyMeters > maxAccuracyMeters) {
+            return MotionValidationResult.Rejected("Invalid or poor accuracy: $accuracyMeters")
+        }
+
+        // 3. Unknown-age check
+        if (fixTimestampMillis <= 0L || nowMillis <= 0L) {
+            return MotionValidationResult.Rejected("Unknown age (fixTimestamp=$fixTimestampMillis, now=$nowMillis)")
+        }
+
+        // 4. Future timestamp check
+        if (fixTimestampMillis > nowMillis) {
+            return MotionValidationResult.Rejected("Future timestamp ($fixTimestampMillis > $nowMillis)")
+        }
+
+        // 5. Stale evidence check
+        val ageMillis = nowMillis - fixTimestampMillis
         if (ageMillis > windowMillis) {
             return MotionValidationResult.Rejected("Stale evidence (${ageMillis}ms old > ${windowMillis}ms)")
         }
 
-        // 2. Accuracy check
-        if (accuracyMeters <= 0f || accuracyMeters > maxAccuracyMeters) {
-            return MotionValidationResult.Rejected("Poor accuracy (${accuracyMeters}m > ${maxAccuracyMeters}m)")
+        // 6. Duplicate or out-of-order timestamp check
+        if (lastQualifyingTimestampMillis > 0L && fixTimestampMillis <= lastQualifyingTimestampMillis) {
+            return MotionValidationResult.Rejected("Duplicate or out-of-order timestamp ($fixTimestampMillis <= $lastQualifyingTimestampMillis)")
         }
 
-        // 3. Speed threshold check
+        // 7. Speed threshold check
         if (speedMph < speedThresholdMph) {
             return MotionValidationResult.Rejected("Below speed threshold (${speedMph}mph < ${speedThresholdMph}mph)")
         }
 
-        // 4. Two-fix corroboration check
-        if (lastQualifyingTimestampMillis > 0L &&
-            fixTimestampMillis != lastQualifyingTimestampMillis &&
-            Math.abs(fixTimestampMillis - lastQualifyingTimestampMillis) <= windowMillis
-        ) {
-            // Second qualifying fix within window!
+        // 8. Two-fix corroboration check
+        if (lastQualifyingTimestampMillis > 0L && (fixTimestampMillis - lastQualifyingTimestampMillis) <= windowMillis) {
+            val first = lastQualifyingTimestampMillis
+            lastQualifyingTimestampMillis = fixTimestampMillis
             return MotionValidationResult.MotionCorroborated(
-                firstFixTimestamp = lastQualifyingTimestampMillis,
+                firstFixTimestamp = first,
                 secondFixTimestamp = fixTimestampMillis
             )
         } else {
-            // First qualifying fix recorded
             lastQualifyingTimestampMillis = fixTimestampMillis
             return MotionValidationResult.AwaitingCorroboration(
                 firstFixTimestamp = fixTimestampMillis
@@ -71,6 +86,9 @@ class MotionResumptionValidator(
     fun reset() {
         lastQualifyingTimestampMillis = 0L
     }
+
+    @Synchronized
+    fun getLastQualifyingTimestamp(): Long = lastQualifyingTimestampMillis
 }
 
 sealed interface MotionValidationResult {
