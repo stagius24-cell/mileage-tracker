@@ -497,6 +497,15 @@ fun SettingsScreen(
         }
 
         item {
+            com.businesstracker.mileage.ui.smart.SmartClassificationCard(
+                isEnabled = state.isSmartTripRecognitionEnabled,
+                currentMode = state.smartClassificationMode,
+                onToggleEnabled = viewModel::setSmartTripRecognitionEnabled,
+                onModeSelected = viewModel::setSmartClassificationMode
+            )
+        }
+
+        item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(22.dp),
