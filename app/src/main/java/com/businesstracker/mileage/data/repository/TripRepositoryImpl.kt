@@ -172,4 +172,36 @@ class TripRepositoryImpl @Inject constructor(
     override suspend fun markAllClassifiedTripsPending() = withContext(ioDispatcher) {
         tripDao.markAllClassifiedTripsPending()
     }
+
+    override suspend fun setPendingSuggestion(
+        tripId: String,
+        suggestedClassification: String
+    ): Boolean = withContext(ioDispatcher) {
+        tripDao.setPendingSuggestion(
+            tripId = tripId,
+            suggestedClassification = suggestedClassification,
+            source = ClassificationSource.SMART_SUGGESTED.value
+        ) > 0
+    }
+
+    override suspend fun dismissSuggestion(tripId: String): Boolean = withContext(ioDispatcher) {
+        tripDao.dismissSuggestion(tripId) > 0
+    }
+
+    override suspend fun autoClassifyTrip(
+        tripId: String,
+        classification: String,
+        businessEntity: String,
+        purpose: String,
+        notes: String?
+    ): Boolean = withContext(ioDispatcher) {
+        val rows = if (database != null) {
+            database.withTransaction {
+                tripDao.autoClassifyTrip(tripId, classification, businessEntity, purpose, notes)
+            }
+        } else {
+            tripDao.autoClassifyTrip(tripId, classification, businessEntity, purpose, notes)
+        }
+        rows > 0
+    }
 }

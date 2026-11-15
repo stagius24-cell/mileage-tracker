@@ -66,4 +66,14 @@ interface TripRepository {
     suspend fun getPendingSyncTrips(): List<TripEntity>
     suspend fun markSynced(tripId: String, timestamp: Long)
     suspend fun markAllClassifiedTripsPending() {}
+
+    suspend fun setPendingSuggestion(tripId: String, suggestedClassification: String): Boolean = false
+    suspend fun dismissSuggestion(tripId: String): Boolean = false
+    suspend fun autoClassifyTrip(
+        tripId: String,
+        classification: String,
+        businessEntity: String,
+        purpose: String,
+        notes: String?
+    ): Boolean = false
 }

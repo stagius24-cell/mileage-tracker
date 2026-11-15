@@ -22,4 +22,6 @@ class FinalizeTripUseCase @Inject constructor(
     suspend fun discardFalseTrip(tripId: String) {
         coordinator.discardFalseTrip(tripId)
     }
+
+    fun isSmartRecognitionAttached(): Boolean = coordinator.isSmartRecognitionAttached()
 }

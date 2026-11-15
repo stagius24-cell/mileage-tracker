@@ -26,6 +26,11 @@ class NotificationHelper @Inject constructor(
         const val CHANNEL_TRIPS_ID = "channel_trip_alerts"
         const val NOTIFICATION_TRACKING_ID = 1001
         const val NOTIFICATION_TRIP_DETECTED_ID = 2001
+        const val NOTIFICATION_SMART_SUGGESTION_BASE_ID = 3000
+        const val NOTIFICATION_SMART_AUTO_BASE_ID = 4000
+
+        const val EXTRA_TRIP_ID = "EXTRA_TRIP_ID"
+        const val EXTRA_OPEN_CONFIRMATION = "EXTRA_OPEN_CONFIRMATION"
 
         const val ACTION_PAUSE = "com.businesstracker.mileage.ACTION_PAUSE"
         const val ACTION_RESUME = "com.businesstracker.mileage.ACTION_RESUME"
@@ -160,6 +165,98 @@ class NotificationHelper @Inject constructor(
             .build()
 
         notificationManager.notify(NOTIFICATION_TRIP_DETECTED_ID, notification)
+    }
+
+    fun showTripSuggestionNotification(
+        tripId: String,
+        distanceMiles: Double,
+        suggestedCategory: String,
+        matchCount: Int
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+        }
+
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_TRIP_ID, tripId)
+            putExtra(EXTRA_OPEN_CONFIRMATION, true)
+        }
+        val pendingIntent = launchIntent?.let {
+            PendingIntent.getActivity(
+                context,
+                tripId.hashCode(),
+                it,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        val formattedDist = String.format(Locale.US, "%.1f", distanceMiles)
+        val isBusiness = suggestedCategory.equals("BUSINESS", ignoreCase = true)
+        val displayCategory = if (isBusiness) "Business" else "Personal"
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_TRIPS_ID)
+            .setContentTitle("Trip completed ($formattedDist mi)")
+            .setContentText("Suggested: $displayCategory (based on $matchCount trips). Tap to review.")
+            .setSmallIcon(android.R.drawable.ic_menu_directions)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        val notificationId = NOTIFICATION_SMART_SUGGESTION_BASE_ID + kotlin.math.abs(tripId.hashCode() % 1000)
+        notificationManager.notify(notificationId, notification)
+    }
+
+    fun showAutoClassifiedNotification(
+        tripId: String,
+        distanceMiles: Double,
+        category: String
+    ) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                return
+            }
+        }
+
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_TRIP_ID, tripId)
+        }
+        val pendingIntent = launchIntent?.let {
+            PendingIntent.getActivity(
+                context,
+                tripId.hashCode(),
+                it,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
+        val formattedDist = String.format(Locale.US, "%.1f", distanceMiles)
+        val isBusiness = category.equals("BUSINESS", ignoreCase = true)
+        val displayCategory = if (isBusiness) "Business" else "Personal"
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_TRIPS_ID)
+            .setContentTitle("Trip automatically classified ($formattedDist mi)")
+            .setContentText("Classified as $displayCategory. Tap to view or edit.")
+            .setSmallIcon(android.R.drawable.ic_menu_directions)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentIntent(pendingIntent)
+            .build()
+
+        val notificationId = NOTIFICATION_SMART_AUTO_BASE_ID + kotlin.math.abs(tripId.hashCode() % 1000)
+        notificationManager.notify(notificationId, notification)
     }
 
     private fun formatDuration(millis: Long): String {

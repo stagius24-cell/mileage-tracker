@@ -192,7 +192,7 @@ class TripDebounceWorker @AssistedInject constructor(
                 return Result.retry()
             }
 
-            if (finalizedTrip != null) {
+            if (finalizedTrip != null && !finalizeTripUseCase.isSmartRecognitionAttached()) {
                 if (finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
                     notificationHelper.showTripDetectedNotification(
                         finalizedTrip.id,
