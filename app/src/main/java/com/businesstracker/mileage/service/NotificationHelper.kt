@@ -68,11 +68,21 @@ class NotificationHelper @Inject constructor(
     fun buildTrackingNotification(
         distanceMiles: Double,
         durationMillis: Long,
-        isPaused: Boolean
+        isPaused: Boolean,
+        isCandidate: Boolean = false
     ): Notification {
         val formattedDistance = String.format(Locale.US, "%.2f miles", distanceMiles)
         val formattedDuration = formatDuration(durationMillis)
-        val statusText = if (isPaused) "Paused • $formattedDuration" else "$formattedDistance • $formattedDuration"
+        val statusText = when {
+            isPaused -> "Paused • $formattedDuration"
+            isCandidate -> "Verifying vehicle movement..."
+            else -> "$formattedDistance • $formattedDuration"
+        }
+        val notificationTitle = if (isCandidate) {
+            "Checking for driving"
+        } else {
+            context.getString(R.string.tracking_notification_title)
+        }
 
         // Pause/Resume PendingIntent
         val toggleActionIntent = Intent(context, ServiceActionReceiver::class.java).apply {
@@ -103,7 +113,7 @@ class NotificationHelper @Inject constructor(
         }
 
         return NotificationCompat.Builder(context, CHANNEL_TRACKING_ID)
-            .setContentTitle(context.getString(R.string.tracking_notification_title))
+            .setContentTitle(notificationTitle)
             .setContentText(statusText)
             .setSmallIcon(android.R.drawable.ic_menu_compass)
             .setOngoing(true)
@@ -118,9 +128,10 @@ class NotificationHelper @Inject constructor(
     fun updateTrackingNotification(
         distanceMiles: Double,
         durationMillis: Long,
-        isPaused: Boolean
+        isPaused: Boolean,
+        isCandidate: Boolean = false
     ) {
-        val notification = buildTrackingNotification(distanceMiles, durationMillis, isPaused)
+        val notification = buildTrackingNotification(distanceMiles, durationMillis, isPaused, isCandidate)
         notificationManager.notify(NOTIFICATION_TRACKING_ID, notification)
     }
 

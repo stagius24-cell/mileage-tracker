@@ -5,6 +5,7 @@ import com.businesstracker.mileage.domain.model.Waypoint
 data class TrackingServiceState(
     val isTracking: Boolean = false,
     val isPaused: Boolean = false,
+    val isCandidate: Boolean = false,
     val tripId: String? = null,
     val distanceMeters: Double = 0.0,
     val distanceMiles: Double = 0.0,

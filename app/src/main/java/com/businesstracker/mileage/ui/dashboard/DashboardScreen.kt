@@ -409,13 +409,13 @@ private fun DriveTrackingTable(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Surface(
                         shape = CircleShape,
-                        color = if (serviceState.isTracking) SucculentPrimary.copy(alpha = 0.15f) else SlateNeutral.copy(alpha = 0.15f),
+                        color = if (serviceState.isTracking && !serviceState.isCandidate) SucculentPrimary.copy(alpha = 0.15f) else SlateNeutral.copy(alpha = 0.15f),
                         modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.DirectionsCar,
                             contentDescription = null,
-                            tint = if (serviceState.isTracking) SucculentPrimary else SlateNeutral,
+                            tint = if (serviceState.isTracking && !serviceState.isCandidate) SucculentPrimary else SlateNeutral,
                             modifier = Modifier.padding(5.dp)
                         )
                     }
@@ -423,7 +423,9 @@ private fun DriveTrackingTable(
                     Column {
                         Text(
                             text = if (serviceState.isTracking) {
-                                if (serviceState.isPaused) "Active Drive (Paused)" else "Active Drive Tracking"
+                                if (serviceState.isPaused) "Active Drive (Paused)"
+                                else if (serviceState.isCandidate) "Checking for driving"
+                                else "Active Drive Tracking"
                             } else if (serviceState.isRecoveryRequired) {
                                 "Drive Interrupted"
                             } else {
@@ -441,6 +443,12 @@ private fun DriveTrackingTable(
                                 } else {
                                     "Tesla Model Y • Ready"
                                 },
+                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
+                        } else if (serviceState.isCandidate) {
+                            Text(
+                                text = "Verifying vehicle movement • Candidate",
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )

@@ -6,6 +6,7 @@ import androidx.room.PrimaryKey
 
 enum class TripLifecycleState(val value: String) {
     STARTING("STARTING"),
+    CANDIDATE("CANDIDATE"),
     TRACKING("TRACKING"),
     DRAINING("DRAINING"),
     READY_TO_FINALIZE("READY_TO_FINALIZE"),

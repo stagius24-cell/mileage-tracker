@@ -1357,6 +1357,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.163 (Build 164)" to "Fixed false automatic starts while stationary, required fresh corroborated motion for stops, and enforced a 4-minute candidate timeout.",
                 "Version 1.0.162 (Build 163)" to "Redesigned compact Drive Tracking and Schedule settings card with inline toggles and independent schedule expansion.",
                 "Version 1.0.161 (Build 162)" to "Styled Back Up button background and content color to match the succulent Personal button shade.",
                 "Version 1.0.160 (Build 161)" to "Reverted walking auto-stop and Tesla Bluetooth tracking commits to restore clean motion auto-detection.",

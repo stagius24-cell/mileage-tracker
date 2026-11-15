@@ -43,6 +43,7 @@ class TripDebounceWorker @AssistedInject constructor(
 
     companion object {
         const val WORK_NAME = "trip_debounce_stop_work"
+        internal val STOP_WORK_POLICY = ExistingWorkPolicy.KEEP
         internal const val INPUT_TRIGGER = "debounce_trigger"
         internal const val INPUT_TRIP_ID = "debounce_trip_id"
         internal const val TRIGGER_ACTIVITY = "activity"
@@ -66,7 +67,7 @@ class TripDebounceWorker @AssistedInject constructor(
 
             WorkManager.getInstance(context).enqueueUniqueWork(
                 WORK_NAME,
-                ExistingWorkPolicy.REPLACE, // Restart 4-minute timer if another exit occurs
+                ExistingWorkPolicy.KEEP, // Preserve established 4-minute timer against duplicate exit events
                 debounceRequest
             )
         }

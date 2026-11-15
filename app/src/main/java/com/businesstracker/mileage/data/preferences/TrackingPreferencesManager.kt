@@ -38,6 +38,8 @@ data class StationaryEvidence(
 
 data class VehicleEnterEvidence(val tripId: String, val elapsedMillis: Long, val bootCount: Int)
 
+data class CandidateDeadline(val tripId: String, val deadlineElapsedMillis: Long, val bootCount: Int)
+
 @Singleton
 class TrackingPreferencesManager @Inject constructor(
     @ApplicationContext private val context: Context
@@ -65,6 +67,11 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_VEHICLE_ENTER_TRIP = stringPreferencesKey("vehicle_enter_trip")
         private val KEY_VEHICLE_ENTER_ELAPSED = longPreferencesKey("vehicle_enter_elapsed")
         private val KEY_VEHICLE_ENTER_BOOT = longPreferencesKey("vehicle_enter_boot")
+        private val KEY_CANDIDATE_DEADLINE_TRIP = stringPreferencesKey("candidate_deadline_trip")
+        private val KEY_CANDIDATE_DEADLINE_ELAPSED = longPreferencesKey("candidate_deadline_elapsed")
+        private val KEY_CANDIDATE_DEADLINE_BOOT = longPreferencesKey("candidate_deadline_boot")
+        private val KEY_LAST_TRANSITION_ELAPSED_NANOS = longPreferencesKey("last_transition_elapsed_nanos")
+        private val KEY_LAST_TRANSITION_BOOT = longPreferencesKey("last_transition_boot")
 
         // Cloudflare D1 & Sync Configuration
         private val KEY_CF_ENDPOINT = stringPreferencesKey("cf_endpoint")
@@ -299,7 +306,53 @@ class TrackingPreferencesManager @Inject constructor(
         context.dataStore.edit { prefs ->
             if (prefs[KEY_ACTIVE_TRIP_ID] == tripId) {
                 prefs.remove(KEY_ACTIVE_TRIP_ID)
+                if (prefs[KEY_CANDIDATE_DEADLINE_TRIP] == tripId) {
+                    prefs.remove(KEY_CANDIDATE_DEADLINE_TRIP)
+                    prefs.remove(KEY_CANDIDATE_DEADLINE_ELAPSED)
+                    prefs.remove(KEY_CANDIDATE_DEADLINE_BOOT)
+                }
             }
+        }
+    }
+
+    suspend fun recordCandidateDeadline(tripId: String, deadlineElapsedMillis: Long, bootCount: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_CANDIDATE_DEADLINE_TRIP] = tripId
+            prefs[KEY_CANDIDATE_DEADLINE_ELAPSED] = deadlineElapsedMillis
+            prefs[KEY_CANDIDATE_DEADLINE_BOOT] = bootCount.toLong()
+        }
+    }
+
+    suspend fun getCandidateDeadline(): CandidateDeadline? {
+        val prefs = context.dataStore.data.first()
+        return CandidateDeadline(
+            prefs[KEY_CANDIDATE_DEADLINE_TRIP] ?: return null,
+            prefs[KEY_CANDIDATE_DEADLINE_ELAPSED] ?: return null,
+            (prefs[KEY_CANDIDATE_DEADLINE_BOOT] ?: return null).toInt()
+        )
+    }
+
+    suspend fun clearCandidateDeadline(tripId: String? = null) {
+        context.dataStore.edit { prefs ->
+            if (tripId == null || prefs[KEY_CANDIDATE_DEADLINE_TRIP] == tripId) {
+                prefs.remove(KEY_CANDIDATE_DEADLINE_TRIP)
+                prefs.remove(KEY_CANDIDATE_DEADLINE_ELAPSED)
+                prefs.remove(KEY_CANDIDATE_DEADLINE_BOOT)
+            }
+        }
+    }
+
+    suspend fun getLastTransitionTimestamp(): Pair<Long, Int>? {
+        val prefs = context.dataStore.data.first()
+        val elapsedNanos = prefs[KEY_LAST_TRANSITION_ELAPSED_NANOS] ?: return null
+        val boot = prefs[KEY_LAST_TRANSITION_BOOT] ?: return null
+        return elapsedNanos to boot.toInt()
+    }
+
+    suspend fun recordLastTransitionTimestamp(elapsedRealtimeNanos: Long, bootCount: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_LAST_TRANSITION_ELAPSED_NANOS] = elapsedRealtimeNanos
+            prefs[KEY_LAST_TRANSITION_BOOT] = bootCount.toLong()
         }
     }
 

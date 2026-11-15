@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 163
-        versionName = "1.0.162"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Redesigned compact Drive Tracking and Schedule settings card with inline toggles and independent schedule expansion.\"")
+        versionCode = 164
+        versionName = "1.0.163"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix false automatic starts while stationary, require fresh corroborated motion, and enforce 4-minute candidate timeout.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

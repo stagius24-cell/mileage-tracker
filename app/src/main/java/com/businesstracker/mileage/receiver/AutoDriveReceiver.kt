@@ -7,13 +7,17 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.SystemClock
 import androidx.core.content.ContextCompat
+import com.businesstracker.mileage.data.local.TripLifecycleDao
+import com.businesstracker.mileage.data.local.entity.TripLifecycleState
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
 import com.businesstracker.mileage.domain.service.BootCountProvider
 import com.businesstracker.mileage.domain.tracking.AutoDriveAction
 import com.businesstracker.mileage.domain.tracking.AutoDriveDecisionEngine
+import com.businesstracker.mileage.domain.tracking.TrackingDiagnostics
 import com.businesstracker.mileage.service.LocationTrackingService
 import com.businesstracker.mileage.worker.TripDebounceWorker
 import com.google.android.gms.location.ActivityTransition
@@ -37,10 +41,12 @@ class AutoDriveReceiver : BroadcastReceiver() {
         const val ACTION_ACTIVITY_TRANSITION = "com.businesstracker.mileage.ACTION_ACTIVITY_TRANSITION"
         const val TRANSITION_REQUEST_CODE = 3001
         const val START_TRIGGER_DISPLACEMENT_METERS = 200.0f
+        const val MAX_TRANSITION_AGE_NANOS = 120_000_000_000L // 2 minutes
     }
 
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
     @Inject lateinit var activeTripRepository: ActiveTripRepository
+    @Inject lateinit var tripLifecycleDao: TripLifecycleDao
     @Inject lateinit var decisionEngine: AutoDriveDecisionEngine
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
     @Inject lateinit var bootCountProvider: BootCountProvider
@@ -55,9 +61,53 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
         receiverScope.launch(ioDispatcher) {
             try {
+                val currentBoot = bootCountProvider.getBootCount()
+                val receiptTimeNanos = SystemClock.elapsedRealtimeNanos()
+
                 // Process transition events strictly in timestamp order
                 val sortedEvents = result.transitionEvents.sortedBy { it.elapsedRealTimeNanos }
                 for (event in sortedEvents) {
+                    // Cross-delivery deduplication check
+                    val last = preferencesManager.getLastTransitionTimestamp()
+                    if (last != null && last.second == currentBoot && event.elapsedRealTimeNanos <= last.first) {
+                        TrackingDiagnostics.logTransition(
+                            eventTimeNanos = event.elapsedRealTimeNanos,
+                            receiptTimeNanos = receiptTimeNanos,
+                            activityType = event.activityType,
+                            transitionType = event.transitionType,
+                            bootCount = currentBoot,
+                            isAccepted = false,
+                            reason = "Duplicate or older event across deliveries"
+                        )
+                        continue
+                    }
+                    preferencesManager.recordLastTransitionTimestamp(event.elapsedRealTimeNanos, currentBoot)
+
+                    // 2-minute age freshness check: treat older events as historical signals, not auto-start triggers
+                    val ageNanos = receiptTimeNanos - event.elapsedRealTimeNanos
+                    if (ageNanos > MAX_TRANSITION_AGE_NANOS) {
+                        TrackingDiagnostics.logTransition(
+                            eventTimeNanos = event.elapsedRealTimeNanos,
+                            receiptTimeNanos = receiptTimeNanos,
+                            activityType = event.activityType,
+                            transitionType = event.transitionType,
+                            bootCount = currentBoot,
+                            isAccepted = false,
+                            reason = "Event older than 2 minutes (${ageNanos / 1_000_000L}ms); historical signal only"
+                        )
+                        continue
+                    }
+
+                    TrackingDiagnostics.logTransition(
+                        eventTimeNanos = event.elapsedRealTimeNanos,
+                        receiptTimeNanos = receiptTimeNanos,
+                        activityType = event.activityType,
+                        transitionType = event.transitionType,
+                        bootCount = currentBoot,
+                        isAccepted = true,
+                        reason = "Fresh transition accepted"
+                    )
+
                     when (event.activityType) {
                         DetectedActivity.IN_VEHICLE -> {
                             when (event.transitionType) {
@@ -113,14 +163,29 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
         val isAutoTrackingEnabled = preferencesManager.isAutoTrackingEnabled.first()
         val isTracking = LocationTrackingService.serviceState.value.isTracking
+
+        // 3. Authoritative active trip & lifecycle validation:
+        // Do not attempt to recover a trip that is null, finalized, or discarded in the database!
         val activeTripId = preferencesManager.activeTripId.first()
+        var effectiveActiveTripId: String? = null
         if (activeTripId != null) {
-            preferencesManager.recordVehicleEnter(
-                activeTripId,
-                android.os.SystemClock.elapsedRealtime(),
-                bootCountProvider.getBootCount()
-            )
+            val activeTrip = activeTripRepository.getActiveTrip()
+            val lifecycleState = tripLifecycleDao.getState(activeTripId)
+            val isTerminal = lifecycleState == TripLifecycleState.FINALIZED.value ||
+                    lifecycleState == TripLifecycleState.DISCARDED.value
+            if (activeTrip != null && !isTerminal && activeTrip.id == activeTripId) {
+                effectiveActiveTripId = activeTripId
+                preferencesManager.recordVehicleEnter(
+                    activeTripId,
+                    SystemClock.elapsedRealtime(),
+                    bootCountProvider.getBootCount()
+                )
+            } else {
+                // Clear dangling preference ID
+                preferencesManager.clearActiveTripId(activeTripId)
+            }
         }
+
         val isWithinSchedule = preferencesManager.isWithinWorkSchedule()
         val outsideBehavior = preferencesManager.getOutsideScheduleBehavior()
 
@@ -130,7 +195,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
             hasBackgroundLocationPermission = hasBackgroundLocation,
             hasActivityRecognitionPermission = hasActivity,
             isServiceTracking = isTracking,
-            activeTripId = activeTripId,
+            activeTripId = effectiveActiveTripId,
             isWithinSchedule = isWithinSchedule,
             outsideScheduleBehavior = outsideBehavior
         )
@@ -138,26 +203,30 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
         when (action) {
             is AutoDriveAction.CancelDebounce -> {
-                TripDebounceWorker.cancelDebounce(context)
+                // Request motion validation from service rather than unconditionally cancelling debounce without fresh GPS movement
+                val validateIntent = Intent(context, LocationTrackingService::class.java).apply {
+                    this.action = LocationTrackingService.ACTION_VALIDATE_MOTION
+                }
+                try {
+                    context.startService(validateIntent)
+                } catch (_: Exception) {}
             }
             is AutoDriveAction.RecoverTrip -> {
-                TripDebounceWorker.cancelDebounce(context)
                 startTrackingService(context, action.tripId, "MySucculentCorner")
             }
             is AutoDriveAction.StartCandidateDrive -> {
-                TripDebounceWorker.cancelDebounce(context)
                 val newTripId = UUID.randomUUID().toString()
                 // Persist newTripId and vehicle enter evidence immediately
                 preferencesManager.setActiveTripId(newTripId)
                 preferencesManager.recordVehicleEnter(
                     newTripId,
-                    android.os.SystemClock.elapsedRealtime(),
+                    SystemClock.elapsedRealtime(),
                     bootCountProvider.getBootCount()
                 )
                 startTrackingService(context, newTripId, action.suggestedBusiness)
             }
             is AutoDriveAction.ScheduleDebounce -> {
-                activeTripId?.let { TripDebounceWorker.scheduleDebounce(context, it) }
+                effectiveActiveTripId?.let { TripDebounceWorker.scheduleDebounce(context, it) }
             }
             is AutoDriveAction.Ignore -> {
                 // Tracking disabled, permissions missing, or battery saver outside schedule
@@ -194,6 +263,16 @@ class AutoDriveReceiver : BroadcastReceiver() {
         val isTracking = LocationTrackingService.serviceState.value.isTracking
 
         decisionEngine.evaluateStillEnter(isInVehicle, isTracking)
+
+        // Request stationary check from the tracking service without prematurely ending the trip at traffic lights
+        if (isTracking) {
+            val checkIntent = Intent(context, LocationTrackingService::class.java).apply {
+                action = LocationTrackingService.ACTION_CHECK_STATIONARY
+            }
+            try {
+                context.startService(checkIntent)
+            } catch (_: Exception) {}
+        }
     }
 
     private fun startTrackingService(context: Context, tripId: String, suggestedBusiness: String) {
@@ -206,8 +285,19 @@ class AutoDriveReceiver : BroadcastReceiver() {
         try {
             ContextCompat.startForegroundService(context, serviceIntent)
             android.util.Log.d(TAG, "startForegroundService initiated for trip $tripId")
+            TrackingDiagnostics.logCandidate(tripId, "ServiceStarted", 0L, 240_000L, 0.0)
         } catch (e: Exception) {
             android.util.Log.e(TAG, "Failed to start LocationTrackingService: ${e.message}", e)
+            // Reconcile reserved candidate ID safely if service launch fails
+            receiverScope.launch(ioDispatcher) {
+                try {
+                    if (preferencesManager.activeTripId.first() == tripId) {
+                        preferencesManager.clearActiveTripId(tripId)
+                        preferencesManager.clearCandidateDeadline(tripId)
+                        TrackingDiagnostics.logCandidate(tripId, "LaunchFailedReconciled", 0L, 0L, 0.0)
+                    }
+                } catch (_: Exception) {}
+            }
         }
     }
 }
