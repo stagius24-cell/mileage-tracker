@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 162
-        versionName = "1.0.161"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Styled Back Up button background and content color to match the succulent Personal button shade.\"")
+        versionCode = 163
+        versionName = "1.0.162"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Redesigned compact Drive Tracking and Schedule settings card with inline toggles and independent schedule expansion.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

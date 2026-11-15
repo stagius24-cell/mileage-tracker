@@ -363,41 +363,44 @@ fun SettingsScreen(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
-                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+                    // Section 1 — Drive tracking
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 60.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         VehicleSettingsIcon(Icons.Outlined.LocationOn)
                         Spacer(Modifier.width(12.dp))
-                        Text("Drive tracking", modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        TextButton(
-                            onClick = {
-                                try {
-                                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
-                                } catch (_: Exception) {
-                                    context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                        data = Uri.fromParts("package", context.packageName, null)
-                                    })
-                                }
-                            },
-                            modifier = Modifier.defaultMinSize(minHeight = 48.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp)
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.Center
                         ) {
-                            Icon(Icons.Default.BatterySaver, contentDescription = null,
-                                modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Battery", style = MaterialTheme.typography.labelLarge)
+                            Text(
+                                text = "Drive tracking",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Spacer(Modifier.height(2.dp))
+                            Text(
+                                text = "Automatic detection",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
+                        Spacer(Modifier.width(8.dp))
+                        SettingsToggle(
+                            checked = state.autoTrackingEnabled,
+                            onCheckedChange = { enabled ->
+                                viewModel.setAutoTrackingEnabled(enabled)
+                            },
+                            label = "Automatic detection"
+                        )
                     }
-                    CompactSettingsDivider()
-                    SettingsSwitchRow(
-                        title = "Automatic detection",
-                        checked = state.autoTrackingEnabled,
-                        onCheckedChange = { enabled ->
-                            if (!enabled) isScheduleExpanded = false
-                            viewModel.setAutoTrackingEnabled(enabled)
-                        }
-                    )
+
                     if (state.autoTrackingEnabled && !state.hasBackgroundLocationPermission) {
+                        Spacer(Modifier.height(4.dp))
                         CompactAlert(
                             text = "Allow location all the time for automatic tracking.",
                             actionLabel = "Open settings",
@@ -409,58 +412,77 @@ fun SettingsScreen(
                         )
                     }
                     if (state.autoTrackingEnabled && !state.isTransitionsRegistered && state.transitionRegistrationError != null) {
+                        Spacer(Modifier.height(4.dp))
                         CompactAlert(
                             text = "Activity detection failed: ${state.transitionRegistrationError}",
                             actionLabel = "Retry",
                             onAction = { viewModel.retryRegisterTransitions() }
                         )
                     }
+
+                    // Subtle divider between Section 1 and Section 2
                     CompactSettingsDivider()
-                    Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
+
+                    // Section 2 — Schedule
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 60.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        VehicleSettingsIcon(Icons.Default.Schedule)
+                        Spacer(Modifier.width(12.dp))
                         Column(
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable(enabled = state.autoTrackingEnabled && state.scheduleFilteringEnabled) {
-                                    isScheduleExpanded = !isScheduleExpanded
-                                },
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable { isScheduleExpanded = !isScheduleExpanded }
+                                .padding(vertical = 4.dp),
                             verticalArrangement = Arrangement.Center
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Work schedule", style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium, maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    text = "Schedule",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(Modifier.width(4.dp))
                                 Icon(
-                                    if (isScheduleExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    contentDescription = if (isScheduleExpanded) "Collapse work schedule" else "Expand work schedule",
+                                    imageVector = if (isScheduleExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                    contentDescription = if (isScheduleExpanded) "Collapse schedule" else "Expand schedule",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
+                            Spacer(Modifier.height(2.dp))
                             Text(
-                                formatScheduleSummary(state.workDays, state.workHoursStart, state.workHoursEnd),
+                                text = formatScheduleSummary(state.workDays, state.workHoursStart, state.workHoursEnd),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2, overflow = TextOverflow.Ellipsis
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                         Spacer(Modifier.width(8.dp))
                         SettingsToggle(
                             checked = state.scheduleFilteringEnabled,
-                            enabled = state.autoTrackingEnabled,
                             onCheckedChange = { enabled ->
-                                if (!enabled) isScheduleExpanded = false
                                 viewModel.setScheduleFilteringEnabled(enabled)
                             },
-                            label = "Work schedule"
+                            label = "Schedule"
                         )
                     }
+
+                    // Expandable schedule controls
                     AnimatedVisibility(
-                        visible = isScheduleExpanded && state.autoTrackingEnabled && state.scheduleFilteringEnabled,
+                        visible = isScheduleExpanded,
                         enter = expandVertically(animationSpec = tween(180)),
                         exit = shrinkVertically(animationSpec = tween(180))
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Spacer(Modifier.height(2.dp))
+                        Column(
+                            modifier = Modifier.padding(top = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
                             ScheduleControls(
                                 state = state,
                                 onToggleDay = viewModel::toggleWorkDay,
@@ -1335,6 +1357,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.162 (Build 163)" to "Redesigned compact Drive Tracking and Schedule settings card with inline toggles and independent schedule expansion.",
                 "Version 1.0.161 (Build 162)" to "Styled Back Up button background and content color to match the succulent Personal button shade.",
                 "Version 1.0.160 (Build 161)" to "Reverted walking auto-stop and Tesla Bluetooth tracking commits to restore clean motion auto-detection.",
                 "Version 1.0.159 (Build 160)" to "Shifted plus and chevron action buttons further right with 20% tighter spacing in Settings management cards.",
