@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 167
-        versionName = "1.0.166"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Re-audit tracking completion: admission barrier during candidate expiry, serialized startup recovery, and GPS-silence watchdog recheck with 10-minute stationary stop fallback.\"")
+        versionCode = 168
+        versionName = "1.0.167"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Ignore stale or unrelated GPS callbacks when measuring silence for automatic trip stopping.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

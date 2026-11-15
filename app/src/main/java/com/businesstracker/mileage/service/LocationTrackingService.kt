@@ -850,10 +850,14 @@ class LocationTrackingService : Service() {
 
     @VisibleForTesting
     internal fun handleFixProcessed(result: GpsInboxProcessor.ProcessResult) {
-        lastLocationReceivedElapsed = SystemClock.elapsedRealtime()
         when (result) {
             is GpsInboxProcessor.ProcessResult.Accepted -> {
                 if (result.tripId != currentTripId) return
+                val freshFixElapsed = result.waypoint?.elapsedRealtimeNanos?.takeIf { it > 0L }?.div(1_000_000L)
+                val observationElapsed = SystemClock.elapsedRealtime()
+                if (freshFixElapsed != null && freshFixElapsed <= observationElapsed && observationElapsed - freshFixElapsed <= 30_000L) {
+                    lastLocationReceivedElapsed = observationElapsed
+                }
                 totalDistanceMeters = result.totalDistanceMeters
                 waypointCount++
 
@@ -1481,6 +1485,9 @@ class LocationTrackingService : Service() {
 
     @VisibleForTesting
     internal fun getInternalDisplacementConfirmed(): Boolean = isDisplacementConfirmed
+
+    @VisibleForTesting
+    internal fun getLastLocationReceivedElapsedForTesting(): Long = lastLocationReceivedElapsed
 
     @VisibleForTesting
     internal fun getInternalIsCandidate(): Boolean = isCandidate

@@ -1126,6 +1126,7 @@ class AutoDriveFalseStartAndStopTest {
         service.handleFixProcessed(lateOldFix)
 
         // Current session must be completely untouched
+        assertEquals(0L, service.getLastLocationReceivedElapsedForTesting())
         assertEquals(100.0, service.getInternalDistanceMeters(), 0.001)
         assertEquals(0, service.getInternalWaypointCount())
         assertFalse(service.getInternalDisplacementConfirmed())
