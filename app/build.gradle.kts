@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 164
-        versionName = "1.0.163"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix false automatic starts while stationary, require fresh corroborated motion, and enforce 4-minute candidate timeout.\"")
+        versionCode = 165
+        versionName = "1.0.164"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Matched Google Sheets settings icon and container styling with other settings cards, aligning indentation perfectly.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

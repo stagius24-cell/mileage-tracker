@@ -617,7 +617,7 @@ fun SettingsScreen(
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
                     Column(Modifier.fillMaxWidth().animateContentSize(animationSpec = tween(180))) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
                                 .clip(RoundedCornerShape(12.dp))
                                 .clickable { isAdvancedExpanded = !isAdvancedExpanded }
                                 .semantics {
@@ -625,11 +625,10 @@ fun SettingsScreen(
                                 },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Outlined.TableChart, contentDescription = null,
-                                tint = SucculentPrimary, modifier = Modifier.size(20.dp))
+                            VehicleSettingsIcon(Icons.Outlined.TableChart)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
-                                Text("Google Sheets settings", style = MaterialTheme.typography.bodyLarge,
+                                Text("Google Sheets settings", style = MaterialTheme.typography.titleMedium,
                                     fontWeight = FontWeight.SemiBold)
                                 Text("Account, spreadsheet & sync", style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1357,6 +1356,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.164 (Build 165)" to "Matched Google Sheets settings icon and container styling with other settings cards, aligning indentation perfectly.",
                 "Version 1.0.163 (Build 164)" to "Fixed false automatic starts while stationary, required fresh corroborated motion for stops, and enforced a 4-minute candidate timeout.",
                 "Version 1.0.162 (Build 163)" to "Redesigned compact Drive Tracking and Schedule settings card with inline toggles and independent schedule expansion.",
                 "Version 1.0.161 (Build 162)" to "Styled Back Up button background and content color to match the succulent Personal button shade.",
