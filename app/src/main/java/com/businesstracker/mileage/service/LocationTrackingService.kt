@@ -144,6 +144,8 @@ class LocationTrackingService : Service() {
 
     @VisibleForTesting
     internal var lastRecoveryJob: Job? = null
+    @VisibleForTesting
+    internal var lastStartupJob: Job? = null
 
     private val isStopping = AtomicBoolean(false)
     private var currentTripId: String = ""
@@ -306,12 +308,13 @@ class LocationTrackingService : Service() {
         }
 
         // Check location permissions safely without crashing
+        val targetContext = try { applicationContext ?: this } catch (_: Throwable) { this }
         val hasFine = ContextCompat.checkSelfPermission(
-            this,
+            targetContext,
             android.Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
         val hasCoarse = ContextCompat.checkSelfPermission(
-            this,
+            targetContext,
             android.Manifest.permission.ACCESS_COARSE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
 
@@ -436,8 +439,13 @@ class LocationTrackingService : Service() {
                         candidateDeadlineElapsed = nowElapsed
                         candidateDeadlineBoot = currentBoot
                         TrackingDiagnostics.logCandidateTransition(currentTripId, "RECONCILE_RECOVERED", "Reconciling candidate session")
-                        serviceScope.launch(ioDispatcher) {
-                            expireCandidateSession()
+                        expireCandidateSession()
+                        if (isStopping.get() || currentTripId.isEmpty() || !_serviceState.value.isTracking) {
+                            Log.d("LocationTrackingService", "Session was terminated or discarded during candidate expiry; aborting recovery initialization")
+                            isStartingOrRunning.set(false)
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf()
+                            return@launch
                         }
                     }
                 } else {
@@ -446,6 +454,7 @@ class LocationTrackingService : Service() {
                     candidateDeadlineBoot = 0
                 }
                 motionResumptionValidator.reset()
+                lastLocationReceivedElapsed = SystemClock.elapsedRealtime()
 
                 // Update notification with recovered metrics
                 notificationHelper.updateTrackingNotification(
@@ -573,35 +582,12 @@ class LocationTrackingService : Service() {
             isDisplacementConfirmed = false
             motionResumptionValidator.reset()
             isCandidate = (method == TrackingMethod.AUTO_DETECTED)
+            val nowElapsed = SystemClock.elapsedRealtime()
+            val currentBoot = safeBootCountProvider.getBootCount()
+            lastLocationReceivedElapsed = nowElapsed
             if (isCandidate) {
-                val nowElapsed = SystemClock.elapsedRealtime()
-                val currentBoot = safeBootCountProvider.getBootCount()
                 candidateDeadlineElapsed = nowElapsed + 240_000L
                 candidateDeadlineBoot = currentBoot
-                serviceScope.launch(ioDispatcher) {
-                    val existingDeadline = preferencesManager.getCandidateDeadline()
-                    if (existingDeadline != null && existingDeadline.tripId == currentTripId) {
-                        // Recovering existing candidate drive via ACTION_START: preserve existing deadline
-                        if (existingDeadline.bootCount == currentBoot && existingDeadline.deadlineElapsedMillis > nowElapsed) {
-                            candidateDeadlineElapsed = existingDeadline.deadlineElapsedMillis
-                            candidateDeadlineBoot = existingDeadline.bootCount
-                            TrackingDiagnostics.logCandidateTransition(currentTripId, "PRESERVED_CANDIDATE_DEADLINE", "Deadline in ${(candidateDeadlineElapsed - nowElapsed) / 1000}s")
-                        } else {
-                            // Expired or incompatible boot: explicit reconciliation, never a 0-deadline
-                            candidateDeadlineElapsed = nowElapsed
-                            candidateDeadlineBoot = currentBoot
-                            TrackingDiagnostics.logCandidateTransition(currentTripId, "RECONCILE_ACTION_START", "Reconciling candidate on ACTION_START")
-                            expireCandidateSession()
-                        }
-                    } else {
-                        preferencesManager.recordCandidateDeadline(
-                            tripId = currentTripId,
-                            deadlineElapsedMillis = candidateDeadlineElapsed,
-                            bootCount = candidateDeadlineBoot
-                        )
-                        TrackingDiagnostics.logCandidateTransition(currentTripId, "CANDIDATE_STARTED", "4-minute window initialized")
-                    }
-                }
             } else {
                 candidateDeadlineElapsed = 0L
                 candidateDeadlineBoot = 0
@@ -645,8 +631,40 @@ class LocationTrackingService : Service() {
                 }
             )
 
-            serviceScope.launch(ioDispatcher) {
+            lastStartupJob = serviceScope.launch(ioDispatcher) {
                 try {
+                    if (isCandidate) {
+                        val existingDeadline = preferencesManager.getCandidateDeadline()
+                        if (existingDeadline != null && existingDeadline.tripId == currentTripId) {
+                            // Recovering existing candidate drive via ACTION_START: preserve existing deadline
+                            if (existingDeadline.bootCount == currentBoot && existingDeadline.deadlineElapsedMillis > nowElapsed) {
+                                candidateDeadlineElapsed = existingDeadline.deadlineElapsedMillis
+                                candidateDeadlineBoot = existingDeadline.bootCount
+                                TrackingDiagnostics.logCandidateTransition(currentTripId, "PRESERVED_CANDIDATE_DEADLINE", "Deadline in ${(candidateDeadlineElapsed - nowElapsed) / 1000}s")
+                            } else {
+                                // Expired or incompatible boot: explicit reconciliation, never a 0-deadline
+                                candidateDeadlineElapsed = nowElapsed
+                                candidateDeadlineBoot = currentBoot
+                                TrackingDiagnostics.logCandidateTransition(currentTripId, "RECONCILE_ACTION_START", "Reconciling candidate on ACTION_START")
+                                expireCandidateSession()
+                                if (isStopping.get() || currentTripId.isEmpty() || !_serviceState.value.isTracking) {
+                                    Log.d("LocationTrackingService", "Session was terminated or discarded during ACTION_START candidate expiry; aborting startup")
+                                    cleanupFailedStartup()
+                                    stopForeground(STOP_FOREGROUND_REMOVE)
+                                    stopSelf()
+                                    return@launch
+                                }
+                            }
+                        } else {
+                            preferencesManager.recordCandidateDeadline(
+                                tripId = currentTripId,
+                                deadlineElapsedMillis = candidateDeadlineElapsed,
+                                bootCount = candidateDeadlineBoot
+                            )
+                            TrackingDiagnostics.logCandidateTransition(currentTripId, "CANDIDATE_STARTED", "4-minute window initialized")
+                        }
+                    }
+
                     // Database-backed guard ensures only one active trip exists
                     val activeTrip = activeTripRepository.createActiveTrip(
                         tripId = currentTripId,
@@ -1177,16 +1195,24 @@ class LocationTrackingService : Service() {
 
                     // Candidate timeout: 4-minute maximum lifetime for unconfirmed automatic sessions
                     if (isCandidate && candidateDeadlineElapsed > 0L && now >= candidateDeadlineElapsed) {
-                        serviceScope.launch(ioDispatcher) {
+                        lastStartupJob = serviceScope.launch(ioDispatcher) {
                             expireCandidateSession()
                         }
                     }
 
                     // Watchdog: check 60s GPS silence for confirmed trips (works even without an existing stationary snapshot)
-                    if (!isCandidate && isDisplacementConfirmed && lastLocationReceivedElapsed > 0L && (now - lastLocationReceivedElapsed >= 60_000L)) {
+                    if (trackingMethod == TrackingMethod.AUTO_DETECTED &&
+                        !isCandidate &&
+                        isDisplacementConfirmed &&
+                        !isPaused &&
+                        !isStopping.get() &&
+                        !stationaryAutoStopRequested.get() &&
+                        lastLocationReceivedElapsed > 0L &&
+                        (now - lastLocationReceivedElapsed >= 60_000L)
+                    ) {
                         if (now - lastStationaryRecheckElapsed >= 30_000L) {
                             lastStationaryRecheckElapsed = now
-                            serviceScope.launch(ioDispatcher) { recheckStationaryLocation() }
+                            lastStartupJob = serviceScope.launch(ioDispatcher) { recheckStationaryLocation() }
                         }
                     }
 
@@ -1197,7 +1223,7 @@ class LocationTrackingService : Service() {
                         isPaused || isStopping.get() || stationaryAutoStopRequested.get()
                     )) {
                         lastStationaryRecheckElapsed = now
-                        serviceScope.launch(ioDispatcher) { recheckStationaryLocation() }
+                        lastStartupJob = serviceScope.launch(ioDispatcher) { recheckStationaryLocation() }
                     }
                 }
             }
@@ -1212,25 +1238,24 @@ class LocationTrackingService : Service() {
 
             // Coordinated drain using admission barrier and inbox drain
             isDrainingGps.set(true)
-            var drainSucceeded = false
-            try {
-                var drainedCount: Int
-                do {
-                    drainedCount = drainPendingGpsFixesUseCase.drain(
-                        tripId = tripIdAtCall,
-                        batchLimit = 100,
-                        onFixProcessed = { handleFixProcessed(it) }
-                    )
-                } while (drainedCount > 0)
-
-                val pendingCount = gpsInboxDao.getPendingCount(tripIdAtCall)
-                drainSucceeded = (pendingCount == 0)
-                if (!drainSucceeded) {
-                    Log.w("LocationTrackingService", "Drain incomplete during candidate expiry: $pendingCount fixes remain")
+            val queue = gpsLocationQueue
+            val drainSucceeded = try {
+                if (queue != null) {
+                    queue.drainAdmittedFixes()
+                } else {
+                    var drainedCount: Int
+                    do {
+                        drainedCount = drainPendingGpsFixesUseCase.drain(
+                            tripId = tripIdAtCall,
+                            batchLimit = 100,
+                            onFixProcessed = { handleFixProcessed(it) }
+                        )
+                    } while (drainedCount > 0)
+                    gpsInboxDao.getPendingCount(tripIdAtCall) == 0
                 }
             } catch (e: Exception) {
                 Log.e("LocationTrackingService", "Error draining inbox during candidate expiry: ${e.message}", e)
-                drainSucceeded = false
+                false
             } finally {
                 isDrainingGps.set(false)
             }
@@ -1238,6 +1263,7 @@ class LocationTrackingService : Service() {
             // Never discard after a failed or incomplete drain; preserve candidate state for safe retry
             if (!drainSucceeded) {
                 TrackingDiagnostics.logCandidateTransition(tripIdAtCall, "DRAIN_FAILED", "Preserving candidate state for safe retry")
+                queue?.reopenAdmissionBarrier()
                 return@withLock
             }
 
@@ -1252,11 +1278,13 @@ class LocationTrackingService : Service() {
                     tripLifecycleDao.updateState(tripIdAtCall, TripLifecycleState.TRACKING.value)
                 } catch (_: Exception) {}
                 TrackingDiagnostics.logCandidateTransition(tripIdAtCall, "CONFIRMED_ON_DRAIN", "Meters: $totalMeters")
+                queue?.reopenAdmissionBarrier()
                 return@withLock
             }
 
             TrackingDiagnostics.logCandidateTransition(tripIdAtCall, "DISCARDING_FALSE_CANDIDATE", "Meters: $totalMeters < 200m")
             if (isStopping.compareAndSet(false, true)) {
+                queue?.stopConsumer()
                 try {
                     fusedLocationClient.removeLocationUpdates(locationCallback)
                 } catch (_: Exception) {}
@@ -1344,8 +1372,10 @@ class LocationTrackingService : Service() {
         }
         // If evidence was null, fresh fix establishes evidence!
         if (!isStopping.get() && !isPaused) {
-            gpsLocationQueue?.enqueueBatch(listOf(location))
-            evaluateStationaryAutoStop(listOf(location))
+            if (location.hasAccuracy() && location.accuracy <= 50f) {
+                gpsLocationQueue?.enqueueBatch(listOf(location))
+                evaluateStationaryAutoStop(listOf(location))
+            }
         }
     }
 
@@ -1395,8 +1425,12 @@ class LocationTrackingService : Service() {
         fusedClient: FusedLocationProviderClient? = null,
         coordinator: TripFinalizationCoordinator? = null,
         dispatcher: CoroutineDispatcher? = null,
-        scope: CoroutineScope? = null
+        scope: CoroutineScope? = null,
+        context: Context? = null
     ) {
+        if (context != null && baseContext == null) {
+            attachBaseContext(context)
+        }
         this.activeTripRepository = activeTripRepo
         this.notificationHelper = helper
         this.currentTripId = tripId
@@ -1461,6 +1495,22 @@ class LocationTrackingService : Service() {
     internal suspend fun expireCandidateSessionForTesting() {
         expireCandidateSession()
     }
+
+    @VisibleForTesting
+    internal fun setGpsLocationQueueForTesting(queue: GpsLocationQueue?) {
+        this.gpsLocationQueue = queue
+    }
+
+    @VisibleForTesting
+    internal fun getGpsLocationQueueForTesting(): GpsLocationQueue? = gpsLocationQueue
+
+    @VisibleForTesting
+    internal suspend fun recheckStationaryLocationForTesting() {
+        recheckStationaryLocation()
+    }
+
+    @VisibleForTesting
+    internal fun isStopping(): Boolean = isStopping.get()
 
     @VisibleForTesting
     internal fun getMotionResumptionValidator(): MotionResumptionValidator = motionResumptionValidator

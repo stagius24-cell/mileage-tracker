@@ -17,11 +17,11 @@ import javax.inject.Singleton
  * - Throws on any database or unresolved orphan failure, halting premature finalization.
  */
 @Singleton
-class DrainPendingGpsFixesUseCase @Inject constructor(
+open class DrainPendingGpsFixesUseCase @Inject constructor(
     private val gpsInboxDao: GpsInboxDao,
     private val gpsInboxProcessor: GpsInboxProcessor
 ) {
-    suspend fun drain(
+    open suspend fun drain(
         tripId: String,
         batchLimit: Int = 100,
         onFixProcessed: ((GpsInboxProcessor.ProcessResult) -> Unit)? = null

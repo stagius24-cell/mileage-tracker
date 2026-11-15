@@ -86,6 +86,16 @@ class GpsAdmissionBarrier(initialSequence: Long = 0L) {
         }
     }
 
+    /**
+     * Reopens the admission barrier so new batches can be admitted.
+     */
+    fun reopen() {
+        synchronized(lock) {
+            isClosed = false
+            (lock as Object).notifyAll()
+        }
+    }
+
     fun isClosed(): Boolean = synchronized(lock) { isClosed }
 
     fun inFlight(): Int = synchronized(lock) { inFlightCount }

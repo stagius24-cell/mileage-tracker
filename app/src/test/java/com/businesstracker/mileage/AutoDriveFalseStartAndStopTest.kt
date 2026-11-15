@@ -2,11 +2,15 @@ package com.businesstracker.mileage
 
 import android.app.Application
 import android.content.Context
+import android.content.Intent
+import android.location.Location
+import android.os.SystemClock
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.ExistingWorkPolicy
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.entity.ActiveTripEntity
+import com.businesstracker.mileage.data.local.entity.GpsInboxEntity
 import com.businesstracker.mileage.data.local.entity.TripLifecycleEntity
 import com.businesstracker.mileage.data.local.entity.TripLifecycleState
 import com.businesstracker.mileage.data.preferences.CandidateDeadline
@@ -27,10 +31,16 @@ import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.GeocodeLocationUseCase
 import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
 import com.businesstracker.mileage.receiver.AutoDriveReceiver
+import com.businesstracker.mileage.service.GpsLocationQueue
 import com.businesstracker.mileage.service.LocationTrackingService
 import com.businesstracker.mileage.service.NotificationHelper
 import com.businesstracker.mileage.service.TrackingServiceState
 import com.businesstracker.mileage.worker.TripDebounceWorker
+import com.google.android.gms.common.internal.safeparcel.SafeParcelableSerializer
+import com.google.android.gms.location.ActivityTransition
+import com.google.android.gms.location.ActivityTransitionEvent
+import com.google.android.gms.location.ActivityTransitionResult
+import com.google.android.gms.location.DetectedActivity
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -118,7 +128,8 @@ class AutoDriveFalseStartAndStopTest {
             tripId = tripId,
             prefs = preferencesManager,
             dispatcher = testDispatcher,
-            scope = testScope
+            scope = testScope,
+            context = context
         )
 
         service.setTrackingStateForTesting(
@@ -179,7 +190,8 @@ class AutoDriveFalseStartAndStopTest {
             tripId = tripId,
             prefs = preferencesManager,
             dispatcher = testDispatcher,
-            scope = testScope
+            scope = testScope,
+            context = context
         )
 
         service.setTrackingStateForTesting(
@@ -343,7 +355,8 @@ class AutoDriveFalseStartAndStopTest {
             tripId = tripId,
             prefs = preferencesManager,
             dispatcher = testDispatcher,
-            scope = testScope
+            scope = testScope,
+            context = context
         )
 
         service.setTrackingStateForTesting(
@@ -424,7 +437,8 @@ class AutoDriveFalseStartAndStopTest {
             prefs = preferencesManager,
             coordinator = coordinator,
             dispatcher = testDispatcher,
-            scope = testScope
+            scope = testScope,
+            context = context
         )
         service.setTrackingStateForTesting(tripId, distanceMeters = 15.0, displacementConfirmed = false)
         service.setCandidateForTesting(true, deadlineElapsed = 1000L)
@@ -475,7 +489,8 @@ class AutoDriveFalseStartAndStopTest {
             lifecycleDao = database.tripLifecycleDao(),
             prefs = preferencesManager,
             dispatcher = testDispatcher,
-            scope = testScope
+            scope = testScope,
+            context = context
         )
 
         preferencesManager.setActiveTripId(tripId)
@@ -620,7 +635,8 @@ class AutoDriveFalseStartAndStopTest {
             tripId = tripId,
             prefs = preferencesManager,
             dispatcher = testDispatcher,
-            scope = testScope
+            scope = testScope,
+            context = context
         )
 
         // Manual tracking starts with isCandidate = false
@@ -755,18 +771,32 @@ class AutoDriveFalseStartAndStopTest {
         preferencesManager.setActiveTripId(tripId)
         preferencesManager.setInVehicleState(false) // Pending stop debounce
 
-        // Evaluate ENTER for existing trip
-        val action = decisionEngine.evaluateVehicleEnter(
-            isAutoTrackingEnabled = true,
-            hasForegroundLocationPermission = true,
-            hasBackgroundLocationPermission = true,
-            hasActivityRecognitionPermission = true,
-            isServiceTracking = true,
-            activeTripId = tripId,
-            isWithinSchedule = true,
-            outsideScheduleBehavior = "PERSONAL"
+        // Instantiate actual receiver
+        val receiver = AutoDriveReceiver()
+        receiver.preferencesManager = preferencesManager
+        receiver.activeTripRepository = activeTripRepo
+        receiver.tripLifecycleDao = database.tripLifecycleDao()
+        receiver.decisionEngine = decisionEngine
+        receiver.ioDispatcher = testDispatcher
+        receiver.bootCountProvider = object : BootCountProvider {
+            override fun getBootCount(): Int = 1
+        }
+
+        val event = ActivityTransitionEvent(
+            DetectedActivity.IN_VEHICLE,
+            ActivityTransition.ACTIVITY_TRANSITION_ENTER,
+            SystemClock.elapsedRealtimeNanos()
         )
-        assertEquals(AutoDriveAction.CancelDebounce, action)
+        val result = ActivityTransitionResult(listOf(event))
+        val intent = Intent(AutoDriveReceiver.ACTION_ACTIVITY_TRANSITION)
+        SafeParcelableSerializer.serializeToIntentExtra(
+            result,
+            intent,
+            "com.google.android.location.internal.EXTRA_ACTIVITY_TRANSITION_RESULT"
+        )
+
+        // Invoke actual receiver path
+        receiver.onReceive(context, intent)
 
         // Verify inVehicle state remains false until motion is corroborated
         assertFalse(
@@ -782,7 +812,7 @@ class AutoDriveFalseStartAndStopTest {
     @Test
     fun test18_expiredCandidateRecoveryTriggersExplicitReconciliation() = runBlocking {
         val tripId = "test-candidate-expired-18"
-        val pastDeadline = 10_000L
+        val pastDeadline = maxOf(0L, SystemClock.elapsedRealtime() - 10_000L)
         val boot = 1
 
         preferencesManager.setActiveTripId(tripId)
@@ -841,15 +871,20 @@ class AutoDriveFalseStartAndStopTest {
             prefs = preferencesManager,
             coordinator = coordinator,
             dispatcher = testDispatcher,
-            scope = testScope
+            scope = testScope,
+            context = context,
+            bootProvider = object : BootCountProvider {
+                override fun getBootCount(): Int = 1
+            }
         )
-        service.setTrackingStateForTesting(tripId, distanceMeters = 50.0, displacementConfirmed = false)
-        service.setCandidateForTesting(true, deadlineElapsed = pastDeadline)
 
-        // Deadline is in the past: explicit reconciliation triggers candidate expiry
-        service.expireCandidateSessionForTesting()
+        service.locationUpdatesRegistrar = { true }
+        // Invoke actual service recovery path: null intent recovery via recoverActiveTripSession
+        service.onStartCommand(null, 0, 1)
+        service.lastRecoveryJob?.join()
 
-        // 50m < 200m -> False candidate is discarded in Room, deadline and active trip cleared
+        // 50m < 200m -> False candidate is discarded in Room, deadline and active trip cleared,
+        // and recovery does not resume tracking
         assertEquals(
             "False candidate trip must be discarded in Room",
             TripLifecycleState.DISCARDED.value,
@@ -857,6 +892,7 @@ class AutoDriveFalseStartAndStopTest {
         )
         assertFalse("Expired candidate session under 200m must be discarded", preferencesManager.isInVehicle())
         assertNull("Candidate deadline must be cleared", preferencesManager.getCandidateDeadline())
+        assertFalse("Service must not be tracking after discarded recovery", LocationTrackingService.serviceState.value.isTracking)
     }
 
     // =========================================================================
@@ -866,17 +902,84 @@ class AutoDriveFalseStartAndStopTest {
     @Test
     fun test19_actionStartRecoveryPreservesCandidateDeadline() = runBlocking {
         val tripId = "test-candidate-preserve-19"
-        val nowElapsed = android.os.SystemClock.elapsedRealtime()
+        val nowElapsed = SystemClock.elapsedRealtime()
         val futureDeadline = nowElapsed + 180_000L // 3 minutes remaining
         val currentBoot = 1
 
         preferencesManager.recordCandidateDeadline(tripId, futureDeadline, currentBoot)
 
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = System.currentTimeMillis(),
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                lastLatitude = 37.7749,
+                lastLongitude = -122.4194,
+                lastTimestamp = System.currentTimeMillis(),
+                totalDistanceMeters = 50.0,
+                trackingMethod = "AUTO_DETECTED",
+                isPaused = false
+            )
+        )
+
+        val service = LocationTrackingService()
+        val notificationHelper = NotificationHelper(context)
+        val processor = GpsInboxProcessor(
+            database = database,
+            activeTripDao = database.activeTripDao(),
+            gpsInboxDao = database.gpsInboxDao(),
+            filterGpsPointUseCase = FilterGpsPointUseCase()
+        )
+        val drainUseCase = DrainPendingGpsFixesUseCase(
+            gpsInboxDao = database.gpsInboxDao(),
+            gpsInboxProcessor = processor
+        )
+        val coordinator = TripFinalizationCoordinator(
+            database = database,
+            activeTripRepository = activeTripRepo,
+            tripRepository = TripRepositoryImpl(database.tripDao(), Dispatchers.Default),
+            geocodeUseCase = GeocodeLocationUseCase(context, Dispatchers.Default),
+            rateCalculator = CalculateMileageRateUseCase(),
+            preferencesManager = preferencesManager,
+            gson = Gson(),
+            ioDispatcher = testDispatcher
+        )
+        service.setTestDependencies(
+            activeTripRepo = activeTripRepo,
+            helper = notificationHelper,
+            tripId = tripId,
+            lifecycleDao = database.tripLifecycleDao(),
+            inboxDao = database.gpsInboxDao(),
+            drainUseCase = drainUseCase,
+            seqDao = database.tripSequenceDao(),
+            db = database,
+            prefs = preferencesManager,
+            coordinator = coordinator,
+            dispatcher = testDispatcher,
+            scope = testScope,
+            context = context,
+            bootProvider = object : BootCountProvider {
+                override fun getBootCount(): Int = currentBoot
+            }
+        )
+
+        val intent = Intent(LocationTrackingService.ACTION_START).apply {
+            putExtra(LocationTrackingService.EXTRA_TRIP_ID, tripId)
+            putExtra(LocationTrackingService.EXTRA_TRACKING_METHOD, TrackingMethod.AUTO_DETECTED.value)
+        }
+
+        service.locationUpdatesRegistrar = { true }
+        // Execute actual service onStartCommand with ACTION_START
+        service.onStartCommand(intent, 0, 1)
+        service.lastStartupJob?.join()
+
         val retrieved = preferencesManager.getCandidateDeadline()
-        assertNotNull(retrieved)
+        assertNotNull("Candidate deadline must exist", retrieved)
         assertEquals(tripId, retrieved?.tripId)
         assertEquals(futureDeadline, retrieved?.deadlineElapsedMillis)
-        assertEquals(futureDeadline, retrieved!!.deadlineElapsedMillis)
+        assertEquals(currentBoot, retrieved?.bootCount)
+        assertTrue("Service should remain candidate with preserved deadline", service.getInternalIsCandidate())
     }
 
     // =========================================================================
@@ -886,6 +989,9 @@ class AutoDriveFalseStartAndStopTest {
     @Test
     fun test20_candidateExpiryDrainFailurePreservesState() = runBlocking {
         val tripId = "test-drain-fail-20"
+        val nowElapsed = SystemClock.elapsedRealtime()
+        val deadline = nowElapsed - 1000L
+
         database.activeTripDao().insertActiveTrip(
             ActiveTripEntity(
                 id = tripId,
@@ -901,13 +1007,66 @@ class AutoDriveFalseStartAndStopTest {
             )
         )
         database.tripLifecycleDao().insertOrUpdate(
-            TripLifecycleEntity(tripId = tripId, state = TripLifecycleState.TRACKING.value)
+            TripLifecycleEntity(tripId = tripId, state = TripLifecycleState.CANDIDATE.value)
         )
+        preferencesManager.setActiveTripId(tripId)
+        preferencesManager.recordCandidateDeadline(tripId, deadline, 1)
 
-        // Candidate state must not be discarded if drain fails or is incomplete
+        database.gpsInboxDao().insertFixes(listOf(
+            GpsInboxEntity(
+                tripId = tripId,
+                sequenceNumber = 1L,
+                elapsedRealtimeNanos = 1000L,
+                latitude = 37.7750,
+                longitude = -122.4195,
+                timestamp = System.currentTimeMillis()
+            )
+        ))
+
+        val service = LocationTrackingService()
+        val notificationHelper = NotificationHelper(context)
+        val processor = GpsInboxProcessor(
+            database = database,
+            activeTripDao = database.activeTripDao(),
+            gpsInboxDao = database.gpsInboxDao(),
+            filterGpsPointUseCase = FilterGpsPointUseCase()
+        )
+        val failingDrainUseCase = object : DrainPendingGpsFixesUseCase(database.gpsInboxDao(), processor) {
+            override suspend fun drain(
+                tripId: String,
+                batchLimit: Int,
+                onFixProcessed: ((GpsInboxProcessor.ProcessResult) -> Unit)?
+            ): Int {
+                throw java.io.IOException("Simulated SQLite drain failure")
+            }
+        }
+
+        service.setTestDependencies(
+            activeTripRepo = activeTripRepo,
+            helper = notificationHelper,
+            tripId = tripId,
+            lifecycleDao = database.tripLifecycleDao(),
+            inboxDao = database.gpsInboxDao(),
+            drainUseCase = failingDrainUseCase,
+            seqDao = database.tripSequenceDao(),
+            db = database,
+            prefs = preferencesManager,
+            dispatcher = testDispatcher,
+            scope = testScope,
+            context = context
+        )
+        service.setTrackingStateForTesting(tripId, distanceMeters = 50.0, displacementConfirmed = false)
+        service.setCandidateForTesting(true, deadlineElapsed = deadline)
+
+        service.expireCandidateSessionForTesting()
+
+        // Candidate state must not be discarded if drain fails; safe retry is preserved
         val activeTrip = activeTripRepo.getActiveTrip()
-        assertNotNull("Active trip must be preserved", activeTrip)
+        assertNotNull("Active trip must be preserved after drain failure", activeTrip)
         assertEquals(tripId, activeTrip?.id)
+        val lifecycle = database.tripLifecycleDao().getState(tripId)
+        assertFalse("Trip must not be marked DISCARDED", lifecycle == TripLifecycleState.DISCARDED.value)
+        assertTrue("Service must remain candidate for retry", service.getInternalIsCandidate())
     }
 
     // =========================================================================
@@ -942,7 +1101,8 @@ class AutoDriveFalseStartAndStopTest {
             tripId = currentTripId,
             prefs = preferencesManager,
             dispatcher = testDispatcher,
-            scope = testScope
+            scope = testScope,
+            context = context
         )
         service.setTrackingStateForTesting(
             tripId = currentTripId,
@@ -1000,9 +1160,14 @@ class AutoDriveFalseStartAndStopTest {
             activeTripRepo = activeTripRepo,
             helper = notificationHelper,
             tripId = tripId,
+            lifecycleDao = database.tripLifecycleDao(),
+            inboxDao = database.gpsInboxDao(),
+            seqDao = database.tripSequenceDao(),
+            db = database,
             prefs = preferencesManager,
             dispatcher = testDispatcher,
-            scope = testScope
+            scope = testScope,
+            context = context
         )
         service.setTrackingStateForTesting(
             tripId = tripId,
@@ -1010,9 +1175,13 @@ class AutoDriveFalseStartAndStopTest {
             displacementConfirmed = true
         )
 
+        // Execute recheck when GPS returns null (missing GPS)
+        service.recheckStationaryLocationForTesting()
+
         // Missing GPS (e.g. timeout / no fix) must NOT stop or finalize confirmed trip
         assertTrue("Displacement remains confirmed", service.getInternalDisplacementConfirmed())
         assertEquals(1500.0, service.getInternalDistanceMeters(), 0.001)
+        assertFalse("Trip must not be stopped on missing GPS", service.isStopping())
     }
 
     // =========================================================================
@@ -1030,5 +1199,123 @@ class AutoDriveFalseStartAndStopTest {
         assertEquals("trip_debounce_stop_work_$tripA", workNameA)
         assertEquals("trip_debounce_stop_work_$tripB", workNameB)
         assertFalse("Unique work names must be distinct per trip", workNameA == workNameB)
+    }
+
+    // =========================================================================
+    // Scenario 24: Deterministic race test: GPS write admitted during candidate expiry
+    // =========================================================================
+
+    @Test
+    fun test24_gpsWriteAdmittedDuringCandidateExpiryPreservesMovement() = runBlocking {
+        val tripId = "test-candidate-race-24"
+        val nowElapsed = SystemClock.elapsedRealtime()
+        val deadline = nowElapsed - 1000L // Candidate window expired
+
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = System.currentTimeMillis() - 250_000L,
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                lastLatitude = 37.7749,
+                lastLongitude = -122.4194,
+                lastTimestamp = System.currentTimeMillis() - 10_000L,
+                totalDistanceMeters = 50.0, // Currently < 200m
+                trackingMethod = "AUTO_DETECTED",
+                isPaused = false
+            )
+        )
+        database.tripLifecycleDao().insertOrUpdate(
+            TripLifecycleEntity(tripId = tripId, state = TripLifecycleState.CANDIDATE.value)
+        )
+        preferencesManager.setActiveTripId(tripId)
+        preferencesManager.recordCandidateDeadline(tripId, deadline, 1)
+
+        val service = LocationTrackingService()
+        val notificationHelper = NotificationHelper(context)
+        val processor = GpsInboxProcessor(
+            database = database,
+            activeTripDao = database.activeTripDao(),
+            gpsInboxDao = database.gpsInboxDao(),
+            filterGpsPointUseCase = FilterGpsPointUseCase()
+        )
+        val drainUseCase = DrainPendingGpsFixesUseCase(
+            gpsInboxDao = database.gpsInboxDao(),
+            gpsInboxProcessor = processor
+        )
+        val coordinator = TripFinalizationCoordinator(
+            database = database,
+            activeTripRepository = activeTripRepo,
+            tripRepository = TripRepositoryImpl(database.tripDao(), Dispatchers.Default),
+            geocodeUseCase = GeocodeLocationUseCase(context, Dispatchers.Default),
+            rateCalculator = CalculateMileageRateUseCase(),
+            preferencesManager = preferencesManager,
+            gson = Gson(),
+            ioDispatcher = testDispatcher
+        )
+
+        service.setTestDependencies(
+            activeTripRepo = activeTripRepo,
+            helper = notificationHelper,
+            tripId = tripId,
+            lifecycleDao = database.tripLifecycleDao(),
+            inboxDao = database.gpsInboxDao(),
+            drainUseCase = drainUseCase,
+            seqDao = database.tripSequenceDao(),
+            db = database,
+            prefs = preferencesManager,
+            coordinator = coordinator,
+            dispatcher = testDispatcher,
+            scope = testScope,
+            context = context
+        )
+
+        val queue = GpsLocationQueue(
+            scope = testScope,
+            dispatcher = testDispatcher,
+            gpsInboxDao = database.gpsInboxDao(),
+            tripIdProvider = { tripId },
+            batchFetchLimit = 100,
+            drainPendingGpsFixesUseCase = drainUseCase,
+            tripSequenceDao = database.tripSequenceDao(),
+            database = database,
+            onFixProcessed = { service.handleFixProcessed(it) }
+        )
+        service.setGpsLocationQueueForTesting(queue)
+        service.setTrackingStateForTesting(tripId, distanceMeters = 50.0, displacementConfirmed = false)
+        service.setCandidateForTesting(true, deadlineElapsed = deadline)
+
+        // Admit a GPS fix representing confirmed movement (250m) right before/during expiry drain
+        val movingLocation = Location("gps").apply {
+            latitude = 37.7770
+            longitude = -122.4194
+            accuracy = 5.0f
+            speed = 12.0f
+            time = System.currentTimeMillis()
+            elapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos()
+        }
+        queue.enqueueBatch(listOf(movingLocation))
+
+        // Trigger candidate expiry
+        service.expireCandidateSessionForTesting()
+
+        // 1. Verify that accepted movement (250m >= 200m) is NOT discarded
+        val activeTrip = activeTripRepo.getActiveTrip()
+        assertNotNull("Trip with admitted movement >= 200m must not be discarded", activeTrip)
+        assertEquals(tripId, activeTrip?.id)
+
+        var promoted = false
+        for (i in 1..40) {
+            if (database.tripLifecycleDao().getState(tripId) == TripLifecycleState.TRACKING.value) {
+                promoted = true
+                break
+            }
+            kotlinx.coroutines.delay(50L)
+        }
+        assertTrue("Trip must be promoted to TRACKING state in Room", promoted)
+        assertFalse("Candidate flag must be cleared", service.getInternalIsCandidate())
+
+        // 2. Verify admission barrier was reopened for ongoing tracking
+        assertFalse("Admission barrier must be reopened after confirmation", queue.admissionBarrier.isClosed())
     }
 }

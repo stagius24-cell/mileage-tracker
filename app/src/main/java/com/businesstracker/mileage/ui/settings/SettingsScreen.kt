@@ -1356,6 +1356,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.166 (Build 167)" to "Re-audit tracking completion: real GPS admission barrier during candidate expiry, serialized startup recovery, and GPS-silence watchdog recheck with 10-minute stationary stop fallback.",
                 "Version 1.0.165 (Build 166)" to "Audit follow-up tracking repair: strict motion corroboration for stops and restarts, preserved candidate deadlines, and scoped stop debounce.",
                 "Version 1.0.164 (Build 165)" to "Matched Google Sheets settings icon and container styling with other settings cards, aligning indentation perfectly.",
                 "Version 1.0.163 (Build 164)" to "Fixed false automatic starts while stationary, required fresh corroborated motion for stops, and enforced a 4-minute candidate timeout.",

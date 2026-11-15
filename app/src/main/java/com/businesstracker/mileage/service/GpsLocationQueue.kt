@@ -325,6 +325,68 @@ class GpsLocationQueue(
     }
 
     /**
+     * Closes the admission barrier to new incoming batches, flushes in-flight Room insertions,
+     * and drains pending inbox fixes through the use case.
+     * Returns true if drain succeeded and pendingCount == 0.
+     */
+    suspend fun drainAdmittedFixes(): Boolean {
+        admissionBarrier.closeAndWait()
+
+        // Flush any remaining batches currently sitting in batchInsertionChannel into SQLite
+        while (true) {
+            val batch = batchInsertionChannel.tryReceive().getOrNull() ?: break
+            persistBatch(batch)
+        }
+
+        while (spilloverJobs.isNotEmpty()) {
+            val jobs = spilloverJobs.toList()
+            jobs.forEach {
+                try {
+                    it.join()
+                } catch (e: Exception) {
+                    Log.w("GpsLocationQueue", "Interrupted awaiting spillover job: ${e.message}")
+                }
+            }
+            spilloverJobs.removeAll(jobs.toSet())
+        }
+
+        var drainOk = true
+        val currentTripId = tripIdProvider()
+        if (drainPendingGpsFixesUseCase != null && currentTripId.isNotEmpty()) {
+            try {
+                var drainedCount: Int
+                do {
+                    drainedCount = drainPendingGpsFixesUseCase.drain(
+                        tripId = currentTripId,
+                        batchLimit = batchFetchLimit,
+                        onFixProcessed = onFixProcessed
+                    )
+                } while (drainedCount > 0)
+            } catch (e: Throwable) {
+                Log.e("GpsLocationQueue", "Error during drainAdmittedFixes: ${e.message}", e)
+                drainOk = false
+            }
+        }
+
+        val pending = if (currentTripId.isNotEmpty()) {
+            try {
+                gpsInboxDao.getPendingCount(currentTripId)
+            } catch (_: Throwable) {
+                -1
+            }
+        } else 0
+
+        return drainOk && (pending == 0)
+    }
+
+    /**
+     * Reopens the admission barrier so new batches can be admitted after candidate validation.
+     */
+    fun reopenAdmissionBarrier() {
+        admissionBarrier.reopen()
+    }
+
+    /**
      * Drains all accepted locations from SQLite inbox and waits for consumer to complete.
      * Throws IllegalStateException if waypoint processing failed, preventing premature finalization.
      */
