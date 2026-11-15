@@ -563,10 +563,16 @@ fun SettingsScreen(
                             enabled = !isBackingUp && !isRestoring && state.isSheetsConnected,
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                             shape = RoundedCornerShape(13.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = SucculentPrimary.copy(alpha = 0.12f),
+                                contentColor = SucculentPrimary,
+                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                            ),
                             contentPadding = PaddingValues(horizontal = 8.dp)) {
-                            Icon(Icons.Outlined.CloudUpload, contentDescription = null,
-                                modifier = Modifier.size(18.dp))
+                            if (isBackingUp) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = SucculentPrimary)
+                            else Icon(Icons.Outlined.CloudUpload, contentDescription = null,
+                                tint = SucculentPrimary, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text(if (isBackingUp) "Backing up" else "Back Up", fontWeight = FontWeight.SemiBold)
                         }
@@ -1329,6 +1335,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.161 (Build 162)" to "Styled Back Up button background and content color to match the succulent Personal button shade.",
                 "Version 1.0.160 (Build 161)" to "Reverted walking auto-stop and Tesla Bluetooth tracking commits to restore clean motion auto-detection.",
                 "Version 1.0.159 (Build 160)" to "Shifted plus and chevron action buttons further right with 20% tighter spacing in Settings management cards.",
                 "Version 1.0.158 (Build 159)" to "Multi-line work schedule wrap for selections over 4 days to prevent header overflow.",

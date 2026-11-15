@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 161
-        versionName = "1.0.160"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Reverted walking auto-stop and Tesla Bluetooth tracking commits to restore clean motion auto-detection.\"")
+        versionCode = 162
+        versionName = "1.0.161"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Styled Back Up button background and content color to match the succulent Personal button shade.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
