@@ -36,6 +36,21 @@ interface RoutePatternDao {
     @Query("SELECT * FROM route_patterns WHERE classification = :classification ORDER BY sampleCount DESC")
     suspend fun getPatternsByClassification(classification: String): List<RoutePatternEntity>
 
+    @Query("""
+        SELECT * FROM route_patterns
+        WHERE startLatitude BETWEEN :minStartLat AND :maxStartLat
+          AND startLongitude BETWEEN :minStartLon AND :maxStartLon
+          AND endLatitude BETWEEN :minEndLat AND :maxEndLat
+          AND endLongitude BETWEEN :minEndLon AND :maxEndLon
+        ORDER BY sampleCount DESC
+    """)
+    suspend fun findCandidatePatterns(
+        minStartLat: Double, maxStartLat: Double,
+        minStartLon: Double, maxStartLon: Double,
+        minEndLat: Double, maxEndLat: Double,
+        minEndLon: Double, maxEndLon: Double
+    ): List<RoutePatternEntity>
+
     @Query("SELECT COUNT(*) FROM route_patterns")
     suspend fun getPatternsCount(): Int
 }

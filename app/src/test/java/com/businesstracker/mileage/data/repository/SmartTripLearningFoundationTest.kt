@@ -16,6 +16,7 @@ import com.businesstracker.mileage.domain.repository.TripRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -61,6 +62,10 @@ class SmartTripLearningFoundationTest {
         routePatternDao = database.routePatternDao()
         tripLearningRecordDao = database.tripLearningRecordDao()
         preferencesManager = TrackingPreferencesManager(context)
+        runBlocking {
+            preferencesManager.setSmartTripRecognitionEnabled(true)
+            preferencesManager.setSmartAutoClassifyEnabled(false)
+        }
 
         smartTripRepository = SmartTripRepositoryImpl(
             routePatternDao = routePatternDao,
@@ -79,6 +84,9 @@ class SmartTripLearningFoundationTest {
 
     @After
     fun tearDown() {
+        runBlocking {
+            preferencesManager.setSmartTripRecognitionEnabled(true)
+        }
         database.close()
     }
 
@@ -430,5 +438,40 @@ class SmartTripLearningFoundationTest {
 
         val allPatterns = routePatternDao.getAllPatterns()
         assertEquals("Distinct destination must create a new distinct pattern, never merge", 2, allPatterns.size)
+    }
+
+    // 11. Turning Smart Classification OFF pauses learning
+    @Test
+    fun turningSmartClassificationOff_pausesLearning() = testScope.runTest {
+        preferencesManager.setSmartTripRecognitionEnabled(false)
+
+        val trip = createSampleTrip(
+            id = "disabled-trip-1",
+            endTime = CUTOFF + 3600000L,
+            classification = "UNREVIEWED"
+        )
+        tripDao.insertTrip(trip)
+
+        val isEligible = smartTripRepository.isTripEligibleForLearning(trip, ClassificationSource.MANUAL)
+        assertFalse("When Smart Trip Recognition is disabled, trip is not eligible", isEligible)
+
+        // User classifies trip while feature is disabled
+        tripRepository.classifyTrip(
+            tripId = trip.id,
+            classification = "BUSINESS",
+            businessEntity = "MySucculentCorner",
+            purpose = "Delivery",
+            notes = null,
+            source = ClassificationSource.MANUAL
+        )
+
+        // Trip itself is classified in trips table
+        val updated = tripDao.getTripById(trip.id)
+        assertNotNull(updated)
+        assertEquals("BUSINESS", updated!!.classification)
+
+        // But NO learning record or route pattern must be generated
+        assertNull("Learning record must not be generated when feature is turned off", tripLearningRecordDao.getByTripId(trip.id))
+        assertEquals("Zero route patterns learned when feature is off", 0, routePatternDao.getPatternsCount())
     }
 }
