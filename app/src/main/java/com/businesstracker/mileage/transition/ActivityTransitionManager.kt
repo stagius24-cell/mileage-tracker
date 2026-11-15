@@ -43,7 +43,6 @@ class ActivityTransitionManager @Inject constructor(
          */
         val SUPPORTED_ACTIVITY_TYPES = listOf(
             DetectedActivity.IN_VEHICLE,
-            DetectedActivity.WALKING,
             DetectedActivity.STILL
         )
     }
@@ -140,12 +139,6 @@ class ActivityTransitionManager @Inject constructor(
             ActivityTransition.Builder()
                 .setActivityType(DetectedActivity.IN_VEHICLE)
                 .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_EXIT)
-                .build(),
-
-            // Walking enter (user exits car and walks away)
-            ActivityTransition.Builder()
-                .setActivityType(DetectedActivity.WALKING)
-                .setActivityTransition(ActivityTransition.ACTIVITY_TRANSITION_ENTER)
                 .build(),
 
             // Still enter (stationary confirmation for debounce)

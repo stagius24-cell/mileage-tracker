@@ -100,10 +100,6 @@ fun DashboardScreen(
     var isTimeFilterExpanded by remember { mutableStateOf(false) }
     var isAmoledDimmed by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
-        viewModel.refreshBluetoothConnection()
-    }
-
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
             modifier = Modifier
@@ -242,7 +238,6 @@ fun DashboardScreen(
             item {
                 DriveTrackingTable(
                     serviceState = serviceState,
-                    isCarBluetoothConnected = state.isCarBluetoothConnected,
                     onStart = { viewModel.startManualTracking() },
                     onPause = { viewModel.pauseTracking() },
                     onResume = { viewModel.resumeTracking() },
@@ -375,7 +370,6 @@ fun DashboardScreen(
 @Composable
 private fun DriveTrackingTable(
     serviceState: TrackingServiceState,
-    isCarBluetoothConnected: Boolean,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -440,17 +434,15 @@ private fun DriveTrackingTable(
                                 fontSize = 16.sp
                             )
                         )
-                        val subtitleText = when {
-                            serviceState.isRecoveryRequired -> serviceState.statusMessage ?: "Recovery Required • Preserved"
-                            isCarBluetoothConnected -> if (serviceState.isTracking) "Tesla Model Y • Connected" else "Tesla Model Y • Ready"
-                            serviceState.isTracking -> null
-                            else -> "Ready"
-                        }
-                        if (subtitleText != null) {
+                        if (!serviceState.isTracking) {
                             Text(
-                                text = subtitleText,
+                                text = if (serviceState.isRecoveryRequired) {
+                                    serviceState.statusMessage ?: "Recovery Required • Preserved"
+                                } else {
+                                    "Tesla Model Y • Ready"
+                                },
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = if (isCarBluetoothConnected) SucculentPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         }
                     }

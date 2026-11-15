@@ -85,7 +85,6 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="com.businesstracker.mileage.ACTION_ACTIVITY_TRANSITION" />
-                <action android:name="com.businesstracker.mileage.ACTION_TRIGGER_VEHICLE_ENTER" />
             </intent-filter>
         </receiver>
 
@@ -115,8 +114,6 @@
             <intent-filter>
                 <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
                 <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
-                <action android:name="android.bluetooth.adapter.action.CONNECTION_STATE_CHANGED" />
-                <action android:name="android.bluetooth.adapter.action.STATE_CHANGED" />
             </intent-filter>
         </receiver>
 

@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 160
-        versionName = "1.0.159"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Shift plus and chevron action icons further right with 20% tighter spacing in Settings management cards.\"")
+        versionCode = 161
+        versionName = "1.0.160"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Reverted walking auto-stop and Tesla Bluetooth tracking commits to restore clean motion auto-detection.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -35,7 +35,6 @@ class AutoDriveReceiver : BroadcastReceiver() {
     companion object {
         const val TAG = "AutoDriveReceiver"
         const val ACTION_ACTIVITY_TRANSITION = "com.businesstracker.mileage.ACTION_ACTIVITY_TRANSITION"
-        const val ACTION_TRIGGER_VEHICLE_ENTER = "com.businesstracker.mileage.ACTION_TRIGGER_VEHICLE_ENTER"
         const val TRANSITION_REQUEST_CODE = 3001
         const val START_TRIGGER_DISPLACEMENT_METERS = 200.0f
     }
@@ -49,22 +48,8 @@ class AutoDriveReceiver : BroadcastReceiver() {
     private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onReceive(context: Context, intent: Intent?) {
-        if (intent == null) return
+        if (intent == null || !ActivityTransitionResult.hasResult(intent)) return
 
-        if (intent.action == ACTION_TRIGGER_VEHICLE_ENTER) {
-            android.util.Log.d(TAG, "Received ACTION_TRIGGER_VEHICLE_ENTER broadcast")
-            val pendingResult = goAsync()
-            receiverScope.launch(ioDispatcher) {
-                try {
-                    handleVehicleEnter(context)
-                } finally {
-                    pendingResult.finish()
-                }
-            }
-            return
-        }
-
-        if (!ActivityTransitionResult.hasResult(intent)) return
         val result = ActivityTransitionResult.extractResult(intent) ?: return
         val pendingResult = goAsync()
 
@@ -84,13 +69,6 @@ class AutoDriveReceiver : BroadcastReceiver() {
                                     android.util.Log.d(TAG, "Transition IN_VEHICLE EXIT received")
                                     handleVehicleExit(context)
                                 }
-                            }
-                        }
-                        DetectedActivity.WALKING,
-                        DetectedActivity.ON_FOOT -> {
-                            if (event.transitionType == ActivityTransition.ACTIVITY_TRANSITION_ENTER) {
-                                android.util.Log.d(TAG, "Transition WALKING ENTER received")
-                                handleWalkingEnter(context, event.elapsedRealTimeNanos)
                             }
                         }
                         DetectedActivity.STILL -> {
@@ -124,7 +102,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
         val hasBackgroundLocation = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ContextCompat.checkSelfPermission(
                 context, Manifest.permission.ACCESS_BACKGROUND_LOCATION
-            ) == PackageManager.PERMISSION_GRANTED || hasForegroundLocation
+            ) == PackageManager.PERMISSION_GRANTED
         } else true
 
         val hasActivity = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -208,34 +186,6 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
         if (action == AutoDriveAction.ScheduleDebounce) {
             activeTripId?.let { TripDebounceWorker.scheduleDebounce(context, it) }
-        }
-    }
-
-    private suspend fun handleWalkingEnter(context: Context, eventElapsedRealtimeNanos: Long) {
-        val isTracking = LocationTrackingService.serviceState.value.isTracking
-        val activeTripId = preferencesManager.activeTripId.first()
-        if (!isTracking && activeTripId == null) {
-            android.util.Log.d(TAG, "Walking transition ignored: not tracking")
-            return
-        }
-
-        val activeTrip = activeTripRepository.getActiveTrip()
-        val method = activeTrip?.let { TrackingMethod.fromString(it.trackingMethod) }
-        val speedMph = LocationTrackingService.serviceState.value.currentSpeedMph
-
-        val action = decisionEngine.evaluateWalkingEnter(
-            isServiceTracking = isTracking,
-            hasActiveTrip = activeTripId != null,
-            trackingMethod = method,
-            currentSpeedMph = speedMph
-        )
-        android.util.Log.d(TAG, "evaluateWalkingEnter result: $action (speed=$speedMph, method=$method, tripId=$activeTripId)")
-
-        if (action == AutoDriveAction.ScheduleDebounce) {
-            preferencesManager.setInVehicleState(false)
-            activeTripId?.let { tripId ->
-                TripDebounceWorker.scheduleDebounce(context, tripId)
-            }
         }
     }
 

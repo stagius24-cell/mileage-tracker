@@ -19,15 +19,12 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class VehicleBluetoothReceiver : BroadcastReceiver() {
     @Inject lateinit var eventHandler: VehicleBluetoothEventHandler
-    @Inject lateinit var vehicleBluetoothManager: VehicleBluetoothManager
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
         if (action != BluetoothDevice.ACTION_ACL_CONNECTED &&
-            action != BluetoothDevice.ACTION_ACL_DISCONNECTED &&
-            action != BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED &&
-            action != BluetoothAdapter.ACTION_STATE_CHANGED
+            action != BluetoothDevice.ACTION_ACL_DISCONNECTED
         ) return
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
@@ -45,7 +42,6 @@ class VehicleBluetoothReceiver : BroadcastReceiver() {
         val pendingResult = goAsync()
         CoroutineScope(SupervisorJob() + ioDispatcher).launch {
             try {
-                vehicleBluetoothManager.onDeviceConnectionChanged(action, device)
                 if (device != null) {
                     eventHandler.handle(action, device.address)
                 }

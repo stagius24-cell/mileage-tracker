@@ -1329,6 +1329,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.160 (Build 161)" to "Reverted walking auto-stop and Tesla Bluetooth tracking commits to restore clean motion auto-detection.",
+                "Version 1.0.159 (Build 160)" to "Shifted plus and chevron action buttons further right with 20% tighter spacing in Settings management cards.",
+                "Version 1.0.158 (Build 159)" to "Multi-line work schedule wrap for selections over 4 days to prevent header overflow.",
                 "Version 1.0.157 (Build 158)" to "Audited and restored motion auto-detection: clean activity transitions (excluding unsupported ON_FOOT), failure feedback with retry, and motion-based drive confirmation.",
                 "Version 1.0.156 (Build 157)" to "Audited and restored motion auto-detection: clean activity transitions, immediate Tesla Model Y Bluetooth drive trigger, unblocked foreground location permissions, and schedule filter default fix.",
                 "Version 1.0.155 (Build 156)" to "Restored automatic drive detection with walking transition protection and Tesla Model Y Bluetooth motion trigger.",

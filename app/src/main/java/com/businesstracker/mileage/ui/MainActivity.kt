@@ -45,7 +45,6 @@ class MainActivity : ComponentActivity() {
 
     @Inject lateinit var activityTransitionManager: ActivityTransitionManager
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
-    @Inject lateinit var vehicleBluetoothManager: com.businesstracker.mileage.receiver.VehicleBluetoothManager
 
     var hasRequestedBackgroundPermission = false
         internal set
@@ -133,7 +132,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         checkAndRegisterTransitions()
-        vehicleBluetoothManager.refreshConnectionState()
     }
 
     private fun checkAndRegisterTransitions() {

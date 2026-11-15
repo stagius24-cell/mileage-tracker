@@ -47,18 +47,21 @@ class AutomaticDriveRegressionAuditTest {
         LocationTrackingService.resetGuardForTesting()
     }
 
-    // 1. Registration contains only supported transition activities (excluding unsupported ON_FOOT)
+    // 1. Registration contains only supported transition activities (excluding unsupported ON_FOOT and reverted WALKING)
     @Test
     fun test01_registrationContainsOnlySupportedTransitionActivities() {
         val supportedTypes = ActivityTransitionManager.SUPPORTED_ACTIVITY_TYPES
 
         assertTrue("IN_VEHICLE must be supported in transition request", supportedTypes.contains(DetectedActivity.IN_VEHICLE))
-        assertTrue("WALKING must be supported in transition request", supportedTypes.contains(DetectedActivity.WALKING))
         assertTrue("STILL must be supported in transition request", supportedTypes.contains(DetectedActivity.STILL))
 
         assertFalse(
             "DetectedActivity.ON_FOOT must NOT be in transition registration (causes Play Services status 16 / DEVELOPER_ERROR)",
             supportedTypes.contains(DetectedActivity.ON_FOOT)
+        )
+        assertFalse(
+            "WALKING is excluded to prevent conflicting events during drive initiation",
+            supportedTypes.contains(DetectedActivity.WALKING)
         )
     }
 
