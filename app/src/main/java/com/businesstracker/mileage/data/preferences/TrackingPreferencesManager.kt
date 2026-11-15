@@ -106,6 +106,7 @@ class TrackingPreferencesManager @Inject constructor(
         // Smart Trip Recognition Keys
         private val KEY_SMART_TRIP_RECOGNITION_ENABLED = booleanPreferencesKey("smart_trip_recognition_enabled")
         private val KEY_SMART_AUTO_CLASSIFY_ENABLED = booleanPreferencesKey("smart_auto_classify_enabled")
+        private val KEY_SMART_CLASSIFICATION_MODE = stringPreferencesKey("smart_classification_mode")
         private val KEY_SMART_TRIP_ACTIVATION_CUTOFF = longPreferencesKey("smart_trip_activation_cutoff")
 
         const val BEHAVIOR_CLASSIFY_PERSONAL = "CLASSIFY_PERSONAL"
@@ -200,6 +201,19 @@ class TrackingPreferencesManager @Inject constructor(
         prefs[KEY_SMART_AUTO_CLASSIFY_ENABLED] ?: false
     }
 
+    val smartClassificationMode: Flow<com.businesstracker.mileage.domain.model.SmartClassificationMode> = context.dataStore.data.map { prefs ->
+        val stored = prefs[KEY_SMART_CLASSIFICATION_MODE]
+        if (stored != null) {
+            com.businesstracker.mileage.domain.model.SmartClassificationMode.fromString(stored)
+        } else {
+            if (prefs[KEY_SMART_AUTO_CLASSIFY_ENABLED] == true) {
+                com.businesstracker.mileage.domain.model.SmartClassificationMode.AUTO_CLASSIFY
+            } else {
+                com.businesstracker.mileage.domain.model.SmartClassificationMode.ALWAYS_ASK
+            }
+        }
+    }
+
     val smartTripActivationCutoff: Flow<Long> = context.dataStore.data.map { prefs ->
         prefs[KEY_SMART_TRIP_ACTIVATION_CUTOFF] ?: com.businesstracker.mileage.domain.model.SmartTripLearningCutoff.ACTIVATION_CUTOFF_MILLIS
     }
@@ -213,6 +227,18 @@ class TrackingPreferencesManager @Inject constructor(
     suspend fun setSmartAutoClassifyEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[KEY_SMART_AUTO_CLASSIFY_ENABLED] = enabled
+            prefs[KEY_SMART_CLASSIFICATION_MODE] = if (enabled) {
+                com.businesstracker.mileage.domain.model.SmartClassificationMode.AUTO_CLASSIFY.name
+            } else {
+                com.businesstracker.mileage.domain.model.SmartClassificationMode.ALWAYS_ASK.name
+            }
+        }
+    }
+
+    suspend fun setSmartClassificationMode(mode: com.businesstracker.mileage.domain.model.SmartClassificationMode) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SMART_CLASSIFICATION_MODE] = mode.name
+            prefs[KEY_SMART_AUTO_CLASSIFY_ENABLED] = (mode == com.businesstracker.mileage.domain.model.SmartClassificationMode.AUTO_CLASSIFY)
         }
     }
 
