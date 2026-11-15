@@ -11,6 +11,7 @@ import com.businesstracker.mileage.data.local.entity.TripSequenceEntity
 import com.businesstracker.mileage.domain.service.BootCountProvider
 import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -61,8 +62,11 @@ class GpsLocationQueue(
     private data class AdmittedBatch(
         val sequence: Long,
         val tripId: String,
-        val entities: List<GpsInboxEntity>
+        val entities: List<GpsInboxEntity>,
+        val persisted: CompletableDeferred<Unit> = CompletableDeferred()
     )
+
+    private val pendingInsertions = java.util.concurrent.ConcurrentHashMap.newKeySet<CompletableDeferred<Unit>>()
 
     private val signalChannel = Channel<Unit>(Channel.CONFLATED)
     private val batchInsertionChannel = Channel<AdmittedBatch>(inMemoryCapacity)
@@ -108,6 +112,9 @@ class GpsLocationQueue(
             } catch (e: Throwable) {
                 Log.e("GpsLocationQueue", "Critical error inserting fixes into inbox: ${e.message}", e)
                 processingError = e
+            } finally {
+                batch.persisted.complete(Unit)
+                pendingInsertions.remove(batch.persisted)
             }
         }
     }
@@ -246,6 +253,7 @@ class GpsLocationQueue(
             }
 
             val batch = AdmittedBatch(sequence, currentTripId, entities)
+            pendingInsertions.add(batch.persisted)
             val sendResult = batchInsertionChannel.trySend(batch)
             if (sendResult.isFailure) {
                 // Bounded in-memory capacity reached.
@@ -302,6 +310,7 @@ class GpsLocationQueue(
                 )
             }
             val batch = AdmittedBatch(sequence, currentTripId, entities)
+            pendingInsertions.add(batch.persisted)
             persistBatch(batch)
         } finally {
             admissionBarrier.releaseSequence()
@@ -337,6 +346,9 @@ class GpsLocationQueue(
             val batch = batchInsertionChannel.tryReceive().getOrNull() ?: break
             persistBatch(batch)
         }
+
+        pendingInsertions.toList().forEach { it.await() }
+        if (processingError != null) return false
 
         while (spilloverJobs.isNotEmpty()) {
             val jobs = spilloverJobs.toList()

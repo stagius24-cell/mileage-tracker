@@ -439,8 +439,8 @@ class LocationTrackingService : Service() {
                         candidateDeadlineElapsed = nowElapsed
                         candidateDeadlineBoot = currentBoot
                         TrackingDiagnostics.logCandidateTransition(currentTripId, "RECONCILE_RECOVERED", "Reconciling candidate session")
-                        expireCandidateSession()
-                        if (isStopping.get() || currentTripId.isEmpty() || !_serviceState.value.isTracking) {
+                        val reconciliation = expireCandidateSession()
+                        if (reconciliation == CandidateReconciliation.TERMINATED) {
                             Log.d("LocationTrackingService", "Session was terminated or discarded during candidate expiry; aborting recovery initialization")
                             isStartingOrRunning.set(false)
                             stopForeground(STOP_FOREGROUND_REMOVE)
@@ -646,8 +646,8 @@ class LocationTrackingService : Service() {
                                 candidateDeadlineElapsed = nowElapsed
                                 candidateDeadlineBoot = currentBoot
                                 TrackingDiagnostics.logCandidateTransition(currentTripId, "RECONCILE_ACTION_START", "Reconciling candidate on ACTION_START")
-                                expireCandidateSession()
-                                if (isStopping.get() || currentTripId.isEmpty() || !_serviceState.value.isTracking) {
+                                val reconciliation = expireCandidateSession()
+                                if (reconciliation == CandidateReconciliation.TERMINATED) {
                                     Log.d("LocationTrackingService", "Session was terminated or discarded during ACTION_START candidate expiry; aborting startup")
                                     cleanupFailedStartup()
                                     stopForeground(STOP_FOREGROUND_REMOVE)
@@ -1234,10 +1234,13 @@ class LocationTrackingService : Service() {
         }
     }
 
-    private suspend fun expireCandidateSession() {
+    private enum class CandidateReconciliation { CONFIRMED, RETRY_REQUIRED, TERMINATED }
+
+    private suspend fun expireCandidateSession(): CandidateReconciliation =
         decisionMutex.withLock {
             val tripIdAtCall = currentTripId
-            if (!isCandidate || isStopping.get() || tripIdAtCall.isEmpty()) return
+            if (isStopping.get() || tripIdAtCall.isEmpty()) return@withLock CandidateReconciliation.TERMINATED
+            if (!isCandidate) return@withLock CandidateReconciliation.CONFIRMED
             TrackingDiagnostics.logCandidateTransition(tripIdAtCall, "EXPIRING_CANDIDATE", "Candidate timeout reached. Draining inbox...")
 
             // Coordinated drain using admission barrier and inbox drain
@@ -1268,12 +1271,13 @@ class LocationTrackingService : Service() {
             if (!drainSucceeded) {
                 TrackingDiagnostics.logCandidateTransition(tripIdAtCall, "DRAIN_FAILED", "Preserving candidate state for safe retry")
                 queue?.reopenAdmissionBarrier()
-                return@withLock
+                return@withLock CandidateReconciliation.RETRY_REQUIRED
             }
 
             val persisted = activeTripRepository.getActiveTrip()
             val totalMeters = persisted?.totalDistanceMeters ?: totalDistanceMeters
             if (isDisplacementConfirmed || totalMeters >= 200.0) {
+                isDisplacementConfirmed = true
                 isCandidate = false
                 candidateDeadlineElapsed = 0L
                 candidateDeadlineBoot = 0
@@ -1283,7 +1287,7 @@ class LocationTrackingService : Service() {
                 } catch (_: Exception) {}
                 TrackingDiagnostics.logCandidateTransition(tripIdAtCall, "CONFIRMED_ON_DRAIN", "Meters: $totalMeters")
                 queue?.reopenAdmissionBarrier()
-                return@withLock
+                return@withLock CandidateReconciliation.CONFIRMED
             }
 
             TrackingDiagnostics.logCandidateTransition(tripIdAtCall, "DISCARDING_FALSE_CANDIDATE", "Meters: $totalMeters < 200m")
@@ -1326,8 +1330,8 @@ class LocationTrackingService : Service() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
+            CandidateReconciliation.TERMINATED
         }
-    }
 
     private suspend fun restoreStationaryEvidence() {
         if (trackingMethod != TrackingMethod.AUTO_DETECTED || !isDisplacementConfirmed || isPaused) return

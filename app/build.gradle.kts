@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 169
-        versionName = "1.0.168"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Replace the custom business-purpose button with a compact green plus control.\"")
+        versionCode = 170
+        versionName = "1.0.169"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Await admitted GPS writes before candidate expiry and preserve surviving recovered sessions.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

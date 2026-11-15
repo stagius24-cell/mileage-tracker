@@ -982,6 +982,168 @@ class AutoDriveFalseStartAndStopTest {
         assertTrue("Service should remain candidate with preserved deadline", service.getInternalIsCandidate())
     }
 
+    @Test
+    fun actionStartRecovery_confirmedDuringReconciliationContinuesStartup() = runBlocking {
+        val tripId = "test-candidate-preserve-19"
+        val nowElapsed = SystemClock.elapsedRealtime()
+        val futureDeadline = nowElapsed - 1000L // 3 minutes remaining
+        val currentBoot = 1
+
+        preferencesManager.recordCandidateDeadline(tripId, futureDeadline, currentBoot)
+
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = System.currentTimeMillis(),
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                lastLatitude = 37.7749,
+                lastLongitude = -122.4194,
+                lastTimestamp = System.currentTimeMillis(),
+                totalDistanceMeters = 500.0,
+                trackingMethod = "AUTO_DETECTED",
+                isPaused = false
+            )
+        )
+
+        val service = LocationTrackingService()
+        val notificationHelper = NotificationHelper(context)
+        val processor = GpsInboxProcessor(
+            database = database,
+            activeTripDao = database.activeTripDao(),
+            gpsInboxDao = database.gpsInboxDao(),
+            filterGpsPointUseCase = FilterGpsPointUseCase()
+        )
+        val drainUseCase = DrainPendingGpsFixesUseCase(
+            gpsInboxDao = database.gpsInboxDao(),
+            gpsInboxProcessor = processor
+        )
+        val coordinator = TripFinalizationCoordinator(
+            database = database,
+            activeTripRepository = activeTripRepo,
+            tripRepository = TripRepositoryImpl(database.tripDao(), Dispatchers.Default),
+            geocodeUseCase = GeocodeLocationUseCase(context, Dispatchers.Default),
+            rateCalculator = CalculateMileageRateUseCase(),
+            preferencesManager = preferencesManager,
+            gson = Gson(),
+            ioDispatcher = testDispatcher
+        )
+        service.setTestDependencies(
+            activeTripRepo = activeTripRepo,
+            helper = notificationHelper,
+            tripId = tripId,
+            lifecycleDao = database.tripLifecycleDao(),
+            inboxDao = database.gpsInboxDao(),
+            drainUseCase = drainUseCase,
+            seqDao = database.tripSequenceDao(),
+            db = database,
+            prefs = preferencesManager,
+            coordinator = coordinator,
+            dispatcher = testDispatcher,
+            scope = testScope,
+            context = context,
+            bootProvider = object : BootCountProvider {
+                override fun getBootCount(): Int = currentBoot
+            }
+        )
+
+        val intent = Intent(LocationTrackingService.ACTION_START).apply {
+            putExtra(LocationTrackingService.EXTRA_TRIP_ID, tripId)
+            putExtra(LocationTrackingService.EXTRA_TRACKING_METHOD, TrackingMethod.AUTO_DETECTED.value)
+        }
+
+        service.locationUpdatesRegistrar = { true }
+        // Execute actual service onStartCommand with ACTION_START
+        service.onStartCommand(intent, 0, 1)
+        service.lastStartupJob?.join()
+
+        assertNull("Confirmed recovery clears candidate deadline", preferencesManager.getCandidateDeadline())
+        assertFalse("Confirmed recovery must leave candidate state", service.getInternalIsCandidate())
+        assertTrue("Confirmed recovery must continue tracking", LocationTrackingService.serviceState.value.isTracking)
+    }
+
+    @Test
+    fun actionStartRecovery_failedReconciliationPreservesSessionForRetry() = runBlocking {
+        val tripId = "test-candidate-preserve-19"
+        val nowElapsed = SystemClock.elapsedRealtime()
+        val futureDeadline = nowElapsed - 1000L // 3 minutes remaining
+        val currentBoot = 1
+
+        preferencesManager.recordCandidateDeadline(tripId, futureDeadline, currentBoot)
+
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = System.currentTimeMillis(),
+                startLatitude = 37.7749,
+                startLongitude = -122.4194,
+                lastLatitude = 37.7749,
+                lastLongitude = -122.4194,
+                lastTimestamp = System.currentTimeMillis(),
+                totalDistanceMeters = 50.0,
+                trackingMethod = "AUTO_DETECTED",
+                isPaused = false
+            )
+        )
+
+        val service = LocationTrackingService()
+        val notificationHelper = NotificationHelper(context)
+        val processor = GpsInboxProcessor(
+            database = database,
+            activeTripDao = database.activeTripDao(),
+            gpsInboxDao = database.gpsInboxDao(),
+            filterGpsPointUseCase = FilterGpsPointUseCase()
+        )
+        val drainUseCase = object : DrainPendingGpsFixesUseCase(database.gpsInboxDao(), processor) {
+            override suspend fun drain(tripId: String, batchLimit: Int,
+                onFixProcessed: ((GpsInboxProcessor.ProcessResult) -> Unit)?): Int {
+                throw java.io.IOException("Drain unavailable")
+            }
+        }
+        val coordinator = TripFinalizationCoordinator(
+            database = database,
+            activeTripRepository = activeTripRepo,
+            tripRepository = TripRepositoryImpl(database.tripDao(), Dispatchers.Default),
+            geocodeUseCase = GeocodeLocationUseCase(context, Dispatchers.Default),
+            rateCalculator = CalculateMileageRateUseCase(),
+            preferencesManager = preferencesManager,
+            gson = Gson(),
+            ioDispatcher = testDispatcher
+        )
+        service.setTestDependencies(
+            activeTripRepo = activeTripRepo,
+            helper = notificationHelper,
+            tripId = tripId,
+            lifecycleDao = database.tripLifecycleDao(),
+            inboxDao = database.gpsInboxDao(),
+            drainUseCase = drainUseCase,
+            seqDao = database.tripSequenceDao(),
+            db = database,
+            prefs = preferencesManager,
+            coordinator = coordinator,
+            dispatcher = testDispatcher,
+            scope = testScope,
+            context = context,
+            bootProvider = object : BootCountProvider {
+                override fun getBootCount(): Int = currentBoot
+            }
+        )
+
+        val intent = Intent(LocationTrackingService.ACTION_START).apply {
+            putExtra(LocationTrackingService.EXTRA_TRIP_ID, tripId)
+            putExtra(LocationTrackingService.EXTRA_TRACKING_METHOD, TrackingMethod.AUTO_DETECTED.value)
+        }
+
+        service.locationUpdatesRegistrar = { true }
+        // Execute actual service onStartCommand with ACTION_START
+        service.onStartCommand(intent, 0, 1)
+        service.lastStartupJob?.join()
+
+        assertNotNull("Failed drain preserves deadline", preferencesManager.getCandidateDeadline())
+        assertTrue("Failed drain preserves candidate for retry", service.getInternalIsCandidate())
+        assertTrue("Confirmed recovery must continue tracking", LocationTrackingService.serviceState.value.isTracking)
+    }
+
     // =========================================================================
     // Scenario 20: Candidate expiry with GPS drain failure preserves candidate state
     // =========================================================================

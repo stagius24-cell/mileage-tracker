@@ -10,6 +10,7 @@ import com.businesstracker.mileage.data.local.TripSequenceDao
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -56,6 +57,55 @@ class GpsLocationQueueTest {
             accuracy = 5.0f
         }
     }
+
+    @Test
+    fun candidateDrain_waitsForInsertionAlreadyTakenFromChannel() = runBlocking {
+        val entered = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val dao = object : GpsInboxDao by gpsInboxDao {
+            override suspend fun insertFixes(fixes: List<com.businesstracker.mileage.data.local.entity.GpsInboxEntity>): List<Long> {
+                entered.complete(Unit)
+                release.await()
+                return gpsInboxDao.insertFixes(fixes)
+            }
+        }
+        val queue = GpsLocationQueue(testScope, Dispatchers.Default, dao, { "held-write" })
+        try {
+            queue.enqueueBatch(listOf(createLocation(37.0, -122.0, 1000L)))
+            kotlinx.coroutines.withTimeout(5000L) { entered.await() }
+            val drain = testScope.asyncDrain(queue)
+            kotlinx.coroutines.withTimeout(5000L) {
+                while (!queue.admissionBarrier.isClosed()) kotlinx.coroutines.yield()
+            }
+            org.junit.Assert.assertFalse("Drain must await the in-progress insertion", drain.isCompleted)
+            release.complete(Unit)
+            // Without a processor the persisted fix remains pending: never authorize discard.
+            org.junit.Assert.assertFalse(kotlinx.coroutines.withTimeout(5000L) { drain.await() })
+            assertEquals(1, gpsInboxDao.getPendingCount("held-write"))
+        } finally {
+            release.complete(Unit)
+            queue.stopConsumer()
+        }
+    }
+
+    @Test
+    fun candidateDrain_insertionFailureNeverAuthorizesDiscard() = runBlocking {
+        val dao = object : GpsInboxDao by gpsInboxDao {
+            override suspend fun insertFixes(fixes: List<com.businesstracker.mileage.data.local.entity.GpsInboxEntity>): List<Long> {
+                throw java.io.IOException("Storage unavailable")
+            }
+        }
+        val queue = GpsLocationQueue(testScope, Dispatchers.Default, dao, { "failed-write" })
+        try {
+            queue.enqueueBatch(listOf(createLocation(37.0, -122.0, 1000L)))
+            org.junit.Assert.assertFalse(kotlinx.coroutines.withTimeout(5000L) { queue.drainAdmittedFixes() })
+            assertEquals(0, gpsInboxDao.getPendingCount("failed-write"))
+        } finally {
+            queue.stopConsumer()
+        }
+    }
+
+    private fun CoroutineScope.asyncDrain(queue: GpsLocationQueue) = async { queue.drainAdmittedFixes() }
 
     // BLOCKER 1 & 5: Failure on first fix preserves all fixes and allows lossless retry
     @Test

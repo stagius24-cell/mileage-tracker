@@ -1356,6 +1356,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.169 (Build 170)" to "Await admitted GPS writes before candidate expiry and preserve surviving recovered sessions.",
                 "Version 1.0.168 (Build 169)" to "Replace the custom business-purpose button with a compact green plus control.",
                 "Version 1.0.167 (Build 168)" to "Ignore stale or unrelated GPS callbacks when measuring silence for automatic trip stopping.",
                 "Version 1.0.166 (Build 167)" to "Re-audit tracking completion: real GPS admission barrier during candidate expiry, serialized startup recovery, and GPS-silence watchdog recheck with 10-minute stationary stop fallback.",
