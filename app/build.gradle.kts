@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 167
-        versionName = "1.0.166"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Re-audit tracking completion: admission barrier during candidate expiry, serialized startup recovery, and GPS-silence watchdog recheck with 10-minute stationary stop fallback.\"")
+        versionCode = 168
+        versionName = "1.0.168"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Phase 7 Smart Trip Recognition: automated route pattern recognition, on-device classification suggestions, and intelligent trip lifecycle integration.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
