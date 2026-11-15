@@ -192,7 +192,17 @@ class TripFinalizationCoordinator @Inject constructor(
                 notes = null,
                 waypointsJson = waypointsJson,
                 syncStatus = "PENDING",
-                syncedAt = null
+                syncedAt = null,
+                classificationSource = if (isPersonalDrive) {
+                    com.businesstracker.mileage.domain.model.ClassificationSource.AUTO_CLASSIFIED.value
+                } else {
+                    com.businesstracker.mileage.domain.model.ClassificationSource.UNCLASSIFIED.value
+                },
+                suggestedClassification = if (isPersonalDrive) {
+                    com.businesstracker.mileage.domain.model.TripClassification.PERSONAL.value
+                } else {
+                    null
+                }
             )
 
             // 7. Atomic database transaction: persists trip, marks lifecycle FINALIZED,

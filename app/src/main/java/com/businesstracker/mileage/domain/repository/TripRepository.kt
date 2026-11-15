@@ -3,6 +3,7 @@ package com.businesstracker.mileage.domain.repository
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.data.local.model.BusinessEntitySummary
 import com.businesstracker.mileage.data.local.model.ClassificationCount
+import com.businesstracker.mileage.domain.model.ClassificationSource
 import kotlinx.coroutines.flow.Flow
 
 interface TripRepository {
@@ -25,14 +26,41 @@ interface TripRepository {
         businessEntity: String,
         purpose: String,
         notes: String?
-    )
+    ) {
+        classifyTrip(tripId, classification, businessEntity, purpose, notes, ClassificationSource.MANUAL)
+    }
+
+    suspend fun classifyTrip(
+        tripId: String,
+        classification: String,
+        businessEntity: String,
+        purpose: String,
+        notes: String?,
+        source: ClassificationSource
+    ) {
+        classifyTrip(tripId, classification, businessEntity, purpose, notes)
+    }
+
     suspend fun updateTripDetails(
         tripId: String,
         classification: String,
         businessEntity: String,
         purpose: String,
         notes: String?
-    )
+    ) {
+        updateTripDetails(tripId, classification, businessEntity, purpose, notes, ClassificationSource.MANUAL)
+    }
+
+    suspend fun updateTripDetails(
+        tripId: String,
+        classification: String,
+        businessEntity: String,
+        purpose: String,
+        notes: String?,
+        source: ClassificationSource
+    ) {
+        updateTripDetails(tripId, classification, businessEntity, purpose, notes)
+    }
     fun getTripsBySyncStatus(syncStatus: String): Flow<List<TripEntity>>
     fun getTripsByClassification(classification: String): Flow<List<TripEntity>>
     suspend fun getPendingSyncTrips(): List<TripEntity>

@@ -7,9 +7,11 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.businesstracker.mileage.data.local.entity.ActiveTripEntity
 import com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity
 import com.businesstracker.mileage.data.local.entity.GpsInboxEntity
+import com.businesstracker.mileage.data.local.entity.RoutePatternEntity
 import com.businesstracker.mileage.data.local.entity.SavedLocationEntity
 import com.businesstracker.mileage.data.local.entity.SavedLocationSyncQueueEntity
 import com.businesstracker.mileage.data.local.entity.TripEntity
+import com.businesstracker.mileage.data.local.entity.TripLearningRecordEntity
 import com.businesstracker.mileage.data.local.entity.TripLifecycleEntity
 import com.businesstracker.mileage.data.local.entity.TripSequenceEntity
 
@@ -22,9 +24,11 @@ import com.businesstracker.mileage.data.local.entity.TripSequenceEntity
         TripLifecycleEntity::class,
         TripSequenceEntity::class,
         SavedLocationEntity::class,
-        SavedLocationSyncQueueEntity::class
+        SavedLocationSyncQueueEntity::class,
+        RoutePatternEntity::class,
+        TripLearningRecordEntity::class
     ],
-    version = 7,
+    version = 8,
     exportSchema = true
 )
 abstract class ExpenseTrackerDatabase : RoomDatabase() {
@@ -36,6 +40,8 @@ abstract class ExpenseTrackerDatabase : RoomDatabase() {
     abstract fun tripSequenceDao(): TripSequenceDao
     abstract fun savedLocationDao(): SavedLocationDao
     abstract fun savedLocationSyncQueueDao(): SavedLocationSyncQueueDao
+    abstract fun routePatternDao(): RoutePatternDao
+    abstract fun tripLearningRecordDao(): TripLearningRecordDao
 
     companion object {
         const val DATABASE_NAME = "EXPENSE_TRACKER_DB"
@@ -267,6 +273,120 @@ abstract class ExpenseTrackerDatabase : RoomDatabase() {
                 MIGRATION_4_5.migrate(db)
                 MIGRATION_5_6.migrate(db)
                 MIGRATION_6_7.migrate(db)
+            }
+        }
+
+        val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // 1. Create route_patterns table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `route_patterns` (
+                        `id` TEXT NOT NULL,
+                        `startLatitude` REAL NOT NULL,
+                        `startLongitude` REAL NOT NULL,
+                        `startRadiusMeters` REAL NOT NULL,
+                        `endLatitude` REAL NOT NULL,
+                        `endLongitude` REAL NOT NULL,
+                        `endRadiusMeters` REAL NOT NULL,
+                        `startAddress` TEXT,
+                        `endAddress` TEXT,
+                        `classification` TEXT NOT NULL,
+                        `businessEntity` TEXT NOT NULL,
+                        `purpose` TEXT NOT NULL,
+                        `sampleCount` INTEGER NOT NULL,
+                        `confidence` REAL NOT NULL,
+                        `lastLearnedAt` INTEGER NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_route_patterns_startLatitude_startLongitude` ON `route_patterns` (`startLatitude`, `startLongitude`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_route_patterns_endLatitude_endLongitude` ON `route_patterns` (`endLatitude`, `endLongitude`)")
+
+                // 2. Create trip_learning_records table
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `trip_learning_records` (
+                        `tripId` TEXT NOT NULL,
+                        `eligible` INTEGER NOT NULL,
+                        `classificationSource` TEXT NOT NULL,
+                        `confirmedCategory` TEXT,
+                        `businessEntity` TEXT,
+                        `purpose` TEXT,
+                        `startLatitude` REAL NOT NULL,
+                        `startLongitude` REAL NOT NULL,
+                        `endLatitude` REAL NOT NULL,
+                        `endLongitude` REAL NOT NULL,
+                        `patternId` TEXT,
+                        `learnedAt` INTEGER,
+                        `createdAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`tripId`),
+                        FOREIGN KEY(`tripId`) REFERENCES `trips`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                        FOREIGN KEY(`patternId`) REFERENCES `route_patterns`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_learning_records_tripId` ON `trip_learning_records` (`tripId`)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS `index_trip_learning_records_patternId` ON `trip_learning_records` (`patternId`)")
+
+                // 3. Add classification provenance columns to trips
+                db.execSQL("ALTER TABLE `trips` ADD COLUMN `classificationSource` TEXT NOT NULL DEFAULT 'UNCLASSIFIED'")
+                db.execSQL("ALTER TABLE `trips` ADD COLUMN `suggestedClassification` TEXT DEFAULT NULL")
+            }
+        }
+
+        val MIGRATION_6_8 = object : Migration(6, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_6_7.migrate(db)
+                MIGRATION_7_8.migrate(db)
+            }
+        }
+
+        val MIGRATION_5_8 = object : Migration(5, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_5_6.migrate(db)
+                MIGRATION_6_7.migrate(db)
+                MIGRATION_7_8.migrate(db)
+            }
+        }
+
+        val MIGRATION_4_8 = object : Migration(4, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_4_5.migrate(db)
+                MIGRATION_5_6.migrate(db)
+                MIGRATION_6_7.migrate(db)
+                MIGRATION_7_8.migrate(db)
+            }
+        }
+
+        val MIGRATION_3_8 = object : Migration(3, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_3_4.migrate(db)
+                MIGRATION_4_5.migrate(db)
+                MIGRATION_5_6.migrate(db)
+                MIGRATION_6_7.migrate(db)
+                MIGRATION_7_8.migrate(db)
+            }
+        }
+
+        val MIGRATION_2_8 = object : Migration(2, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_2_3.migrate(db)
+                MIGRATION_3_4.migrate(db)
+                MIGRATION_4_5.migrate(db)
+                MIGRATION_5_6.migrate(db)
+                MIGRATION_6_7.migrate(db)
+                MIGRATION_7_8.migrate(db)
+            }
+        }
+
+        val MIGRATION_1_8 = object : Migration(1, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                MIGRATION_1_2.migrate(db)
+                MIGRATION_2_3.migrate(db)
+                MIGRATION_3_4.migrate(db)
+                MIGRATION_4_5.migrate(db)
+                MIGRATION_5_6.migrate(db)
+                MIGRATION_6_7.migrate(db)
+                MIGRATION_7_8.migrate(db)
             }
         }
     }

@@ -80,5 +80,11 @@ data class TripEntity(
     val syncStatus: String, // "PENDING", "SYNCED", "FAILED"
 
     @ColumnInfo(name = "syncedAt")
-    val syncedAt: Long?
+    val syncedAt: Long?,
+
+    @ColumnInfo(name = "classificationSource", defaultValue = "'UNCLASSIFIED'")
+    val classificationSource: String = "UNCLASSIFIED",
+
+    @ColumnInfo(name = "suggestedClassification")
+    val suggestedClassification: String? = null
 )

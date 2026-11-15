@@ -103,6 +103,11 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_WORK_HOURS_END = stringPreferencesKey("work_hours_end")
         private val KEY_OUTSIDE_SCHEDULE_BEHAVIOR = stringPreferencesKey("outside_schedule_behavior")
 
+        // Smart Trip Recognition Keys
+        private val KEY_SMART_TRIP_RECOGNITION_ENABLED = booleanPreferencesKey("smart_trip_recognition_enabled")
+        private val KEY_SMART_AUTO_CLASSIFY_ENABLED = booleanPreferencesKey("smart_auto_classify_enabled")
+        private val KEY_SMART_TRIP_ACTIVATION_CUTOFF = longPreferencesKey("smart_trip_activation_cutoff")
+
         const val BEHAVIOR_CLASSIFY_PERSONAL = "CLASSIFY_PERSONAL"
         const val BEHAVIOR_CONSERVE_BATTERY = "CONSERVE_BATTERY"
         const val DEFAULT_WORK_DAYS = "MON,TUE,WED,THU,FRI"
@@ -186,6 +191,38 @@ class TrackingPreferencesManager @Inject constructor(
 
     suspend fun isCarBluetoothConnected(): Boolean =
         context.dataStore.data.first()[KEY_CAR_BLUETOOTH_CONNECTED] ?: false
+
+    val isSmartTripRecognitionEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SMART_TRIP_RECOGNITION_ENABLED] ?: true
+    }
+
+    val isSmartAutoClassifyEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SMART_AUTO_CLASSIFY_ENABLED] ?: false
+    }
+
+    val smartTripActivationCutoff: Flow<Long> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SMART_TRIP_ACTIVATION_CUTOFF] ?: com.businesstracker.mileage.domain.model.SmartTripLearningCutoff.ACTIVATION_CUTOFF_MILLIS
+    }
+
+    suspend fun setSmartTripRecognitionEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SMART_TRIP_RECOGNITION_ENABLED] = enabled
+        }
+    }
+
+    suspend fun setSmartAutoClassifyEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SMART_AUTO_CLASSIFY_ENABLED] = enabled
+        }
+    }
+
+    suspend fun initializeSmartTripActivationCutoff(cutoffMillis: Long = com.businesstracker.mileage.domain.model.SmartTripLearningCutoff.ACTIVATION_CUTOFF_MILLIS) {
+        context.dataStore.edit { prefs ->
+            if (!prefs.contains(KEY_SMART_TRIP_ACTIVATION_CUTOFF)) {
+                prefs[KEY_SMART_TRIP_ACTIVATION_CUTOFF] = cutoffMillis
+            }
+        }
+    }
 
     // Work Schedule & Drive Filtering
     val isScheduleFilteringEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
