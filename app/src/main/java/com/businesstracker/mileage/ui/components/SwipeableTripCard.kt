@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -40,6 +41,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
@@ -288,15 +290,23 @@ fun SwipeableTripCard(
                             )
                         )
                     }
-                    FilterChip(
-                        selected = isCustomPurpose,
+                    IconButton(
                         onClick = { isCustomPurpose = true },
-                        label = { Text("Custom...") },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = SucculentPrimary,
-                            selectedLabelColor = Color.White
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(
+                                if (isCustomPurpose) SucculentPrimary
+                                else SucculentPrimary.copy(alpha = 0.10f)
+                            )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Add custom purpose",
+                            tint = if (isCustomPurpose) Color.White else SucculentPrimary,
+                            modifier = Modifier.size(22.dp)
                         )
-                    )
+                    }
                 }
 
                 if (isCustomPurpose) {

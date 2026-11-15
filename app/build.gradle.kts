@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 168
-        versionName = "1.0.167"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Ignore stale or unrelated GPS callbacks when measuring silence for automatic trip stopping.\"")
+        versionCode = 169
+        versionName = "1.0.168"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Replace the custom business-purpose button with a compact green plus control.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
