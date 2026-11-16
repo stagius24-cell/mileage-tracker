@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 170
-        versionName = "1.0.169"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Await admitted GPS writes before candidate expiry and preserve surviving recovered sessions.\"")
+        versionCode = 171
+        versionName = "1.0.170"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Add native sticky date headers to Trip History.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

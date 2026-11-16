@@ -105,6 +105,7 @@ import java.util.Locale
 private data class HistoryFilterOption(val value: String, val label: String)
 
 @Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 fun TripHistoryScreen(
     viewModel: TripHistoryViewModel = hiltViewModel(),
     initialMonthIso: String = "",
@@ -221,31 +222,26 @@ fun TripHistoryScreen(
             Color(0xFFEFF3F9)
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(pageBg)
-        ) {
-            HistoryControls(
-                state = state,
-                onSearchChange = viewModel::setSearchQuery,
-                onSortChange = viewModel::setSortOrder,
-                onClassificationChange = viewModel::setClassificationFilter,
-                onEntityChange = viewModel::setBusinessEntityFilter,
-                onSyncChange = viewModel::setSyncStatusFilter,
-                onClearDateFilter = { viewModel.setDateRange("", "") },
-                onDateRangeChange = viewModel::setDateRange,
-                onMonthChange = { month ->
-                    if (month.isBlank()) viewModel.setDateRange("", "")
-                    else {
-                        val selected = YearMonth.parse(month)
-                        viewModel.setDateRange(selected.atDay(1).toString(), selected.atEndOfMonth().toString())
-                    }
-                },
-                onBackToReports = onBackToReports
-            )
-
+        Column(modifier = Modifier.fillMaxSize().background(pageBg)) {
             if (state.trips.isEmpty()) {
+                HistoryControls(
+                    state = state,
+                    onSearchChange = viewModel::setSearchQuery,
+                    onSortChange = viewModel::setSortOrder,
+                    onClassificationChange = viewModel::setClassificationFilter,
+                    onEntityChange = viewModel::setBusinessEntityFilter,
+                    onSyncChange = viewModel::setSyncStatusFilter,
+                    onClearDateFilter = { viewModel.setDateRange("", "") },
+                    onDateRangeChange = viewModel::setDateRange,
+                    onMonthChange = { month ->
+                        if (month.isBlank()) viewModel.setDateRange("", "")
+                        else {
+                            val selected = YearMonth.parse(month)
+                            viewModel.setDateRange(selected.atDay(1).toString(), selected.atEndOfMonth().toString())
+                        }
+                    },
+                    onBackToReports = onBackToReports
+                )
                 EmptyHistory(
                     state = state,
                     onClearSearch = { viewModel.setSearchQuery("") },
@@ -260,9 +256,29 @@ fun TripHistoryScreen(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    item(key = "history-controls") {
+                        HistoryControls(
+                            state = state,
+                            onSearchChange = viewModel::setSearchQuery,
+                            onSortChange = viewModel::setSortOrder,
+                            onClassificationChange = viewModel::setClassificationFilter,
+                            onEntityChange = viewModel::setBusinessEntityFilter,
+                            onSyncChange = viewModel::setSyncStatusFilter,
+                            onClearDateFilter = { viewModel.setDateRange("", "") },
+                            onDateRangeChange = viewModel::setDateRange,
+                            onMonthChange = { month ->
+                                if (month.isBlank()) viewModel.setDateRange("", "")
+                                else {
+                                    val selected = YearMonth.parse(month)
+                                    viewModel.setDateRange(selected.atDay(1).toString(), selected.atEndOfMonth().toString())
+                                }
+                            },
+                            onBackToReports = onBackToReports
+                        )
+                    }
                     if (groupByDate) {
                         state.trips.groupBy { it.date }.forEach { (date, trips) ->
-                            item(key = "date-$date") {
+                            stickyHeader(key = "date-$date") {
                                 DateSectionHeader(date = date, trips = trips)
                             }
                             items(trips, key = { it.id }) { trip ->
@@ -620,7 +636,9 @@ private fun DateSectionHeader(date: String, trips: List<TripEntity>) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 14.dp, bottom = 10.dp),
+            .background(if (dark) MaterialTheme.colorScheme.background else Color(0xFFEFF3F9))
+            .heightIn(min = 48.dp)
+            .padding(vertical = 6.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
