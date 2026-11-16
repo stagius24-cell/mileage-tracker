@@ -46,7 +46,7 @@ class VehicleBluetoothReceiver : BroadcastReceiver() {
                     eventHandler.handle(action, device.address)
                 }
             } finally {
-                pendingResult.finish()
+                pendingResult?.finish()
             }
         }
     }

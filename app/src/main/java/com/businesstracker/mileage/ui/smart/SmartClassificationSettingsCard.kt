@@ -20,11 +20,14 @@ import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.businesstracker.mileage.domain.model.SmartClassificationMode
 import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
@@ -48,6 +52,7 @@ import com.businesstracker.mileage.ui.theme.SucculentPrimary
  * - Entire card is tappable to open the Classification mode bottom sheet
  * - No toggle, no divider, no extra description
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SmartClassificationCard(
     isEnabled: Boolean,
@@ -70,7 +75,8 @@ fun SmartClassificationCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .heightIn(min = 72.dp)
+                .padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Surface(
@@ -105,13 +111,19 @@ fun SmartClassificationCard(
                     overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(Modifier.width(8.dp))
-            Icon(
-                imageVector = Icons.Default.ChevronRight,
-                contentDescription = "Change classification mode",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
-            )
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+                Box(
+                    modifier = Modifier.size(38.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = "Change classification mode",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
         }
     }
 

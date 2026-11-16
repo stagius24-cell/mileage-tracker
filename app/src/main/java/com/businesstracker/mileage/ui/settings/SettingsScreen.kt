@@ -521,7 +521,7 @@ fun SettingsScreen(
                         onOpen = { showPurposeList = true }
                     )
                     HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 14.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
                     )
                     SettingsManagementRow(
@@ -1496,7 +1496,7 @@ private fun SettingsSection(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Row(
@@ -1929,7 +1929,7 @@ private fun SettingsManagementRow(
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 72.dp)
-            .padding(start = 12.dp, end = 2.dp),
+            .padding(start = 16.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Row(
@@ -1960,8 +1960,12 @@ private fun SettingsManagementRow(
                 }
             }
             IconButton(onClick = onOpen, modifier = Modifier.size(38.dp)) {
-                Icon(Icons.Default.ChevronRight, contentDescription = "Show $title",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(
+                    imageVector = Icons.Default.ChevronRight,
+                    contentDescription = "Show $title",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(24.dp)
+                )
             }
         }
     }

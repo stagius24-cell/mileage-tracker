@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 181
-        versionName = "1.0.181"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Smart Sticky Date Headers in Trip History: native Compose sticky headers, bidirectional push-off scrolling, and accurate filtered date group totals.\"")
+        versionCode = 182
+        versionName = "1.0.182"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Harmonize Settings screen layout: unify 16dp icon indentation and standardize 24dp chevron arrow size and alignment across Smart Classification, Business purposes, Saved Locations, and Backup & Restore.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
