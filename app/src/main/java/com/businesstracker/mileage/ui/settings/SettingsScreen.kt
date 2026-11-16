@@ -1356,6 +1356,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.176 (Build 177)" to "Combine Build 168 tracking behavior with Build 172 Trip History layout.",
                 "Version 1.0.174 (Build 175)" to "Restore Build 172 Trip History layout.",
                 "Version 1.0.172 (Build 173)" to "Keep the Trip History title scrolling while search controls stay fixed.",
                 "Version 1.0.171 (Build 172)" to "Keep Trip History search and filters fixed while scrolling date groups.",

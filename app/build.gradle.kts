@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 175
-        versionName = "1.0.174"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Restore Build 172 Trip History layout.\"")
+        versionCode = 177
+        versionName = "1.0.176"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Combine Build 168 tracking behavior with Build 172 Trip History layout.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
