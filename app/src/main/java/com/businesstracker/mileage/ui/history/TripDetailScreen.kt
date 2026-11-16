@@ -36,6 +36,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.Paid
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Info
@@ -77,6 +79,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import com.businesstracker.mileage.util.AddressUtil
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -92,6 +95,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.domain.usecase.ResolveTripAddressesUseCase
@@ -202,10 +206,9 @@ fun TripDetailScreen(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(8.dp)
-                    .size(44.dp)
-                    .graphicsLayer { alpha = 0.85f },
+                    .size(44.dp),
                 shape = CircleShape,
-                color = SucculentPrimary.copy(alpha = 0.85f),
+                color = Color.White,
                 shadowElevation = 3.dp
             ) {
                 IconButton(
@@ -215,7 +218,7 @@ fun TripDetailScreen(
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Close trip details",
-                        tint = Color.White,
+                        tint = Color(0xFF718096),
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -378,13 +381,13 @@ fun TripDetailScreen(
             // Route and more-info tabs matching container roundness.
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(19.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(4.dp),
+                        .padding(3.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TripDetailTabButton(
@@ -419,12 +422,14 @@ fun TripDetailScreen(
                     verticalAlignment = Alignment.Top
                 ) { page ->
                     if (page == 0) {
-                        val finalStartAddress = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                        val resolvedStart = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
                             ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
                             else "Approximate start location unavailable"
-                        val finalEndAddress = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                        val finalStartAddress = AddressUtil.abbreviateAddress(resolvedStart)
+                        val resolvedEnd = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
                             ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
                             else "Approximate destination unavailable"
+                        val finalEndAddress = AddressUtil.abbreviateAddress(resolvedEnd)
                         val savedStartId = smartNames?.startLocation?.id
                         val savedEndId = smartNames?.endLocation?.id
 
@@ -705,17 +710,17 @@ private fun TripDetailTabButton(
             modifier = Modifier
                 .offset(x = indicatorOffset)
                 .fillMaxWidth()
-                .height(48.dp)
+                .height(38.dp)
                 .background(
                     color = SucculentPrimary.copy(alpha = if (selected) 0.16f else 0f),
-                    shape = RoundedCornerShape(20.dp)
+                    shape = RoundedCornerShape(19.dp)
                 )
         )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .defaultMinSize(minHeight = 48.dp)
-                .clip(RoundedCornerShape(20.dp))
+                .defaultMinSize(minHeight = 38.dp)
+                .clip(RoundedCornerShape(19.dp))
                 .semantics {
                     role = Role.Tab
                     this.selected = selected
@@ -760,49 +765,118 @@ private fun RouteDetailsTab(
             .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
+        // Formatted date string (e.g. NOV 15, 2026) and day of week (e.g. Sunday)
+        val fullDateHeader = remember(trip.startTime) {
+            if (trip.startTime > 0) {
+                SimpleDateFormat("MMM d, yyyy", Locale.US).format(Date(trip.startTime)).uppercase(Locale.US)
+            } else {
+                date.uppercase(Locale.US)
+            }
+        }
+        val dayOfWeekStr = remember(trip.startTime) {
+            if (trip.startTime > 0) {
+                SimpleDateFormat("EEEE", Locale.US).format(Date(trip.startTime))
+            } else ""
+        }
+
         Row(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Column 1: Date & Day of Week
             Column(
                 modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
+                Icon(
+                    imageVector = Icons.Outlined.CalendarToday,
+                    contentDescription = null,
+                    tint = SucculentPrimary,
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(Modifier.height(2.dp))
                 Text(
-                    date.uppercase(Locale.getDefault()),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                    text = fullDateHeader,
+                    style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    if (trip.startTime > 0) SimpleDateFormat("yyyy", Locale.getDefault()).format(Date(trip.startTime)) else "",
-                    style = MaterialTheme.typography.labelSmall,
+                    text = dayOfWeekStr,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
                     color = SlateNeutral,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Medium
                 )
             }
+
+            // Divider 1
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(44.dp)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
+            )
+
+            // Column 2: Miles & Road graphic
             Column(
                 modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Black
+                RoadHighwayIcon(
+                    modifier = Modifier.size(24.dp),
+                    tint = SlateNeutral
                 )
-                Text("MILES", style = MaterialTheme.typography.labelSmall, color = SlateNeutral, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "miles",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                    color = SlateNeutral,
+                    fontWeight = FontWeight.Medium
+                )
             }
+
+            // Divider 2
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(44.dp)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
+            )
+
+            // Column 3: Potential & Stash of coins
             Column(
                 modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    "\$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = SucculentPrimary,
-                    fontWeight = FontWeight.Bold
+                StackedCoinsIcon(
+                    modifier = Modifier.size(24.dp),
+                    tint = SucculentPrimary
                 )
-                Text("POTENTIAL", style = MaterialTheme.typography.labelSmall, color = SlateNeutral, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(2.dp))
+                Text(
+                    text = "$" + String.format(Locale.US, "%.2f", trip.calculatedDeduction),
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
+                    fontWeight = FontWeight.Black,
+                    color = SucculentPrimary
+                )
+                Text(
+                    text = "Potential",
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
+                    color = SlateNeutral,
+                    fontWeight = FontWeight.Medium
+                )
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
@@ -1061,6 +1135,146 @@ private fun StatusValue(
             color = valueColor,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun RoadHighwayIcon(
+    modifier: Modifier = Modifier,
+    tint: Color = SlateNeutral
+) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+        val stroke = 2.2.dp.toPx()
+
+        // Left lane border (angled /)
+        drawLine(
+            color = tint,
+            start = Offset(w * 0.40f, 0f),
+            end = Offset(w * 0.16f, h),
+            strokeWidth = stroke,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
+
+        // Right lane border (angled \)
+        drawLine(
+            color = tint,
+            start = Offset(w * 0.60f, 0f),
+            end = Offset(w * 0.84f, h),
+            strokeWidth = stroke,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
+
+        // Dashed center line (|)
+        drawLine(
+            color = tint,
+            start = Offset(w * 0.50f, h * 0.08f),
+            end = Offset(w * 0.50f, h * 0.40f),
+            strokeWidth = stroke,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
+        drawLine(
+            color = tint,
+            start = Offset(w * 0.50f, h * 0.60f),
+            end = Offset(w * 0.50f, h * 0.92f),
+            strokeWidth = stroke,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+private fun StackedCoinsIcon(
+    modifier: Modifier = Modifier,
+    tint: Color = SucculentPrimary
+) {
+    androidx.compose.foundation.Canvas(modifier = modifier) {
+        val stroke = 2.0.dp.toPx()
+        val w = size.width
+        val h = size.height
+
+        // Left stack of coins
+        val leftCenter = Offset(w * 0.38f, h * 0.40f)
+        val leftRadiusX = w * 0.28f
+        val leftRadiusY = h * 0.14f
+
+        // Bottom ellipse of left stack
+        drawArc(
+            color = tint,
+            startAngle = 0f,
+            sweepAngle = 180f,
+            useCenter = false,
+            topLeft = Offset(leftCenter.x - leftRadiusX, h * 0.64f - leftRadiusY),
+            size = androidx.compose.ui.geometry.Size(leftRadiusX * 2, leftRadiusY * 2),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
+        )
+        // Middle ellipse of left stack
+        drawArc(
+            color = tint,
+            startAngle = 0f,
+            sweepAngle = 180f,
+            useCenter = false,
+            topLeft = Offset(leftCenter.x - leftRadiusX, h * 0.48f - leftRadiusY),
+            size = androidx.compose.ui.geometry.Size(leftRadiusX * 2, leftRadiusY * 2),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
+        )
+        // Top full ellipse of left stack
+        drawOval(
+            color = tint,
+            topLeft = Offset(leftCenter.x - leftRadiusX, h * 0.32f - leftRadiusY),
+            size = androidx.compose.ui.geometry.Size(leftRadiusX * 2, leftRadiusY * 2),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
+        )
+        // Left stack side vertical lines
+        drawLine(
+            color = tint,
+            start = Offset(leftCenter.x - leftRadiusX, h * 0.32f),
+            end = Offset(leftCenter.x - leftRadiusX, h * 0.64f),
+            strokeWidth = stroke
+        )
+        drawLine(
+            color = tint,
+            start = Offset(leftCenter.x + leftRadiusX, h * 0.32f),
+            end = Offset(leftCenter.x + leftRadiusX, h * 0.64f),
+            strokeWidth = stroke
+        )
+
+        // Right higher stack
+        val rightCenter = Offset(w * 0.68f, h * 0.22f)
+        val rightRadiusX = w * 0.24f
+        val rightRadiusY = h * 0.12f
+
+        // Bottom arc of right stack
+        drawArc(
+            color = tint,
+            startAngle = 0f,
+            sweepAngle = 180f,
+            useCenter = false,
+            topLeft = Offset(rightCenter.x - rightRadiusX, h * 0.42f - rightRadiusY),
+            size = androidx.compose.ui.geometry.Size(rightRadiusX * 2, rightRadiusY * 2),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
+        )
+        // Top oval of right stack
+        drawOval(
+            color = tint,
+            topLeft = Offset(rightCenter.x - rightRadiusX, h * 0.22f - rightRadiusY),
+            size = androidx.compose.ui.geometry.Size(rightRadiusX * 2, rightRadiusY * 2),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke)
+        )
+        // Right stack side vertical lines
+        drawLine(
+            color = tint,
+            start = Offset(rightCenter.x - rightRadiusX, h * 0.22f),
+            end = Offset(rightCenter.x - rightRadiusX, h * 0.42f),
+            strokeWidth = stroke
+        )
+        drawLine(
+            color = tint,
+            start = Offset(rightCenter.x + rightRadiusX, h * 0.22f),
+            end = Offset(rightCenter.x + rightRadiusX, h * 0.42f),
+            strokeWidth = stroke
         )
     }
 }

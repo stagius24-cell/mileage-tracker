@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 184
-        versionName = "1.0.184"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings visual refinements: display trip purpose count underneath Business purposes, remove sync checkmark, and update sync status description to muted gray matching Google Sheets settings.\"")
+        versionCode = 185
+        versionName = "1.0.185"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip details redesign: 20% shorter Route/More Info capsule tabs with matching radius, white circular map close button with gray X, abbreviated street and 2-letter state addresses, and 3-column stats card with date/miles/potential icons and vertical dividers.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

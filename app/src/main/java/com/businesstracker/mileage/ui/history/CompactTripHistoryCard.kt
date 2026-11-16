@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.usecase.SmartTripNames
+import com.businesstracker.mileage.util.AddressUtil
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -54,8 +55,8 @@ fun CompactTripHistoryCard(
     val startTime = remember(trip.startTime) { timeFormatter.format(Date(trip.startTime)) }
     val endTime = remember(trip.endTime) { timeFormatter.format(Date(trip.endTime)) }
 
-    val startAddress = smartNames?.startDisplayName ?: (trip.startAddress?.takeIf { it.isNotBlank() } ?: "Starting location unavailable")
-    val endAddress = smartNames?.endDisplayName ?: (trip.endAddress?.takeIf { it.isNotBlank() } ?: "Destination unavailable")
+    val startAddress = smartNames?.startDisplayName ?: AddressUtil.abbreviateAddress(trip.startAddress?.takeIf { it.isNotBlank() } ?: "Starting location unavailable")
+    val endAddress = smartNames?.endDisplayName ?: AddressUtil.abbreviateAddress(trip.endAddress?.takeIf { it.isNotBlank() } ?: "Destination unavailable")
 
     Card(
         modifier = modifier
