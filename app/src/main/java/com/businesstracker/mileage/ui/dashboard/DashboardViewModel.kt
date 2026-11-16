@@ -48,6 +48,7 @@ data class DashboardUiState(
     val summary: DashboardSummary = DashboardSummary(),
     val currentRate: Double = 0.760,
     val lastClassifiedTrip: TripEntity? = null,
+    val lastClassificationLabel: String? = null,
     val isUndoAvailable: Boolean = false,
     val processingTripIds: Set<String> = emptySet(),
     val customPurposes: List<String> = emptyList()
@@ -74,6 +75,7 @@ class DashboardViewModel @Inject constructor(
     private val _selectedMonthPrefix = MutableStateFlow(currentMonthIso)
     private val _processingTripIds = MutableStateFlow<Set<String>>(emptySet())
     private val _lastClassifiedTrip = MutableStateFlow<TripEntity?>(null)
+    private val _lastClassificationLabel = MutableStateFlow<String?>(null)
 
     val serviceState: StateFlow<TrackingServiceState> = if (activeTripRepository != null) {
         combine(
@@ -166,6 +168,7 @@ class DashboardViewModel @Inject constructor(
         val customEnd: String,
         val processingIds: Set<String>,
         val lastClassified: TripEntity?,
+        val lastClassificationLabel: String?,
         val customPurposes: List<String> = emptyList()
     )
 
@@ -180,18 +183,24 @@ class DashboardViewModel @Inject constructor(
 
     private val customPurposesFlow: Flow<List<String>> = preferencesManager?.customPurposes ?: flowOf(emptyList())
 
+    private val undoStateFlow = combine(
+        _lastClassifiedTrip,
+        _lastClassificationLabel
+    ) { trip, label -> trip to label }
+
     private val actionFlow = combine(
         _customStartDate,
         _customEndDate,
         _processingTripIds,
-        _lastClassifiedTrip,
+        undoStateFlow,
         customPurposesFlow
-    ) { customStart, customEnd, processingIds, lastClassified, purposes ->
+    ) { customStart, customEnd, processingIds, undoState, purposes ->
         CustomRangeAndActionState(
             customStart = customStart,
             customEnd = customEnd,
             processingIds = processingIds,
-            lastClassified = lastClassified,
+            lastClassified = undoState.first,
+            lastClassificationLabel = undoState.second,
             customPurposes = purposes
         )
     }
@@ -236,6 +245,7 @@ class DashboardViewModel @Inject constructor(
             summary = summary,
             currentRate = currentRate,
             lastClassifiedTrip = actionState.lastClassified,
+            lastClassificationLabel = actionState.lastClassificationLabel,
             isUndoAvailable = actionState.lastClassified != null,
             processingTripIds = actionState.processingIds,
             customPurposes = actionState.customPurposes
@@ -322,6 +332,7 @@ class DashboardViewModel @Inject constructor(
                     notes = originalTrip?.notes
                 )
                 if (originalTrip != null) {
+                    _lastClassificationLabel.value = TripClassification.BUSINESS.value
                     _lastClassifiedTrip.value = originalTrip
                 }
                 GoogleSheetsSyncWorker.enqueueOneTimeSync(appContext)
@@ -346,6 +357,7 @@ class DashboardViewModel @Inject constructor(
                     notes = originalTrip?.notes
                 )
                 if (originalTrip != null) {
+                    _lastClassificationLabel.value = TripClassification.PERSONAL.value
                     _lastClassifiedTrip.value = originalTrip
                 }
                 GoogleSheetsSyncWorker.enqueueOneTimeSync(appContext)
@@ -358,6 +370,7 @@ class DashboardViewModel @Inject constructor(
     fun undoLastClassification() {
         val previousTrip = _lastClassifiedTrip.value ?: return
         _lastClassifiedTrip.value = null
+        _lastClassificationLabel.value = null
 
         viewModelScope.launch {
             tripRepository.classifyTrip(

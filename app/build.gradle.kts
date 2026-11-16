@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 188
-        versionName = "1.0.188"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Add long-press actions to Trip History cards for quick category editing and trip deletion.\"")
+        versionCode = 189
+        versionName = "1.0.189"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Show the selected Business or Personal classification in the Dashboard undo message.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

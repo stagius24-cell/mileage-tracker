@@ -1364,6 +1364,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.189 (Build 189)" to "Show the selected Business or Personal classification in the Dashboard undo message.",
                 "Version 1.0.188 (Build 188)" to "Add long-press actions to Trip History cards for quick category editing and trip deletion.",
                 "Version 1.0.187 (Build 187)" to "Update Business purposes subtitle to '<count> business purposes' and replace arrow navigation button with plus action button in management cards.",
                 "Version 1.0.186 (Build 186)" to "Format schedule subtitle onto two lines when 2 or more work days are selected to avoid text overflow.",

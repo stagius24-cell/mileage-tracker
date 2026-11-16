@@ -307,7 +307,7 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Drive classified as ${state.lastClassifiedTrip?.classification}",
+                                text = "Drive classified as ${state.lastClassificationLabel ?: state.lastClassifiedTrip?.classification}",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium
                             )
