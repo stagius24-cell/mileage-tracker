@@ -249,8 +249,9 @@ fun TripHistoryScreen(
                     onClearFilters = { viewModel.clearAllFilters() }
                 )
             } else {
-                val groupByDate = state.sortOrder == SortOrder.NEWEST_FIRST ||
-                    state.sortOrder == SortOrder.OLDEST_FIRST
+                val dateSections = remember(state.trips) {
+                    groupTripsByDisplayedDate(state.trips)
+                }
 
                 HistoryControls(
                             state = state,
@@ -280,21 +281,11 @@ fun TripHistoryScreen(
                     item(key = "history-title") {
                         HistoryTitle(onBackToReports)
                     }
-                    if (groupByDate) {
-                        state.trips.groupBy { it.date }.forEach { (date, trips) ->
-                            stickyHeader(key = "date-$date") {
-                                DateSectionHeader(date = date, trips = trips)
-                            }
-                            items(trips, key = { it.id }) { trip ->
-                                CompactTripHistoryCard(
-                                    trip = trip,
-                                    smartNames = state.smartNamesMap[trip.id],
-                                    onClick = { viewModel.selectTripForDetails(trip) }
-                                )
-                            }
+                    dateSections.forEach { (date, trips) ->
+                        stickyHeader(key = "date-$date-${trips.first().id}") {
+                            DateSectionHeader(date = date, trips = trips)
                         }
-                    } else {
-                        items(state.trips, key = { it.id }) { trip ->
+                        items(trips, key = { it.id }) { trip ->
                             CompactTripHistoryCard(
                                 trip = trip,
                                 smartNames = state.smartNamesMap[trip.id],
@@ -646,6 +637,19 @@ private fun DateSectionHeader(date: String, trips: List<TripEntity>) {
             color = summaryColor
         )
     }
+}
+
+private fun groupTripsByDisplayedDate(trips: List<TripEntity>): List<Pair<String, List<TripEntity>>> {
+    val groups = mutableListOf<MutableList<TripEntity>>()
+    trips.forEach { trip ->
+        val currentGroup = groups.lastOrNull()
+        if (currentGroup?.lastOrNull()?.date == trip.date) {
+            currentGroup.add(trip)
+        } else {
+            groups.add(mutableListOf(trip))
+        }
+    }
+    return groups.map { group -> group.first().date to group.toList() }
 }
 
 @Composable
