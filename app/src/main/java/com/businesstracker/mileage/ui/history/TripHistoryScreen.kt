@@ -240,7 +240,8 @@ fun TripHistoryScreen(
                             viewModel.setDateRange(selected.atDay(1).toString(), selected.atEndOfMonth().toString())
                         }
                     },
-                    onBackToReports = onBackToReports
+                    onBackToReports = onBackToReports,
+                    showTitle = true
                 )
                 EmptyHistory(
                     state = state,
@@ -267,7 +268,8 @@ HistoryControls(
                                     viewModel.setDateRange(selected.atDay(1).toString(), selected.atEndOfMonth().toString())
                                 }
                             },
-                            onBackToReports = onBackToReports
+                            onBackToReports = onBackToReports,
+                            showTitle = false
                         )
 
                 LazyColumn(
@@ -275,6 +277,9 @@ HistoryControls(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    item(key = "history-title") {
+                        HistoryTitle(onBackToReports)
+                    }
 
                     if (groupByDate) {
                         state.trips.groupBy { it.date }.forEach { (date, trips) ->
@@ -324,7 +329,8 @@ private fun HistoryControls(
     onClearDateFilter: () -> Unit,
     onDateRangeChange: (String, String) -> Unit,
     onMonthChange: (String) -> Unit,
-    onBackToReports: (() -> Unit)?
+    onBackToReports: (() -> Unit)?,
+    showTitle: Boolean
 ) {
     val hasActiveFilter = state.selectedClassificationFilter != "ALL" ||
         state.startDateFilter.isNotBlank() ||
@@ -345,35 +351,7 @@ private fun HistoryControls(
             .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (onBackToReports != null) {
-                IconButton(
-                    onClick = onBackToReports,
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ArrowBack,
-                        contentDescription = "Back",
-                        tint = primaryText,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-                Spacer(Modifier.width(4.dp))
-            }
-            Text(
-                text = "Trip History",
-                style = MaterialTheme.typography.headlineSmall.copy(
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                ),
-                color = primaryText
-            )
-        }
+        if (showTitle) HistoryTitle(onBackToReports)
 
         // Search Bar & Sort Toggle Button
         Row(
@@ -588,6 +566,21 @@ private fun HistoryControls(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun HistoryTitle(onBackToReports: (() -> Unit)?) {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val primaryText = if (dark) MaterialTheme.colorScheme.onSurface else Color(0xFF192A40)
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (onBackToReports != null) {
+            IconButton(onClick = onBackToReports, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = primaryText, modifier = Modifier.size(24.dp))
+            }
+            Spacer(Modifier.width(4.dp))
+        }
+        Text("Trip History", style = MaterialTheme.typography.headlineSmall.copy(fontSize = 24.sp, fontWeight = FontWeight.Bold), color = primaryText)
     }
 }
 

@@ -1356,6 +1356,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.172 (Build 173)" to "Keep the Trip History title scrolling while search controls stay fixed.",
                 "Version 1.0.171 (Build 172)" to "Keep Trip History search and filters fixed while scrolling date groups.",
                 "Version 1.0.170 (Build 171)" to "Add native sticky date headers to Trip History.",
                 "Version 1.0.169 (Build 170)" to "Await admitted GPS writes before candidate expiry and preserve surviving recovered sessions.",

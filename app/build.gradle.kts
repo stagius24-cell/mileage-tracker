@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 172
-        versionName = "1.0.171"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Keep Trip History search and filters fixed while scrolling date groups.\"")
+        versionCode = 173
+        versionName = "1.0.172"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Keep the Trip History title scrolling while search controls stay fixed.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
