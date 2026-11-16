@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 186
-        versionName = "1.0.186"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings schedule layout update: formats schedule subtitle onto two lines when 2 or more days are selected to prevent text overflow.\"")
+        versionCode = 187
+        versionName = "1.0.187"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings management cards update: update Business purposes description to '<count> business purposes' and replace chevron arrow button with standalone plus button.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

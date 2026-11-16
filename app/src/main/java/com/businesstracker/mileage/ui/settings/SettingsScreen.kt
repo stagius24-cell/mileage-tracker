@@ -514,7 +514,7 @@ fun SettingsScreen(
             ) {
                 Column {
                     val purposeCount = state.customPurposes.size
-                    val purposeSubtitle = if (purposeCount == 1) "1 purpose" else "$purposeCount purposes"
+                    val purposeSubtitle = if (purposeCount == 1) "1 business purpose" else "$purposeCount business purposes"
                     SettingsManagementRow(
                         title = "Business purposes",
                         subtitle = purposeSubtitle,
@@ -1364,6 +1364,14 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.187 (Build 187)" to "Update Business purposes subtitle to '<count> business purposes' and replace arrow navigation button with plus action button in management cards.",
+                "Version 1.0.186 (Build 186)" to "Format schedule subtitle onto two lines when 2 or more work days are selected to avoid text overflow.",
+                "Version 1.0.185 (Build 185)" to "Trip detail redesign with 20% shorter capsule tabs, white close button, address abbreviations, and 3-column stats card.",
+                "Version 1.0.184 (Build 184)" to "Display purpose count under Business purposes, remove sync checkmark, and style sync status in muted gray.",
+                "Version 1.0.183 (Build 183)" to "Position Trip History title above search bar, pinning search bar and date headers on scroll.",
+                "Version 1.0.182 (Build 182)" to "Harmonize Settings icon indentation, chevron size, and vertical alignment.",
+                "Version 1.0.181 (Build 181)" to "Implement smart sticky date headers in Trip History.",
+                "Version 1.0.180 (Build 180)" to "Redesign Smart Classification card with bottom sheet mode selector and clean subtitle.",
                 "Version 1.0.177 (Build 178)" to "Keep date headers sticky below the fixed search controls for every sort order.",
                 "Version 1.0.176 (Build 177)" to "Combine Build 168 tracking behavior with Build 172 Trip History layout.",
                 "Version 1.0.174 (Build 175)" to "Restore Build 172 Trip History layout.",
@@ -1953,18 +1961,10 @@ private fun SettingsManagementRow(
             }
         }
         CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
-            IconButton(onClick = onAdd, modifier = Modifier.size(38.dp)) {
-                Box(Modifier.size(32.dp).background(SucculentPrimary.copy(alpha = 0.10f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.Add, contentDescription = "Add $title", tint = SucculentPrimary, modifier = Modifier.size(20.dp))
+            IconButton(onClick = onAdd, modifier = Modifier.size(44.dp)) {
+                Box(Modifier.size(36.dp).background(SucculentPrimary.copy(alpha = 0.10f), RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.Add, contentDescription = "Add $title", tint = SucculentPrimary, modifier = Modifier.size(22.dp))
                 }
-            }
-            IconButton(onClick = onOpen, modifier = Modifier.size(38.dp)) {
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = "Show $title",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
             }
         }
     }
