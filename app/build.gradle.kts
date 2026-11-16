@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 183
-        versionName = "1.0.183"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip History header pinning: Trip History title positioned on top of search bar, title scrolls away on scroll down while search bar remains pinned at the top, and date headers stick and transition directly beneath the search bar.\"")
+        versionCode = 184
+        versionName = "1.0.184"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings visual refinements: display trip purpose count underneath Business purposes, remove sync checkmark, and update sync status description to muted gray matching Google Sheets settings.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

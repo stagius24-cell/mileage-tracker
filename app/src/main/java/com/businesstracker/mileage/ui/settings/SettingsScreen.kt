@@ -513,9 +513,11 @@ fun SettingsScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column {
+                    val purposeCount = state.customPurposes.size
+                    val purposeSubtitle = if (purposeCount == 1) "1 purpose" else "$purposeCount purposes"
                     SettingsManagementRow(
                         title = "Business purposes",
-                        subtitle = "Manage trip purposes",
+                        subtitle = purposeSubtitle,
                         icon = Icons.Outlined.BusinessCenter,
                         onAdd = { purposeError = null; showAddPurpose = true },
                         onOpen = { showPurposeList = true }
@@ -524,9 +526,11 @@ fun SettingsScreen(
                         modifier = Modifier.padding(horizontal = 16.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
                     )
+                    val locationCount = state.savedLocations.size
+                    val locationSubtitle = if (locationCount == 1) "1 saved place" else "$locationCount saved places"
                     SettingsManagementRow(
                         title = "Saved Locations",
-                        subtitle = "${state.savedLocations.size} saved places",
+                        subtitle = locationSubtitle,
                         icon = Icons.Outlined.LocationOn,
                         onAdd = { editingLocation = null; showLocationDialog = true },
                         onOpen = { showSavedLocationsList = true }
@@ -566,21 +570,16 @@ fun SettingsScreen(
                         Column(Modifier.weight(1f)) {
                             Text("Backup & Restore", style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold)
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(if (state.isSheetsConnected) Icons.Outlined.CheckCircle else Icons.Default.CloudOff,
-                                    contentDescription = null,
-                                    tint = if (state.isSheetsConnected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(14.dp))
-                                Spacer(Modifier.width(4.dp))
-                                val syncSubtitle = if (state.isSheetsConnected) {
-                                    lastBackupTime?.let { "Synced on ${timeFormat.format(Date(it))}" } ?: "Connected"
-                                } else {
-                                    "Disconnected"
-                                }
-                                Text(syncSubtitle,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (state.isSheetsConnected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant)
+                            val syncSubtitle = if (state.isSheetsConnected) {
+                                lastBackupTime?.let { "Synced on ${timeFormat.format(Date(it))}" } ?: "Connected"
+                            } else {
+                                "Disconnected"
                             }
+                            Text(
+                                text = syncSubtitle,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
 
