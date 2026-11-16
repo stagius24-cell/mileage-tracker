@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 179
-        versionName = "1.0.179"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Phase 7 Smart Trip Recognition: automated route pattern recognition, on-device classification suggestions, and intelligent trip lifecycle integration.\"")
+        versionCode = 180
+        versionName = "1.0.180"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Redesign Smart Classification settings card with inline mode subtitle, seamless bottom sheet, and non-destructive Disable option.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

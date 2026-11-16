@@ -302,4 +302,52 @@ class SmartTripRecognitionUiTest {
         assertFalse("Enabled state must be false after restart", enabledAfterRestart)
         assertEquals("Mode must be AUTO_CLASSIFY after restart", SmartClassificationMode.AUTO_CLASSIFY, modeAfterRestart)
     }
+
+    // 11. Redesigned Smart Classification Card Subtitle Formatting
+    @Test
+    fun test11_redesignedCardSubtitle_formatting() {
+        assertEquals("Ask me first", formatModeLabel(SmartClassificationMode.ALWAYS_ASK))
+        assertEquals("Automatic", formatModeLabel(SmartClassificationMode.AUTO_CLASSIFY))
+        assertEquals("Suggestions only", formatModeLabel(SmartClassificationMode.SUGGEST_ONLY))
+    }
+
+    // 12. Disable Option Selection Turns Off Feature Without Erasing Learned Routes
+    @Test
+    fun test12_disableSelection_turnsOffFeature_preservesLearnedRoutes() = testScope.runTest {
+        // Seed learned routes
+        preferencesManager.setSmartTripRecognitionEnabled(true)
+        preferencesManager.setSmartClassificationMode(SmartClassificationMode.AUTO_CLASSIFY)
+
+        val pattern = com.businesstracker.mileage.data.local.entity.RoutePatternEntity(
+            id = "p1",
+            startLatitude = 37.7749,
+            startLongitude = -122.4194,
+            endLatitude = 37.7849,
+            endLongitude = -122.4094,
+            classification = "BUSINESS",
+            businessEntity = "My Succulent Corner",
+            purpose = "Nursery Pickup",
+            sampleCount = 5,
+            confidence = 1.0,
+            lastLearnedAt = System.currentTimeMillis(),
+            createdAt = System.currentTimeMillis()
+        )
+        routePatternDao.insertRoutePattern(pattern)
+        assertEquals(1, routePatternDao.getPatternsCount())
+
+        // User selects "Disable" in the bottom sheet
+        preferencesManager.setSmartTripRecognitionEnabled(false)
+
+        assertFalse("Feature must be disabled", preferencesManager.isSmartTripRecognitionEnabled.first())
+        assertEquals("Learned routes must be preserved", 1, routePatternDao.getPatternsCount())
+        assertEquals("Underlying mode is preserved", SmartClassificationMode.AUTO_CLASSIFY, preferencesManager.smartClassificationMode.first())
+
+        // Re-enabling by selecting a mode restores normal operation
+        preferencesManager.setSmartTripRecognitionEnabled(true)
+        preferencesManager.setSmartClassificationMode(SmartClassificationMode.ALWAYS_ASK)
+
+        assertTrue("Feature is re-enabled", preferencesManager.isSmartTripRecognitionEnabled.first())
+        assertEquals("Mode updated to ALWAYS_ASK", SmartClassificationMode.ALWAYS_ASK, preferencesManager.smartClassificationMode.first())
+        assertEquals("Learned routes still intact", 1, routePatternDao.getPatternsCount())
+    }
 }
