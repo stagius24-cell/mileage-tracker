@@ -252,7 +252,8 @@ fun TripHistoryScreen(
                 val groupByDate = state.sortOrder == SortOrder.NEWEST_FIRST ||
                     state.sortOrder == SortOrder.OLDEST_FIRST
 
-HistoryControls(
+                HistoryTitle(onBackToReports)
+                HistoryControls(
                             state = state,
                             onSearchChange = viewModel::setSearchQuery,
                             onSortChange = viewModel::setSortOrder,
@@ -277,10 +278,6 @@ HistoryControls(
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    item(key = "history-title") {
-                        HistoryTitle(onBackToReports)
-                    }
-
                     if (groupByDate) {
                         state.trips.groupBy { it.date }.forEach { (date, trips) ->
                             stickyHeader(key = "date-$date") {
