@@ -1,7 +1,8 @@
 package com.businesstracker.mileage.ui.history
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -40,16 +43,20 @@ import java.util.Locale
  * - Row 3: Ending location: Soft red outlined pin, end address, end timestamp
  * - Single thin vertical connector line (#D9E3EB) between the two route icons
  * - Card corner radius: 20dp, solid white surface, no heavy shadow or borders
+ * - Supports normal tap to open details and long press (~500ms) with subtle haptic feedback for trip options
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CompactTripHistoryCard(
     trip: TripEntity,
     smartNames: SmartTripNames? = null,
     onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val cardBg = if (dark) MaterialTheme.colorScheme.surface else Color.White
+    val haptic = LocalHapticFeedback.current
 
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     val startTime = remember(trip.startTime) { timeFormatter.format(Date(trip.startTime)) }
@@ -61,7 +68,15 @@ fun CompactTripHistoryCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick?.let { action ->
+                    {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        action()
+                    }
+                }
+            ),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)

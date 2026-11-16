@@ -56,6 +56,8 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Sort
@@ -101,7 +103,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.SortOrder
+import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.model.TripPurpose
+import com.businesstracker.mileage.ui.components.AppConfirmationDialog
 import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
@@ -134,6 +138,10 @@ fun TripHistoryScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    var longPressedTripForOptions by remember { mutableStateOf<TripEntity?>(null) }
+    var tripForCategoryEdit by remember { mutableStateOf<TripEntity?>(null) }
+    var tripForDeleteConfirm by remember { mutableStateOf<TripEntity?>(null) }
 
     LaunchedEffect(initialSelectedTripId) {
         if (initialSelectedTripId.isNotBlank()) {
@@ -434,6 +442,7 @@ fun TripHistoryScreen(
                                 trip = trip,
                                 smartNames = state.smartNamesMap[trip.id],
                                 onClick = { viewModel.selectTripForDetails(trip) },
+                                onLongClick = { longPressedTripForOptions = trip },
                                 modifier = Modifier.padding(horizontal = 16.dp)
                             )
                         }
@@ -450,7 +459,189 @@ fun TripHistoryScreen(
         )
     }
 
+    // Long-Press Trip Actions: "Trip options" floating bottom sheet
+    if (longPressedTripForOptions != null) {
+        val trip = longPressedTripForOptions!!
+        AppFloatingBottomSheet(
+            onDismissRequest = { longPressedTripForOptions = null },
+            title = "Trip options",
+            onClose = { longPressedTripForOptions = null }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Edit category action
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                        .clickable {
+                            val target = trip
+                            longPressedTripForOptions = null
+                            tripForCategoryEdit = target
+                        }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = null,
+                        tint = SucculentPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(Modifier.width(14.dp))
+                    Text(
+                        text = "Edit category",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium),
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
 
+                // Delete trip action
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(SpeedRed.copy(alpha = 0.08f))
+                        .clickable {
+                            val target = trip
+                            longPressedTripForOptions = null
+                            tripForDeleteConfirm = target
+                        }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = null,
+                        tint = SpeedRed,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(Modifier.width(14.dp))
+                    Text(
+                        text = "Delete trip",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 16.sp, fontWeight = FontWeight.Medium),
+                        color = SpeedRed
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+
+    // Category Selection Bottom Sheet
+    if (tripForCategoryEdit != null) {
+        val trip = tripForCategoryEdit!!
+        val currentCategory = trip.classification
+        AppFloatingBottomSheet(
+            onDismissRequest = { tripForCategoryEdit = null },
+            title = "Edit category",
+            onClose = { tripForCategoryEdit = null }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                val categories = listOf(
+                    TripClassification.BUSINESS.value to "Business",
+                    TripClassification.PERSONAL.value to "Personal"
+                )
+
+                categories.forEach { (catValue, catLabel) ->
+                    val isSelected = currentCategory.equals(catValue, ignoreCase = true)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 54.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (isSelected) SucculentPrimary.copy(alpha = 0.12f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                            )
+                            .clickable {
+                                val isBiz = catValue == TripClassification.BUSINESS.value
+                                val targetEntity = if (isBiz) {
+                                    if (trip.businessEntity.isNotBlank() && trip.businessEntity != BusinessEntity.PERSONAL.displayName) {
+                                        trip.businessEntity
+                                    } else {
+                                        BusinessEntity.MY_SUCCULENT_CORNER.displayName
+                                    }
+                                } else {
+                                    BusinessEntity.PERSONAL.displayName
+                                }
+                                val targetPurpose = if (isBiz) {
+                                    if (trip.purpose.isNotBlank() && trip.purpose != "Personal" && trip.purpose != "Personal Drive") {
+                                        trip.purpose
+                                    } else {
+                                        TripPurpose.NURSERY_PICKUP
+                                    }
+                                } else {
+                                    "Personal Drive"
+                                }
+
+                                viewModel.updateTripDetails(
+                                    tripId = trip.id,
+                                    classification = catValue,
+                                    businessEntity = targetEntity,
+                                    purpose = targetPurpose,
+                                    notes = trip.notes
+                                )
+                                tripForCategoryEdit = null
+                            }
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = catLabel,
+                            style = MaterialTheme.typography.bodyLarge.copy(
+                                fontSize = 16.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            ),
+                            color = if (isSelected) SucculentPrimary else MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        if (isSelected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Selected",
+                                tint = SucculentPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+            }
+        }
+    }
+
+    // Delete Confirmation Dialog
+    if (tripForDeleteConfirm != null) {
+        val trip = tripForDeleteConfirm!!
+        AppConfirmationDialog(
+            onDismissRequest = { tripForDeleteConfirm = null },
+            title = "Delete this trip?",
+            message = "This action cannot be undone. This removes the trip and its route learning from your history.",
+            confirmLabel = "Delete",
+            dismissLabel = "Cancel",
+            onConfirm = {
+                viewModel.deleteTrip(trip.id)
+                tripForDeleteConfirm = null
+            },
+            onDismiss = { tripForDeleteConfirm = null },
+            isDestructive = true
+        )
+    }
 }
 
 @Composable

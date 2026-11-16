@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 187
-        versionName = "1.0.187"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings management cards update: update Business purposes description to '<count> business purposes' and replace chevron arrow button with standalone plus button.\"")
+        versionCode = 188
+        versionName = "1.0.188"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Add long-press actions to Trip History cards for quick category editing and trip deletion.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
