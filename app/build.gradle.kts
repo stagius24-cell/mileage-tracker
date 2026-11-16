@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 171
-        versionName = "1.0.170"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Add native sticky date headers to Trip History.\"")
+        versionCode = 172
+        versionName = "1.0.171"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Keep Trip History search and filters fixed while scrolling date groups.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -251,13 +251,7 @@ fun TripHistoryScreen(
                 val groupByDate = state.sortOrder == SortOrder.NEWEST_FIRST ||
                     state.sortOrder == SortOrder.OLDEST_FIRST
 
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    item(key = "history-controls") {
-                        HistoryControls(
+HistoryControls(
                             state = state,
                             onSearchChange = viewModel::setSearchQuery,
                             onSortChange = viewModel::setSortOrder,
@@ -275,7 +269,13 @@ fun TripHistoryScreen(
                             },
                             onBackToReports = onBackToReports
                         )
-                    }
+
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+
                     if (groupByDate) {
                         state.trips.groupBy { it.date }.forEach { (date, trips) ->
                             stickyHeader(key = "date-$date") {
@@ -634,8 +634,7 @@ private fun DateSectionHeader(date: String, trips: List<TripEntity>) {
     val summaryColor = if (dark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF718096)
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = Modifier.fillMaxWidth()
             .background(if (dark) MaterialTheme.colorScheme.background else Color(0xFFEFF3F9))
             .heightIn(min = 48.dp)
             .padding(vertical = 6.dp),
