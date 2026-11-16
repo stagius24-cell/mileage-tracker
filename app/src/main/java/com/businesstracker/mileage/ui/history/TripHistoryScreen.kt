@@ -38,6 +38,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -264,6 +265,12 @@ fun TripHistoryScreen(
             Color(0xFFEFF3F9)
         }
 
+        val listState = rememberLazyListState()
+
+        LaunchedEffect(state.searchQuery, state.selectedClassificationFilter, state.startDateFilter, state.endDateFilter, state.sortOrder) {
+            listState.scrollToItem(0)
+        }
+
         Column(modifier = Modifier.fillMaxSize().background(pageBg)) {
             if (state.trips.isEmpty()) {
                 HistoryControls(
@@ -283,7 +290,8 @@ fun TripHistoryScreen(
                         }
                     },
                     onBackToReports = onBackToReports,
-                    showTitle = true
+                    showTitle = true,
+                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 8.dp)
                 )
                 EmptyHistory(
                     state = state,
@@ -295,7 +303,20 @@ fun TripHistoryScreen(
                     groupTripsByDisplayedDate(state.trips)
                 }
 
-                HistoryControls(
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    item(key = "history-title") {
+                        HistoryTitle(
+                            onBackToReports = onBackToReports,
+                            modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp)
+                        )
+                    }
+                    item(key = "history-controls") {
+                        HistoryControls(
                             state = state,
                             onSearchChange = viewModel::setSearchQuery,
                             onSortChange = viewModel::setSortOrder,
@@ -312,26 +333,23 @@ fun TripHistoryScreen(
                                 }
                             },
                             onBackToReports = onBackToReports,
-                            showTitle = false
+                            showTitle = false,
+                            modifier = Modifier.padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 4.dp)
                         )
-
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    item(key = "history-title") {
-                        HistoryTitle(onBackToReports)
                     }
-                    dateSections.forEach { (date, trips) ->
-                        stickyHeader(key = "date-$date-${trips.first().id}") {
-                            DateSectionHeader(date = date, trips = trips)
+                    dateSections.forEach { group ->
+                        stickyHeader(key = "date-header-${group.date}-${group.firstTripId}") {
+                            DateSectionHeader(
+                                group = group,
+                                backgroundColor = pageBg
+                            )
                         }
-                        items(trips, key = { it.id }) { trip ->
+                        items(group.trips, key = { it.id }) { trip ->
                             CompactTripHistoryCard(
                                 trip = trip,
                                 smartNames = state.smartNamesMap[trip.id],
-                                onClick = { viewModel.selectTripForDetails(trip) }
+                                onClick = { viewModel.selectTripForDetails(trip) },
+                                modifier = Modifier.padding(horizontal = 16.dp)
                             )
                         }
                     }
@@ -362,7 +380,8 @@ private fun HistoryControls(
     onDateRangeChange: (String, String) -> Unit,
     onMonthChange: (String) -> Unit,
     onBackToReports: (() -> Unit)?,
-    showTitle: Boolean
+    showTitle: Boolean,
+    modifier: Modifier = Modifier
 ) {
     val hasActiveFilter = state.selectedClassificationFilter != "ALL" ||
         state.startDateFilter.isNotBlank() ||
@@ -378,9 +397,7 @@ private fun HistoryControls(
     val secondaryText = if (dark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF718096)
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 8.dp),
+        modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (showTitle) HistoryTitle(onBackToReports)
@@ -602,10 +619,18 @@ private fun HistoryControls(
 }
 
 @Composable
-private fun HistoryTitle(onBackToReports: (() -> Unit)?) {
+private fun HistoryTitle(
+    onBackToReports: (() -> Unit)?,
+    modifier: Modifier = Modifier
+) {
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val primaryText = if (dark) MaterialTheme.colorScheme.onSurface else Color(0xFF192A40)
-    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         if (onBackToReports != null) {
             IconButton(onClick = onBackToReports, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = primaryText, modifier = Modifier.size(24.dp))
@@ -651,37 +676,17 @@ private fun SortFilterPill(
     }
 }
 
-@Composable
-private fun DateSectionHeader(date: String, trips: List<TripEntity>) {
-    val miles = trips.sumOf { it.totalDistanceMiles }
-    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val titleColor = if (dark) MaterialTheme.colorScheme.onSurface else Color(0xFF192A40)
-    val summaryColor = if (dark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF718096)
+internal data class DateGroup(
+    val date: String,
+    val firstTripId: String,
+    val formattedDate: String,
+    val tripCount: Int,
+    val totalMiles: Double,
+    val summaryText: String,
+    val trips: List<TripEntity>
+)
 
-    Row(
-        modifier = Modifier.fillMaxWidth()
-            .background(if (dark) MaterialTheme.colorScheme.background else Color(0xFFEFF3F9))
-            .heightIn(min = 48.dp)
-            .padding(vertical = 6.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = formatHistoryDate(date),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = titleColor
-        )
-        Text(
-            text = "${trips.size} ${if (trips.size == 1) "drive" else "drives"} · ${formatMiles(miles)} mi",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = summaryColor
-        )
-    }
-}
-
-private fun groupTripsByDisplayedDate(trips: List<TripEntity>): List<Pair<String, List<TripEntity>>> {
+internal fun groupTripsByDisplayedDate(trips: List<TripEntity>): List<DateGroup> {
     val groups = mutableListOf<MutableList<TripEntity>>()
     trips.forEach { trip ->
         val currentGroup = groups.lastOrNull()
@@ -691,7 +696,57 @@ private fun groupTripsByDisplayedDate(trips: List<TripEntity>): List<Pair<String
             groups.add(mutableListOf(trip))
         }
     }
-    return groups.map { group -> group.first().date to group.toList() }
+    return groups.map { groupList ->
+        val first = groupList.first()
+        val miles = groupList.sumOf { it.totalDistanceMiles }
+        DateGroup(
+            date = first.date,
+            firstTripId = first.id,
+            formattedDate = formatHistoryDate(first.date),
+            tripCount = groupList.size,
+            totalMiles = miles,
+            summaryText = "${groupList.size} ${if (groupList.size == 1) "drive" else "drives"} · ${formatMiles(miles)} mi",
+            trips = groupList
+        )
+    }
+}
+
+@Composable
+private fun DateSectionHeader(
+    group: DateGroup,
+    backgroundColor: Color
+) {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val titleColor = if (dark) MaterialTheme.colorScheme.onSurface else Color(0xFF192A40)
+    val summaryColor = if (dark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF718096)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(backgroundColor)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .heightIn(min = 48.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = group.formattedDate,
+            style = MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp),
+            fontWeight = FontWeight.SemiBold,
+            color = titleColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = group.summaryText,
+            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp),
+            fontWeight = FontWeight.Medium,
+            color = summaryColor,
+            maxLines = 1
+        )
+    }
 }
 
 @Composable
@@ -794,7 +849,7 @@ private fun formatMiles(miles: Double): String = String.format(Locale.US, "%.1f"
 
 private fun formatCurrency(amount: Double): String = String.format(Locale.US, "$%.2f", amount)
 
-private fun formatHistoryDate(date: String): String {
+internal fun formatHistoryDate(date: String): String {
     return runCatching {
         val parser = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { isLenient = false }
         val formatter = SimpleDateFormat("EEE, MMM d", Locale.getDefault())

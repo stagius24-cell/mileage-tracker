@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 180
-        versionName = "1.0.180"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Redesign Smart Classification settings card with inline mode subtitle, seamless bottom sheet, and non-destructive Disable option.\"")
+        versionCode = 181
+        versionName = "1.0.181"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Smart Sticky Date Headers in Trip History: native Compose sticky headers, bidirectional push-off scrolling, and accurate filtered date group totals.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
