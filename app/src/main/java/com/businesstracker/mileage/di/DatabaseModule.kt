@@ -5,9 +5,11 @@ import androidx.room.Room
 import com.businesstracker.mileage.data.local.ActiveTripDao
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.GpsInboxDao
+import com.businesstracker.mileage.data.local.RoutePatternDao
 import com.businesstracker.mileage.data.local.SavedLocationDao
 import com.businesstracker.mileage.data.local.SavedLocationSyncQueueDao
 import com.businesstracker.mileage.data.local.TripDao
+import com.businesstracker.mileage.data.local.TripLearningRecordDao
 import com.businesstracker.mileage.data.local.TripLifecycleDao
 import com.businesstracker.mileage.data.local.TripSequenceDao
 import dagger.Module
@@ -52,7 +54,14 @@ object DatabaseModule {
             ExpenseTrackerDatabase.MIGRATION_4_7,
             ExpenseTrackerDatabase.MIGRATION_3_7,
             ExpenseTrackerDatabase.MIGRATION_2_7,
-            ExpenseTrackerDatabase.MIGRATION_1_7
+            ExpenseTrackerDatabase.MIGRATION_1_7,
+            ExpenseTrackerDatabase.MIGRATION_7_8,
+            ExpenseTrackerDatabase.MIGRATION_6_8,
+            ExpenseTrackerDatabase.MIGRATION_5_8,
+            ExpenseTrackerDatabase.MIGRATION_4_8,
+            ExpenseTrackerDatabase.MIGRATION_3_8,
+            ExpenseTrackerDatabase.MIGRATION_2_8,
+            ExpenseTrackerDatabase.MIGRATION_1_8
         )
         .build()
     }
@@ -97,5 +106,17 @@ object DatabaseModule {
     @Singleton
     fun provideSavedLocationSyncQueueDao(database: ExpenseTrackerDatabase): SavedLocationSyncQueueDao {
         return database.savedLocationSyncQueueDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideRoutePatternDao(database: ExpenseTrackerDatabase): RoutePatternDao {
+        return database.routePatternDao()
+    }
+
+    @Provides
+    @Singleton
+    fun provideTripLearningRecordDao(database: ExpenseTrackerDatabase): TripLearningRecordDao {
+        return database.tripLearningRecordDao()
     }
 }

@@ -1,9 +1,13 @@
 package com.businesstracker.mileage.data.repository
 
+import androidx.room.withTransaction
+import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.TripDao
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.data.local.model.BusinessEntitySummary
 import com.businesstracker.mileage.data.local.model.ClassificationCount
+import com.businesstracker.mileage.domain.model.ClassificationSource
+import com.businesstracker.mileage.domain.repository.SmartTripRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -15,8 +19,20 @@ import javax.inject.Singleton
 @Singleton
 class TripRepositoryImpl @Inject constructor(
     private val tripDao: TripDao,
+    private val database: ExpenseTrackerDatabase?,
+    private val smartTripRepository: SmartTripRepository?,
     private val ioDispatcher: CoroutineDispatcher
 ) : TripRepository {
+
+    constructor(
+        tripDao: TripDao,
+        ioDispatcher: CoroutineDispatcher
+    ) : this(
+        tripDao = tripDao,
+        database = null,
+        smartTripRepository = null,
+        ioDispatcher = ioDispatcher
+    )
 
     override fun getAllTrips(): Flow<List<TripEntity>> =
         tripDao.getAllTrips().flowOn(ioDispatcher)
@@ -58,7 +74,15 @@ class TripRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteTrip(tripId: String) = withContext(ioDispatcher) {
-        tripDao.deleteTripById(tripId)
+        if (database != null) {
+            database.withTransaction {
+                smartTripRepository?.removeTripLearning(tripId)
+                tripDao.deleteTripById(tripId)
+            }
+        } else {
+            smartTripRepository?.removeTripLearning(tripId)
+            tripDao.deleteTripById(tripId)
+        }
     }
 
     override suspend fun classifyTrip(
@@ -67,8 +91,33 @@ class TripRepositoryImpl @Inject constructor(
         businessEntity: String,
         purpose: String,
         notes: String?
+    ) {
+        classifyTrip(tripId, classification, businessEntity, purpose, notes, ClassificationSource.MANUAL)
+    }
+
+    override suspend fun classifyTrip(
+        tripId: String,
+        classification: String,
+        businessEntity: String,
+        purpose: String,
+        notes: String?,
+        source: ClassificationSource
     ) = withContext(ioDispatcher) {
-        tripDao.classifyTrip(tripId, classification, businessEntity, purpose, notes)
+        if (database != null) {
+            database.withTransaction {
+                tripDao.classifyTrip(tripId, classification, businessEntity, purpose, notes, source.value)
+                val updatedTrip = tripDao.getTripById(tripId)
+                if (updatedTrip != null && smartTripRepository != null) {
+                    smartTripRepository.reconcileTripLearning(updatedTrip, source)
+                }
+            }
+        } else {
+            tripDao.classifyTrip(tripId, classification, businessEntity, purpose, notes, source.value)
+            val updatedTrip = tripDao.getTripById(tripId)
+            if (updatedTrip != null && smartTripRepository != null) {
+                smartTripRepository.reconcileTripLearning(updatedTrip, source)
+            }
+        }
     }
 
     override suspend fun updateTripDetails(
@@ -77,8 +126,33 @@ class TripRepositoryImpl @Inject constructor(
         businessEntity: String,
         purpose: String,
         notes: String?
+    ) {
+        updateTripDetails(tripId, classification, businessEntity, purpose, notes, ClassificationSource.MANUAL)
+    }
+
+    override suspend fun updateTripDetails(
+        tripId: String,
+        classification: String,
+        businessEntity: String,
+        purpose: String,
+        notes: String?,
+        source: ClassificationSource
     ) = withContext(ioDispatcher) {
-        tripDao.updateTripDetails(tripId, classification, businessEntity, purpose, notes)
+        if (database != null) {
+            database.withTransaction {
+                tripDao.updateTripDetails(tripId, classification, businessEntity, purpose, notes, source.value)
+                val updatedTrip = tripDao.getTripById(tripId)
+                if (updatedTrip != null && smartTripRepository != null) {
+                    smartTripRepository.reconcileTripLearning(updatedTrip, source)
+                }
+            }
+        } else {
+            tripDao.updateTripDetails(tripId, classification, businessEntity, purpose, notes, source.value)
+            val updatedTrip = tripDao.getTripById(tripId)
+            if (updatedTrip != null && smartTripRepository != null) {
+                smartTripRepository.reconcileTripLearning(updatedTrip, source)
+            }
+        }
     }
 
     override fun getTripsBySyncStatus(syncStatus: String): Flow<List<TripEntity>> =
@@ -97,5 +171,37 @@ class TripRepositoryImpl @Inject constructor(
 
     override suspend fun markAllClassifiedTripsPending() = withContext(ioDispatcher) {
         tripDao.markAllClassifiedTripsPending()
+    }
+
+    override suspend fun setPendingSuggestion(
+        tripId: String,
+        suggestedClassification: String
+    ): Boolean = withContext(ioDispatcher) {
+        tripDao.setPendingSuggestion(
+            tripId = tripId,
+            suggestedClassification = suggestedClassification,
+            source = ClassificationSource.SMART_SUGGESTED.value
+        ) > 0
+    }
+
+    override suspend fun dismissSuggestion(tripId: String): Boolean = withContext(ioDispatcher) {
+        tripDao.dismissSuggestion(tripId) > 0
+    }
+
+    override suspend fun autoClassifyTrip(
+        tripId: String,
+        classification: String,
+        businessEntity: String,
+        purpose: String,
+        notes: String?
+    ): Boolean = withContext(ioDispatcher) {
+        val rows = if (database != null) {
+            database.withTransaction {
+                tripDao.autoClassifyTrip(tripId, classification, businessEntity, purpose, notes)
+            }
+        } else {
+            tripDao.autoClassifyTrip(tripId, classification, businessEntity, purpose, notes)
+        }
+        rows > 0
     }
 }

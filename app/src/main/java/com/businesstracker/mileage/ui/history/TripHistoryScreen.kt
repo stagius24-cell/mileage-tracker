@@ -88,6 +88,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.SortOrder
+import com.businesstracker.mileage.domain.model.TripPurpose
 import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
 import com.businesstracker.mileage.ui.theme.SlateNeutral
 import com.businesstracker.mileage.ui.theme.SpeedRed
@@ -112,12 +113,20 @@ fun TripHistoryScreen(
     initialCategory: String = "",
     initialStartDate: String = "",
     initialEndDate: String = "",
+    initialSelectedTripId: String = "",
+    initialOpenConfirmation: Boolean = false,
     onBackToReports: (() -> Unit)? = null,
     onNavigateToSavedLocations: ((String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(initialSelectedTripId) {
+        if (initialSelectedTripId.isNotBlank()) {
+            viewModel.selectTripById(initialSelectedTripId, initialOpenConfirmation)
+        }
+    }
 
     LaunchedEffect(state.recentlyDeletedTrip) {
         val deleted = state.recentlyDeletedTrip
@@ -210,9 +219,42 @@ fun TripHistoryScreen(
             onNavigateToSavedLocations = { locationId ->
                 viewModel.selectTripForDetails(null)
                 onNavigateToSavedLocations?.invoke(locationId)
-            }
+            },
+            onConfirmSmartSuggestion = viewModel::confirmSmartSuggestion,
+            onDismissSmartSuggestion = viewModel::dismissSmartSuggestion
         )
         return
+    }
+
+    if (state.selectedTripForConfirmationSheet != null) {
+        val sheetTrip = state.selectedTripForConfirmationSheet!!
+        com.businesstracker.mileage.ui.smart.SmartClassificationConfirmationSheet(
+            tripId = sheetTrip.id,
+            startAddress = sheetTrip.startAddress,
+            endAddress = sheetTrip.endAddress,
+            suggestedCategory = sheetTrip.suggestedClassification ?: "BUSINESS",
+            confirmedCount = 5,
+            suggestedEntity = sheetTrip.businessEntity.takeIf { sheetTrip.suggestedClassification == "BUSINESS" },
+            suggestedPurpose = sheetTrip.purpose.takeIf { sheetTrip.suggestedClassification == "BUSINESS" },
+            onConfirm = { cat, ent, pur ->
+                viewModel.confirmSmartSuggestion(sheetTrip.id, cat, ent, pur)
+                viewModel.dismissConfirmationSheet()
+            },
+            onChooseOpposite = { opp ->
+                val isBiz = opp.equals("BUSINESS", ignoreCase = true)
+                viewModel.updateTripDetails(
+                    sheetTrip.id,
+                    opp,
+                    if (isBiz) BusinessEntity.MY_SUCCULENT_CORNER.displayName else BusinessEntity.PERSONAL.displayName,
+                    if (isBiz) TripPurpose.NURSERY_PICKUP else "Personal Drive",
+                    sheetTrip.notes
+                )
+                viewModel.dismissConfirmationSheet()
+            },
+            onDismiss = {
+                viewModel.dismissConfirmationSheet()
+            }
+        )
     }
 
     Box(modifier = modifier.fillMaxSize()) {

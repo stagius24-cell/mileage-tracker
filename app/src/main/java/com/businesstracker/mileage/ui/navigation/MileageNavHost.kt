@@ -53,7 +53,7 @@ fun MileageNavHost(
             TrackTripScreen()
         }
         composable(
-            route = "${Screen.History.route}?month={month}&category={category}&startDate={startDate}&endDate={endDate}",
+            route = "${Screen.History.route}?month={month}&category={category}&startDate={startDate}&endDate={endDate}&selectedTripId={selectedTripId}&openConfirmation={openConfirmation}",
             arguments = listOf(
                 navArgument("month") {
                     type = NavType.StringType
@@ -70,6 +70,14 @@ fun MileageNavHost(
                 navArgument("endDate") {
                     type = NavType.StringType
                     defaultValue = ""
+                },
+                navArgument("selectedTripId") {
+                    type = NavType.StringType
+                    defaultValue = ""
+                },
+                navArgument("openConfirmation") {
+                    type = NavType.BoolType
+                    defaultValue = false
                 }
             )
         ) { backStackEntry ->
@@ -77,12 +85,16 @@ fun MileageNavHost(
             val category = backStackEntry.arguments?.getString("category").orEmpty()
             val startDate = backStackEntry.arguments?.getString("startDate").orEmpty()
             val endDate = backStackEntry.arguments?.getString("endDate").orEmpty()
-            val hasNavigatedFilter = monthIso.isNotBlank() || category.isNotBlank() || startDate.isNotBlank() || endDate.isNotBlank()
+            val selectedTripId = backStackEntry.arguments?.getString("selectedTripId").orEmpty()
+            val openConfirmation = backStackEntry.arguments?.getBoolean("openConfirmation") ?: false
+            val hasNavigatedFilter = monthIso.isNotBlank() || category.isNotBlank() || startDate.isNotBlank() || endDate.isNotBlank() || selectedTripId.isNotBlank()
             TripHistoryScreen(
                 initialMonthIso = monthIso,
                 initialCategory = category,
                 initialStartDate = startDate,
                 initialEndDate = endDate,
+                initialSelectedTripId = selectedTripId,
+                initialOpenConfirmation = openConfirmation,
                 onNavigateToSavedLocations = { locationId ->
                     navController.navigate("${Screen.Settings.route}?editLocationId=${Uri.encode(locationId)}") {
                         launchSingleTop = true

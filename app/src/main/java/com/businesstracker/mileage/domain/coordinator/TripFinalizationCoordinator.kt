@@ -38,9 +38,12 @@ class TripFinalizationCoordinator @Inject constructor(
     private val rateCalculator: CalculateMileageRateUseCase,
     private val preferencesManager: TrackingPreferencesManager,
     private val gson: Gson,
-    private val ioDispatcher: CoroutineDispatcher
+    private val ioDispatcher: CoroutineDispatcher,
+    private val smartClassificationCoordinator: SmartClassificationCoordinator? = null
 ) {
     private val finalizationMutex = Mutex()
+
+    fun isSmartRecognitionAttached(): Boolean = smartClassificationCoordinator != null
 
     companion object {
         private const val METERS_PER_MILE = 1609.344
@@ -192,7 +195,17 @@ class TripFinalizationCoordinator @Inject constructor(
                 notes = null,
                 waypointsJson = waypointsJson,
                 syncStatus = "PENDING",
-                syncedAt = null
+                syncedAt = null,
+                classificationSource = if (isPersonalDrive) {
+                    com.businesstracker.mileage.domain.model.ClassificationSource.AUTO_CLASSIFIED.value
+                } else {
+                    com.businesstracker.mileage.domain.model.ClassificationSource.UNCLASSIFIED.value
+                },
+                suggestedClassification = if (isPersonalDrive) {
+                    com.businesstracker.mileage.domain.model.TripClassification.PERSONAL.value
+                } else {
+                    null
+                }
             )
 
             // 7. Atomic database transaction: persists trip, marks lifecycle FINALIZED,
@@ -209,7 +222,11 @@ class TripFinalizationCoordinator @Inject constructor(
             }
 
             preferencesManager.clearActiveTripId(activeTrip.id)
-            tripEntity
+
+            // 8. Invoke Smart Classification Coordinator outside Room transaction
+            smartClassificationCoordinator?.processFinalizedTrip(tripId)
+
+            tripRepository.getTripById(tripId) ?: tripEntity
         }
     }
 

@@ -148,7 +148,8 @@ interface TripDao {
             businessMiles = CASE WHEN :classification = 'BUSINESS' THEN totalDistanceMiles ELSE 0.0 END,
             calculatedDeduction = CASE WHEN :classification = 'BUSINESS' THEN totalDistanceMiles * applicableRate ELSE 0.0 END,
             notes = :notes,
-            syncStatus = 'PENDING'
+            syncStatus = 'PENDING',
+            classificationSource = :classificationSource
         WHERE id = :tripId
     """)
     suspend fun classifyTrip(
@@ -156,7 +157,8 @@ interface TripDao {
         classification: String,
         businessEntity: String,
         purpose: String,
-        notes: String?
+        notes: String?,
+        classificationSource: String = "MANUAL"
     )
 
     @Query("""
@@ -167,7 +169,8 @@ interface TripDao {
             businessMiles = CASE WHEN :classification = 'BUSINESS' THEN totalDistanceMiles ELSE 0.0 END,
             calculatedDeduction = CASE WHEN :classification = 'BUSINESS' THEN totalDistanceMiles * applicableRate ELSE 0.0 END,
             notes = :notes,
-            syncStatus = 'PENDING'
+            syncStatus = 'PENDING',
+            classificationSource = :classificationSource
         WHERE id = :tripId
     """)
     suspend fun updateTripDetails(
@@ -175,6 +178,46 @@ interface TripDao {
         classification: String,
         businessEntity: String,
         purpose: String,
-        notes: String?
+        notes: String?,
+        classificationSource: String = "MANUAL"
     )
+
+    @Query("""
+        UPDATE trips 
+        SET suggestedClassification = :suggestedClassification, 
+            classificationSource = :source 
+        WHERE id = :tripId AND classification = 'UNREVIEWED' AND classificationSource != 'MANUAL'
+    """)
+    suspend fun setPendingSuggestion(
+        tripId: String,
+        suggestedClassification: String,
+        source: String = "SMART_SUGGESTED"
+    ): Int
+
+    @Query("""
+        UPDATE trips 
+        SET suggestedClassification = 'DISMISSED' 
+        WHERE id = :tripId
+    """)
+    suspend fun dismissSuggestion(tripId: String): Int
+
+    @Query("""
+        UPDATE trips 
+        SET classification = :classification, 
+            businessEntity = :businessEntity, 
+            purpose = :purpose, 
+            businessMiles = CASE WHEN :classification = 'BUSINESS' THEN totalDistanceMiles ELSE 0.0 END,
+            calculatedDeduction = CASE WHEN :classification = 'BUSINESS' THEN totalDistanceMiles * applicableRate ELSE 0.0 END,
+            notes = :notes,
+            syncStatus = 'PENDING',
+            classificationSource = 'SMART_AUTO'
+        WHERE id = :tripId AND classification = 'UNREVIEWED' AND classificationSource != 'MANUAL'
+    """)
+    suspend fun autoClassifyTrip(
+        tripId: String,
+        classification: String,
+        businessEntity: String,
+        purpose: String,
+        notes: String?
+    ): Int
 }

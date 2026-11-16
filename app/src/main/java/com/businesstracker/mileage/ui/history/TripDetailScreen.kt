@@ -131,7 +131,9 @@ fun TripDetailScreen(
     customPurposes: List<String> = emptyList(),
     smartNames: com.businesstracker.mileage.domain.usecase.SmartTripNames? = null,
     onSaveLocation: ((name: String, lat: Double, lng: Double, address: String, radius: Int, icon: String, pref: String?, entity: String?, onSuccess: (String) -> Unit, onError: (String) -> Unit) -> Unit)? = null,
-    onNavigateToSavedLocations: ((String) -> Unit)? = null
+    onNavigateToSavedLocations: ((String) -> Unit)? = null,
+    onConfirmSmartSuggestion: ((tripId: String, category: String, entity: String?, purpose: String?) -> Unit)? = null,
+    onDismissSmartSuggestion: ((tripId: String) -> Unit)? = null
 ) {
     var showEditSheet by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -226,10 +228,58 @@ fun TripDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Classification Suggestion Card for Unreviewed Trips
+            // Smart Auto-Classified Indicator or Smart Suggestion Card
             val isUnreviewed = trip.classification == TripClassification.UNREVIEWED.value
-            val suggestedClassification = smartNames?.suggestedClassification
-            if (isUnreviewed && suggestedClassification != null && !suggestionDismissed) {
+            val isSmartAuto = trip.classificationSource == com.businesstracker.mileage.domain.model.ClassificationSource.SMART_AUTO.value
+            val hasSmartSuggestion = isUnreviewed && (trip.suggestedClassification == "BUSINESS" || trip.suggestedClassification == "PERSONAL") && !suggestionDismissed
+
+            if (isSmartAuto) {
+                com.businesstracker.mileage.ui.smart.SmartAutoClassifiedIndicator(
+                    classification = trip.classification,
+                    onEditClassification = { showEditSheet = true }
+                )
+            } else if (hasSmartSuggestion) {
+                com.businesstracker.mileage.ui.smart.SmartTripSuggestionCard(
+                    suggestedCategory = trip.suggestedClassification!!,
+                    confirmedCount = 5,
+                    suggestedEntity = if (trip.suggestedClassification == "BUSINESS") trip.businessEntity else null,
+                    suggestedPurpose = if (trip.suggestedClassification == "BUSINESS") trip.purpose else null,
+                    onConfirm = {
+                        suggestionDismissed = true
+                        onConfirmSmartSuggestion?.invoke(
+                            trip.id,
+                            trip.suggestedClassification!!,
+                            if (trip.suggestedClassification == "BUSINESS") trip.businessEntity else null,
+                            if (trip.suggestedClassification == "BUSINESS") trip.purpose else null
+                        ) ?: onSaveTrip(
+                            trip.id,
+                            trip.suggestedClassification!!,
+                            if (trip.suggestedClassification == "BUSINESS") trip.businessEntity else BusinessEntity.PERSONAL.displayName,
+                            if (trip.suggestedClassification == "BUSINESS") trip.purpose else "Personal Drive",
+                            trip.notes,
+                            null,
+                            null
+                        )
+                    },
+                    onChangeToOpposite = { oppCategory ->
+                        val isBiz = oppCategory.equals("BUSINESS", ignoreCase = true)
+                        onSaveTrip(
+                            trip.id,
+                            oppCategory,
+                            if (isBiz) BusinessEntity.MY_SUCCULENT_CORNER.displayName else BusinessEntity.PERSONAL.displayName,
+                            if (isBiz) TripPurpose.NURSERY_PICKUP else "Personal Drive",
+                            trip.notes,
+                            null,
+                            null
+                        )
+                    },
+                    onDismiss = {
+                        suggestionDismissed = true
+                        onDismissSmartSuggestion?.invoke(trip.id)
+                    }
+                )
+            } else if (isUnreviewed && smartNames?.suggestedClassification != null && !suggestionDismissed) {
+                val suggestedClassification = smartNames.suggestedClassification
                 val isBizSuggestion = suggestedClassification.equals("BUSINESS", ignoreCase = true)
                 val targetEntity = if (isBizSuggestion) {
                     smartNames.suggestedBusinessEntity ?: trip.businessEntity.ifEmpty { BusinessEntity.MY_SUCCULENT_CORNER.displayName }

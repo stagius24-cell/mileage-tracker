@@ -52,6 +52,10 @@ class MainActivity : ComponentActivity() {
         internal set
     var showBackgroundSettingsDialog by mutableStateOf(false)
         internal set
+    var pendingNotificationTripId by mutableStateOf<String?>(null)
+        internal set
+    var pendingOpenConfirmation by mutableStateOf(false)
+        internal set
 
     private val backgroundLocationLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -85,6 +89,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleNotificationIntent(intent)
         requestRequiredPermissions()
         checkAndRegisterTransitions()
 
@@ -94,6 +99,17 @@ class MainActivity : ComponentActivity() {
             )
             BusinessMileageTrackerTheme(themeMode = themeMode) {
                 val navController = rememberNavController()
+
+                androidx.compose.runtime.LaunchedEffect(pendingNotificationTripId) {
+                    val tripId = pendingNotificationTripId
+                    if (!tripId.isNullOrBlank()) {
+                        val encodedId = android.net.Uri.encode(tripId)
+                        navController.navigate("${com.businesstracker.mileage.ui.navigation.Screen.History.route}?selectedTripId=$encodedId&openConfirmation=$pendingOpenConfirmation") {
+                            launchSingleTop = true
+                        }
+                        pendingNotificationTripId = null
+                    }
+                }
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
@@ -132,6 +148,24 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         checkAndRegisterTransitions()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNotificationIntent(intent)
+    }
+
+    private fun handleNotificationIntent(intent: Intent?) {
+        val tripId = intent?.getStringExtra("EXTRA_TRIP_ID")
+            ?: intent?.getStringExtra(com.businesstracker.mileage.service.NotificationHelper.EXTRA_TRIP_ID)
+        if (!tripId.isNullOrBlank()) {
+            pendingNotificationTripId = tripId
+            pendingOpenConfirmation = intent?.getBooleanExtra(
+                com.businesstracker.mileage.service.NotificationHelper.EXTRA_OPEN_CONFIRMATION,
+                false
+            ) ?: false
+        }
     }
 
     private fun checkAndRegisterTransitions() {

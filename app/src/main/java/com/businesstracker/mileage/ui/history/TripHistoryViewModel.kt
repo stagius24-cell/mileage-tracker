@@ -5,10 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.local.entity.SavedLocationEntity
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
+import com.businesstracker.mileage.domain.model.ClassificationSource
 import com.businesstracker.mileage.domain.model.SortOrder
 import com.businesstracker.mileage.domain.model.TripClassification
+import com.businesstracker.mileage.domain.model.TripPurpose
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.flowOf
 import com.businesstracker.mileage.domain.repository.SavedLocationRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
@@ -46,6 +49,7 @@ data class TripHistoryUiState(
     val endDateFilter: String = "",
     val sortOrder: SortOrder = SortOrder.NEWEST_FIRST,
     val selectedTripForDetails: TripEntity? = null,
+    val selectedTripForConfirmationSheet: TripEntity? = null,
     val customPurposes: List<String> = emptyList(),
     val recentlyDeletedTrip: TripEntity? = null,
     val restoreFailedTrip: TripEntity? = null,
@@ -70,6 +74,7 @@ class TripHistoryViewModel @Inject constructor(
     private val _endDateFilter = MutableStateFlow("")
     private val _sortOrder = MutableStateFlow(SortOrder.NEWEST_FIRST)
     private val _selectedTripForDetails = MutableStateFlow<TripEntity?>(null)
+    private val _selectedTripForConfirmationSheet = MutableStateFlow<TripEntity?>(null)
     private val _recentlyDeletedTrips = MutableStateFlow<List<TripEntity>>(emptyList())
     private val _restoreFailedTrip = MutableStateFlow<TripEntity?>(null)
     private val _isRestoring = MutableStateFlow(false)
@@ -92,14 +97,17 @@ class TripHistoryViewModel @Inject constructor(
             _startDateFilter,
             _endDateFilter,
             _sortOrder,
-            _selectedTripForDetails
-        ) { syncStatus, start, end, sort, selectedTrip ->
+            combine(_selectedTripForDetails, _selectedTripForConfirmationSheet) { details, sheet ->
+                Pair(details, sheet)
+            }
+        ) { syncStatus, start, end, sort, (selectedTrip, sheetTrip) ->
             FilterStatePart2(
                 syncStatus = syncStatus,
                 startDate = start,
                 endDate = end,
                 sortOrder = sort,
                 selectedTrip = selectedTrip,
+                selectedTripForConfirmationSheet = sheetTrip,
                 customPurposes = emptyList()
             )
         }
@@ -193,6 +201,7 @@ class TripHistoryViewModel @Inject constructor(
             endDateFilter = part2.endDate,
             sortOrder = part2.sortOrder,
             selectedTripForDetails = part2.selectedTrip,
+            selectedTripForConfirmationSheet = part2.selectedTripForConfirmationSheet,
             customPurposes = part2.customPurposes,
             recentlyDeletedTrip = undoState.recentlyDeleted,
             restoreFailedTrip = undoState.restoreFailed,
@@ -234,6 +243,78 @@ class TripHistoryViewModel @Inject constructor(
         _selectedTripForDetails.value = trip
     }
 
+    fun selectTripForConfirmationSheet(trip: TripEntity?) {
+        _selectedTripForConfirmationSheet.value = trip
+    }
+
+    fun dismissConfirmationSheet() {
+        _selectedTripForConfirmationSheet.value = null
+    }
+
+    fun selectTripById(tripId: String, openConfirmation: Boolean = false): Job =
+        viewModelScope.launch {
+            val trip = tripRepository.getTripById(tripId)
+            if (trip != null) {
+                _selectedTripForDetails.value = trip
+                if (openConfirmation && (trip.suggestedClassification == "BUSINESS" || trip.suggestedClassification == "PERSONAL")) {
+                    _selectedTripForConfirmationSheet.value = trip
+                }
+            }
+        }
+
+    fun confirmSmartSuggestion(
+        tripId: String,
+        category: String,
+        entity: String? = null,
+        purpose: String? = null
+    ): Job = viewModelScope.launch {
+        try {
+            val currentTrip = tripRepository.getTripById(tripId)
+            if (currentTrip == null) return@launch
+            val isBiz = category.equals("BUSINESS", ignoreCase = true)
+            val targetEntity = entity?.takeIf { it.isNotBlank() }
+                ?: if (isBiz) BusinessEntity.MY_SUCCULENT_CORNER.displayName else BusinessEntity.PERSONAL.displayName
+            val targetPurpose = purpose?.takeIf { it.isNotBlank() }
+                ?: if (isBiz) TripPurpose.NURSERY_PICKUP else "Personal Drive"
+
+            tripRepository.classifyTrip(
+                tripId = tripId,
+                classification = if (isBiz) TripClassification.BUSINESS.value else TripClassification.PERSONAL.value,
+                businessEntity = targetEntity,
+                purpose = targetPurpose,
+                notes = currentTrip.notes,
+                source = ClassificationSource.SUGGESTED_CONFIRMED
+            )
+
+            val updated = tripRepository.getTripById(tripId)
+            if (_selectedTripForDetails.value?.id == tripId) {
+                _selectedTripForDetails.value = updated
+            }
+            if (_selectedTripForConfirmationSheet.value?.id == tripId) {
+                _selectedTripForConfirmationSheet.value = null
+            }
+            context?.let { GoogleSheetsSyncWorker.enqueueOneTimeSync(it) }
+        } catch (e: Exception) {
+            android.util.Log.e("TripHistoryViewModel", "Failed to confirm suggestion: ${e.message}", e)
+            _actionErrorMessage.value = "Failed to confirm trip classification."
+        }
+    }
+
+    fun dismissSmartSuggestion(tripId: String): Job = viewModelScope.launch {
+        try {
+            tripRepository.dismissSuggestion(tripId)
+            val updated = tripRepository.getTripById(tripId)
+            if (_selectedTripForDetails.value?.id == tripId) {
+                _selectedTripForDetails.value = updated
+            }
+            if (_selectedTripForConfirmationSheet.value?.id == tripId) {
+                _selectedTripForConfirmationSheet.value = null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("TripHistoryViewModel", "Failed to dismiss suggestion: ${e.message}", e)
+        }
+    }
+
     fun updateTripDetails(
         tripId: String,
         classification: String,
@@ -242,8 +323,7 @@ class TripHistoryViewModel @Inject constructor(
         notes: String?,
         onError: ((String) -> Unit)? = null,
         onSuccess: (() -> Unit)? = null
-    ) {
-        viewModelScope.launch {
+    ): Job = viewModelScope.launch {
             try {
                 tripRepository.updateTripDetails(
                     tripId = tripId,
@@ -266,7 +346,6 @@ class TripHistoryViewModel @Inject constructor(
                 onError?.invoke(msg)
             }
         }
-    }
 
     fun clearAllFilters() {
         _searchQuery.value = ""
@@ -425,6 +504,7 @@ class TripHistoryViewModel @Inject constructor(
         val endDate: String,
         val sortOrder: SortOrder,
         val selectedTrip: TripEntity?,
+        val selectedTripForConfirmationSheet: TripEntity? = null,
         val customPurposes: List<String> = emptyList()
     )
 }

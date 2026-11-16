@@ -474,4 +474,85 @@ class DatabaseMigrationTest {
         cursor.close()
         db.close()
     }
+
+    @Test
+    fun migrate7To8_preservesExistingData_andCreatesSmartRecognitionTables() {
+        var db = helper.createDatabase(TEST_DB, 7).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v7-to-v8', '2026-11-14', 1000, 2000, 37.3382, -121.8863, 37.3521, -121.8901, 7.5, 7.5, 'MySucculentCorner', 'Delivery', 'AUTO_DETECTED', 'BUSINESS', 0.67, 5.025, '[]', 'PENDING')
+            """.trimIndent())
+            execSQL("""
+                INSERT INTO saved_locations (id, name, latitude, longitude, address, radiusMeters, icon, classificationPreference, businessEntity, createdAt, updatedAt)
+                VALUES ('loc-v7', 'Farm Stand', 37.3382, -121.8863, '500 Blossom Hill Rd', 250, 'place', 'BUSINESS', 'MySucculentCorner', 1000, 1500)
+            """.trimIndent())
+            execSQL("""
+                INSERT INTO saved_location_sync_queue (locationId, operation, updatedAt)
+                VALUES ('loc-v7', 'UPSERT', 2000)
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 8, true, ExpenseTrackerDatabase.MIGRATION_7_8)
+
+        // 1. Verify existing trip is preserved with new default columns
+        val tripCursor = db.query("SELECT id, totalDistanceMiles, syncStatus, classificationSource, suggestedClassification FROM trips WHERE id = 'trip-v7-to-v8'")
+        assertTrue(tripCursor.moveToFirst())
+        assertEquals("trip-v7-to-v8", tripCursor.getString(0))
+        assertEquals(7.5, tripCursor.getDouble(1), 0.001)
+        assertEquals("PENDING", tripCursor.getString(2))
+        assertEquals("UNCLASSIFIED", tripCursor.getString(3))
+        assertTrue("suggestedClassification must default to null", tripCursor.isNull(4))
+        tripCursor.close()
+
+        // 2. Verify route_patterns table is created and operational
+        db.execSQL("""
+            INSERT INTO route_patterns (id, startLatitude, startLongitude, startRadiusMeters, endLatitude, endLongitude, endRadiusMeters, startAddress, endAddress, classification, businessEntity, purpose, sampleCount, confidence, lastLearnedAt, createdAt)
+            VALUES ('pat-v8', 37.3382, -121.8863, 250.0, 37.3521, -121.8901, 250.0, '100 Main St', '200 Market St', 'BUSINESS', 'MySucculentCorner', 'Delivery', 1, 0.6, 3000, 3000)
+        """.trimIndent())
+        val patternCursor = db.query("SELECT id, classification, businessEntity, sampleCount, confidence FROM route_patterns WHERE id = 'pat-v8'")
+        assertTrue(patternCursor.moveToFirst())
+        assertEquals("pat-v8", patternCursor.getString(0))
+        assertEquals("BUSINESS", patternCursor.getString(1))
+        assertEquals("MySucculentCorner", patternCursor.getString(2))
+        assertEquals(1, patternCursor.getInt(3))
+        assertEquals(0.6, patternCursor.getDouble(4), 0.001)
+        patternCursor.close()
+
+        // 3. Verify trip_learning_records table is created and operational
+        db.execSQL("""
+            INSERT INTO trip_learning_records (tripId, eligible, classificationSource, confirmedCategory, businessEntity, purpose, startLatitude, startLongitude, endLatitude, endLongitude, patternId, learnedAt, createdAt)
+            VALUES ('trip-v7-to-v8', 1, 'MANUAL', 'BUSINESS', 'MySucculentCorner', 'Delivery', 37.3382, -121.8863, 37.3521, -121.8901, 'pat-v8', 3500, 3500)
+        """.trimIndent())
+        val recordCursor = db.query("SELECT tripId, eligible, classificationSource, patternId FROM trip_learning_records WHERE tripId = 'trip-v7-to-v8'")
+        assertTrue(recordCursor.moveToFirst())
+        assertEquals("trip-v7-to-v8", recordCursor.getString(0))
+        assertEquals(1, recordCursor.getInt(1))
+        assertEquals("MANUAL", recordCursor.getString(2))
+        assertEquals("pat-v8", recordCursor.getString(3))
+        recordCursor.close()
+
+        db.close()
+    }
+
+    @Test
+    fun migrate1To8_compositeMigration_preservesAllData() {
+        var db = helper.createDatabase(TEST_DB, 1).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus)
+                VALUES ('trip-v1-to-v8', '2026-11-08', 1000, 2000, 37.33, -121.88, 37.35, -121.89, 21.0, 21.0, 'MySucculentCorner', 'Pickup', 'AUTO_DETECTED', 'BUSINESS', 0.67, 14.07, '[]', 'PENDING')
+            """.trimIndent())
+            close()
+        }
+
+        db = helper.runMigrationsAndValidate(TEST_DB, 8, true, ExpenseTrackerDatabase.MIGRATION_1_8)
+
+        val cursor = db.query("SELECT id, totalDistanceMiles, classificationSource FROM trips WHERE id = 'trip-v1-to-v8'")
+        assertTrue(cursor.moveToFirst())
+        assertEquals("trip-v1-to-v8", cursor.getString(0))
+        assertEquals(21.0, cursor.getDouble(1), 0.001)
+        assertEquals("UNCLASSIFIED", cursor.getString(2))
+        cursor.close()
+        db.close()
+    }
 }

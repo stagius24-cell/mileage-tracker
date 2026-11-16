@@ -23,6 +23,7 @@ import com.businesstracker.mileage.data.remote.SheetsSyncResult
 import com.businesstracker.mileage.data.remote.toMessage
 import com.businesstracker.mileage.data.security.SecureStorageManager
 import com.businesstracker.mileage.domain.model.AppThemeMode
+import com.businesstracker.mileage.domain.model.SmartClassificationMode
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.worker.GoogleSheetsSyncWorker
@@ -50,6 +51,8 @@ data class SettingsUiState(
     val workHoursStart: String = "08:00",
     val workHoursEnd: String = "18:00",
     val outsideScheduleBehavior: String = TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL,
+    val isSmartTripRecognitionEnabled: Boolean = true,
+    val smartClassificationMode: SmartClassificationMode = SmartClassificationMode.ALWAYS_ASK,
     val cfEndpoint: String = TrackingPreferencesManager.DEFAULT_CF_ENDPOINT,
     val cfClientId: String = "",
     val cfClientSecret: String = "",
@@ -134,7 +137,9 @@ private data class GeneralPrefs(
     val autoTrackingEnabled: Boolean,
     val defaultVehicle: String,
     val themeMode: AppThemeMode,
-    val customPurposes: List<String> = emptyList()
+    val customPurposes: List<String> = emptyList(),
+    val smartTripRecognitionEnabled: Boolean = true,
+    val smartClassificationMode: SmartClassificationMode = SmartClassificationMode.ALWAYS_ASK
 )
 
 private data class BluetoothPrefs(
@@ -217,13 +222,19 @@ class SettingsViewModel @Inject constructor(
     private val _unifiedBackupMessage = MutableStateFlow<String?>(null)
     private val _unifiedBackupError = MutableStateFlow<String?>(null)
 
+    private val smartFlow = combine(
+        preferencesManager.isSmartTripRecognitionEnabled,
+        preferencesManager.smartClassificationMode
+    ) { enabled, mode -> Pair(enabled, mode) }
+
     private val generalFlow = combine(
         preferencesManager.isAutoTrackingEnabled,
         preferencesManager.defaultVehicle,
         preferencesManager.appThemeMode,
-        preferencesManager.customPurposes
-    ) { autoTrack, vehicle, themeMode, customPurposes ->
-        GeneralPrefs(autoTrack, vehicle, themeMode, customPurposes)
+        preferencesManager.customPurposes,
+        smartFlow
+    ) { autoTrack, vehicle, themeMode, customPurposes, (smartEnabled, smartMode) ->
+        GeneralPrefs(autoTrack, vehicle, themeMode, customPurposes, smartEnabled, smartMode)
     }
 
     private val _workHoursStartInput = MutableStateFlow<String?>(null)
@@ -415,6 +426,8 @@ class SettingsViewModel @Inject constructor(
                 workHoursStart = config.schedule.startTime,
                 workHoursEnd = config.schedule.endTime,
                 outsideScheduleBehavior = config.schedule.behavior,
+                isSmartTripRecognitionEnabled = config.general.smartTripRecognitionEnabled,
+                smartClassificationMode = config.general.smartClassificationMode,
                 defaultVehicle = config.general.defaultVehicle,
                 bluetoothAutoStopEnabled = config.bluetooth.enabled,
                 vehicleBluetoothAddress = config.bluetooth.address,
@@ -494,6 +507,18 @@ class SettingsViewModel @Inject constructor(
     fun setScheduleFilteringEnabled(enabled: Boolean) {
         viewModelScope.launch {
             preferencesManager.setScheduleFilteringEnabled(enabled)
+        }
+    }
+
+    fun setSmartTripRecognitionEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setSmartTripRecognitionEnabled(enabled)
+        }
+    }
+
+    fun setSmartClassificationMode(mode: SmartClassificationMode) {
+        viewModelScope.launch {
+            preferencesManager.setSmartClassificationMode(mode)
         }
     }
 

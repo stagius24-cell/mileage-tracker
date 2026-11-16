@@ -1144,12 +1144,14 @@ class LocationTrackingService : Service() {
                 // 5. Finalize trip using single-owner idempotent coordinator
                 if (currentTripId.isNotEmpty()) {
                     val finalizedTrip = tripFinalizationCoordinator.finalizeTrip(currentTripId, trackingMethod)
-                    finalizedTrip?.let { trip ->
-                        if (trip.classification == com.businesstracker.mileage.domain.model.TripClassification.UNREVIEWED.value) {
-                            notificationHelper.showTripDetectedNotification(trip.id, trip.totalDistanceMiles)
-                        } else {
-                            // Auto-classified trip (e.g. from Saved Location), sync immediately to Google Sheets
-                            GoogleSheetsSyncWorker.enqueueOneTimeSync(applicationContext)
+                    if (!tripFinalizationCoordinator.isSmartRecognitionAttached()) {
+                        finalizedTrip?.let { trip ->
+                            if (trip.classification == com.businesstracker.mileage.domain.model.TripClassification.UNREVIEWED.value) {
+                                notificationHelper.showTripDetectedNotification(trip.id, trip.totalDistanceMiles)
+                            } else {
+                                // Auto-classified trip (e.g. from Saved Location), sync immediately to Google Sheets
+                                GoogleSheetsSyncWorker.enqueueOneTimeSync(applicationContext)
+                            }
                         }
                     }
                     if (currentTripId == tripIdAtCall) {

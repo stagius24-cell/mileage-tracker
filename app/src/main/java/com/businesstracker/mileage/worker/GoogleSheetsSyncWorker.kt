@@ -34,24 +34,28 @@ class GoogleSheetsSyncWorker @AssistedInject constructor(
         const val UNIQUE_SHEETS_PERIODIC = "google_sheets_sync_periodic"
 
         fun enqueueOneTimeSync(context: Context) {
-            val constraints = Constraints.Builder()
-                .setRequiredNetworkType(NetworkType.CONNECTED)
-                .build()
+            try {
+                val constraints = Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
 
-            val syncRequest = OneTimeWorkRequestBuilder<GoogleSheetsSyncWorker>()
-                .setConstraints(constraints)
-                .setBackoffCriteria(
-                    BackoffPolicy.EXPONENTIAL,
-                    15,
-                    TimeUnit.SECONDS
+                val syncRequest = OneTimeWorkRequestBuilder<GoogleSheetsSyncWorker>()
+                    .setConstraints(constraints)
+                    .setBackoffCriteria(
+                        BackoffPolicy.EXPONENTIAL,
+                        15,
+                        TimeUnit.SECONDS
+                    )
+                    .build()
+
+                WorkManager.getInstance(context).enqueueUniqueWork(
+                    UNIQUE_SHEETS_ONE_TIME,
+                    ExistingWorkPolicy.REPLACE,
+                    syncRequest
                 )
-                .build()
-
-            WorkManager.getInstance(context).enqueueUniqueWork(
-                UNIQUE_SHEETS_ONE_TIME,
-                ExistingWorkPolicy.REPLACE,
-                syncRequest
-            )
+            } catch (e: Exception) {
+                android.util.Log.w("GoogleSheetsSyncWorker", "WorkManager enqueue failed: ${e.message}")
+            }
         }
 
         fun enqueuePeriodicSync(context: Context) {
