@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 185
-        versionName = "1.0.185"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip details redesign: 20% shorter Route/More Info capsule tabs with matching radius, white circular map close button with gray X, abbreviated street and 2-letter state addresses, and 3-column stats card with date/miles/potential icons and vertical dividers.\"")
+        versionCode = 186
+        versionName = "1.0.186"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Settings schedule layout update: formats schedule subtitle onto two lines when 2 or more days are selected to prevent text overflow.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -7,7 +7,7 @@ class WorkScheduleSummaryTest {
     @Test
     fun weekdaySchedule_usesSavedDaysAndTimes() {
         assertEquals(
-            "Mon–Fri · 8:00 AM – 6:00 PM",
+            "Mon–Fri\n8:00 AM – 6:00 PM",
             formatScheduleSummary(
                 setOf("MON", "TUE", "WED", "THU", "FRI"),
                 "08:00", "18:00"
@@ -18,15 +18,15 @@ class WorkScheduleSummaryTest {
     @Test
     fun individualDays_keepTheirOwnIdentities() {
         assertEquals(
-            "Tue, Thu, Sun · 9:15 AM – 5:30 PM",
+            "Tue, Thu, Sun\n9:15 AM – 5:30 PM",
             formatScheduleSummary(setOf("TUE", "THU", "SUN"), "09:15", "17:30")
         )
     }
 
     @Test
-    fun fourDays_singleLineWithDotSeparator() {
+    fun fourDays_putsTimeOnSecondLine() {
         assertEquals(
-            "Mon, Tue, Fri, Sat · 8:00 AM – 7:00 PM",
+            "Mon, Tue, Fri, Sat\n8:00 AM – 7:00 PM",
             formatScheduleSummary(setOf("MON", "TUE", "FRI", "SAT"), "08:00", "19:00")
         )
     }
@@ -48,9 +48,9 @@ class WorkScheduleSummaryTest {
     }
 
     @Test
-    fun allSevenDays_singleLineEveryDay() {
+    fun allSevenDays_timePeriodOnSecondLine() {
         assertEquals(
-            "Every day · 8:00 AM – 7:00 PM",
+            "Every day\n8:00 AM – 7:00 PM",
             formatScheduleSummary(setOf("MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"), "08:00", "19:00")
         )
     }

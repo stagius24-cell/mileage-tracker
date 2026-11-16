@@ -1617,7 +1617,7 @@ internal fun formatScheduleSummary(days: Set<String>, start: String, end: String
         else -> selected.joinToString(", ")
     }
     val timePeriod = "${formatDisplayTime(start).removePrefix("0")} – ${formatDisplayTime(end).removePrefix("0")}"
-    val separator = if (selected.size > 4 && daySummary != "Mon–Fri" && daySummary != "Every day") "\n" else " · "
+    val separator = if (selected.size >= 2) "\n" else " · "
     return "$daySummary$separator$timePeriod"
 }
 
