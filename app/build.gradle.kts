@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 182
-        versionName = "1.0.182"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Harmonize Settings screen layout: unify 16dp icon indentation and standardize 24dp chevron arrow size and alignment across Smart Classification, Business purposes, Saved Locations, and Backup & Restore.\"")
+        versionCode = 183
+        versionName = "1.0.183"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip History header pinning: Trip History title positioned on top of search bar, title scrolls away on scroll down while search bar remains pinned at the top, and date headers stick and transition directly beneath the search bar.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

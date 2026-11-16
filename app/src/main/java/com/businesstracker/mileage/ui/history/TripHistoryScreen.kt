@@ -17,6 +17,17 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.fadeIn
+import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.AnimatedVisibility
 
@@ -71,6 +82,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -267,11 +279,50 @@ fun TripHistoryScreen(
 
         val listState = rememberLazyListState()
 
-        LaunchedEffect(state.searchQuery, state.selectedClassificationFilter, state.startDateFilter, state.endDateFilter, state.sortOrder) {
-            listState.scrollToItem(0)
+        var titleHeightPx by remember { mutableFloatStateOf(0f) }
+        var titleOffsetPx by remember { mutableFloatStateOf(0f) }
+        val density = LocalDensity.current
+
+        val nestedScrollConnection = remember {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    val delta = available.y
+                    // When scrolling down (delta < 0, finger dragging up):
+                    // First scroll title away until titleOffsetPx reaches -titleHeightPx
+                    if (delta < 0 && titleHeightPx > 0f && titleOffsetPx > -titleHeightPx) {
+                        val newOffset = (titleOffsetPx + delta).coerceIn(-titleHeightPx, 0f)
+                        val consumedY = newOffset - titleOffsetPx
+                        titleOffsetPx = newOffset
+                        return Offset(0f, consumedY)
+                    }
+                    return Offset.Zero
+                }
+
+                override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                    val delta = available.y
+                    // When scrolling up (delta > 0, finger dragging down) and LazyColumn has reached the top:
+                    if (delta > 0 && titleHeightPx > 0f && titleOffsetPx < 0f) {
+                        val newOffset = (titleOffsetPx + delta).coerceIn(-titleHeightPx, 0f)
+                        val consumedY = newOffset - titleOffsetPx
+                        titleOffsetPx = newOffset
+                        return Offset(0f, consumedY)
+                    }
+                    return Offset.Zero
+                }
+            }
         }
 
-        Column(modifier = Modifier.fillMaxSize().background(pageBg)) {
+        LaunchedEffect(state.searchQuery, state.selectedClassificationFilter, state.startDateFilter, state.endDateFilter, state.sortOrder) {
+            listState.scrollToItem(0)
+            titleOffsetPx = 0f
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(pageBg)
+                .nestedScroll(nestedScrollConnection)
+        ) {
             if (state.trips.isEmpty()) {
                 HistoryControls(
                     state = state,
@@ -303,40 +354,74 @@ fun TripHistoryScreen(
                     groupTripsByDisplayedDate(state.trips)
                 }
 
+                // Top container: Trip History title is placed on top of search bar, collapsible
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(pageBg)
+                ) {
+                    // Collapsible Trip History Title: scrolls off-screen when scrolling down
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clipToBounds()
+                            .then(
+                                if (titleHeightPx > 0f) {
+                                    val currentHeightDp = with(density) {
+                                        ((titleHeightPx + titleOffsetPx).coerceAtLeast(0f)).toDp()
+                                    }
+                                    Modifier.height(currentHeightDp)
+                                } else {
+                                    Modifier.wrapContentHeight()
+                                }
+                            )
+                    ) {
+                        HistoryTitle(
+                            onBackToReports = onBackToReports,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onGloballyPositioned { coordinates ->
+                                    if (titleOffsetPx == 0f && coordinates.size.height > 0) {
+                                        titleHeightPx = coordinates.size.height.toFloat()
+                                    }
+                                }
+                                .offset { IntOffset(x = 0, y = titleOffsetPx.roundToInt()) }
+                                .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp)
+                        )
+                    }
+
+                    // Pinned Search Bar and Controls: remains pinned at the top while scrolling
+                    HistoryControls(
+                        state = state,
+                        onSearchChange = viewModel::setSearchQuery,
+                        onSortChange = viewModel::setSortOrder,
+                        onClassificationChange = viewModel::setClassificationFilter,
+                        onEntityChange = viewModel::setBusinessEntityFilter,
+                        onSyncChange = viewModel::setSyncStatusFilter,
+                        onClearDateFilter = { viewModel.setDateRange("", "") },
+                        onDateRangeChange = viewModel::setDateRange,
+                        onMonthChange = { month ->
+                            if (month.isBlank()) viewModel.setDateRange("", "")
+                            else {
+                                val selected = YearMonth.parse(month)
+                                viewModel.setDateRange(selected.atDay(1).toString(), selected.atEndOfMonth().toString())
+                            }
+                        },
+                        onBackToReports = onBackToReports,
+                        showTitle = false,
+                        modifier = Modifier.padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 6.dp)
+                    )
+                }
+
+                // Scrolling List: Date headers are sticky directly beneath the pinned search bar
                 LazyColumn(
                     state = listState,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
                     contentPadding = PaddingValues(bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    item(key = "history-title") {
-                        HistoryTitle(
-                            onBackToReports = onBackToReports,
-                            modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp)
-                        )
-                    }
-                    item(key = "history-controls") {
-                        HistoryControls(
-                            state = state,
-                            onSearchChange = viewModel::setSearchQuery,
-                            onSortChange = viewModel::setSortOrder,
-                            onClassificationChange = viewModel::setClassificationFilter,
-                            onEntityChange = viewModel::setBusinessEntityFilter,
-                            onSyncChange = viewModel::setSyncStatusFilter,
-                            onClearDateFilter = { viewModel.setDateRange("", "") },
-                            onDateRangeChange = viewModel::setDateRange,
-                            onMonthChange = { month ->
-                                if (month.isBlank()) viewModel.setDateRange("", "")
-                                else {
-                                    val selected = YearMonth.parse(month)
-                                    viewModel.setDateRange(selected.atDay(1).toString(), selected.atEndOfMonth().toString())
-                                }
-                            },
-                            onBackToReports = onBackToReports,
-                            showTitle = false,
-                            modifier = Modifier.padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 4.dp)
-                        )
-                    }
                     dateSections.forEach { group ->
                         stickyHeader(key = "date-header-${group.date}-${group.firstTripId}") {
                             DateSectionHeader(
