@@ -125,7 +125,7 @@ jobs:
       - name: Upload Verified Update-Ready APK
         uses: actions/upload-artifact@v4
         with:
-          name: BusinessMileageTracker-v1.0.194-compact-trip-details-more-info
+          name: BusinessMileageTracker-v1.0.195-trip-details-readable-speed
           path: ${{ steps.find_apk.outputs.apk_path }}
           retention-days: 30
           if-no-files-found: error

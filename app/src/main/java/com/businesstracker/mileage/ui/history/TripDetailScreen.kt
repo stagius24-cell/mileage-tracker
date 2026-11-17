@@ -1136,12 +1136,25 @@ private fun TripStatusTab(
             modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            StatusValue("Vehicle", vehicleName, Modifier.weight(1f))
-            IconButton(
-                onClick = onEditVehicle,
-                modifier = Modifier.size(48.dp).semantics { contentDescription = "Edit trip vehicle" }
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(17.dp))
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text("Vehicle", style = MaterialTheme.typography.labelSmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize * 1.15f), color = SlateNeutral)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        vehicleName,
+                        modifier = Modifier.weight(1f, fill = false),
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize * 1.15f),
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    IconButton(
+                        onClick = onEditVehicle,
+                        modifier = Modifier.size(48.dp).semantics { contentDescription = "Edit trip vehicle" }
+                    ) {
+                        Icon(Icons.Default.Edit, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(17.dp))
+                    }
+                }
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
@@ -1156,7 +1169,7 @@ private fun TripStatusTab(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
-            StatusValue("Speed", speedSummary, Modifier.weight(1f))
+            StatusValue("Speed", speedSummary, Modifier.weight(1f), maxLines = 4)
             StatusValue("IRS rate", TripDetailsDisplayFormatter.irsRate(trip.applicableRate), Modifier.weight(1f))
         }
         if (!trip.notes.isNullOrBlank()) {
@@ -1185,16 +1198,21 @@ private fun StatusValue(
     label: String,
     value: String,
     modifier: Modifier = Modifier,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
+    maxLines: Int = 2
 ) {
     Column(modifier = modifier.padding(end = 8.dp)) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = SlateNeutral)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize * 1.15f),
+            color = SlateNeutral
+        )
         Text(
             value,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodySmall.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize * 1.15f),
             fontWeight = FontWeight.SemiBold,
             color = valueColor,
-            maxLines = 2,
+            maxLines = maxLines,
             overflow = TextOverflow.Ellipsis
         )
     }
