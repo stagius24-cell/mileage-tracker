@@ -163,7 +163,7 @@ fun TrackTripScreen(
                     Spacer(modifier = Modifier.height(6.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            serviceState.vehicleName ?: "Vehicle not identified",
+                            serviceState.vehicleName ?: "Unknown vehicle",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1

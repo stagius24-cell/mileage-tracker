@@ -450,7 +450,7 @@ private fun DriveTrackingTable(
                         } else {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = serviceState.vehicleName ?: "Vehicle not identified",
+                                    text = serviceState.vehicleName ?: "Unknown vehicle",
                                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                                     maxLines = 1,

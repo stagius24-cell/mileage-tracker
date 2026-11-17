@@ -103,6 +103,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.domain.usecase.ResolveTripAddressesUseCase
 import com.businesstracker.mileage.data.local.entity.TripEntity
+import com.businesstracker.mileage.domain.tracking.VehicleFriendlyNameResolver
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.model.TripPurpose
@@ -158,6 +159,7 @@ fun TripDetailScreen(
     val startAddress = addressState.takeIf { it.tripId == trip.id }?.start ?: trip.startAddress
     val endAddress = addressState.takeIf { it.tripId == trip.id }?.end ?: trip.endAddress
     val tripVehicle = vehicleDirectoryState.vehicles.firstOrNull { it.id == trip.vehicleId }
+    val tripVehicleName = VehicleFriendlyNameResolver.resolve(trip.vehicleId, vehicleDirectoryState.vehicles)
 
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     val dateFormatter = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
@@ -407,7 +409,7 @@ fun TripDetailScreen(
                     Column(Modifier.weight(1f)) {
                         Text("Vehicle", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(
-                            tripVehicle?.name ?: "Vehicle not identified",
+                            tripVehicleName,
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,

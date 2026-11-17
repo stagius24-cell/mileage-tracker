@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 191
-        versionName = "1.0.191"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Identify vehicles from paired Bluetooth devices and show vehicle details on trips.\"")
+        versionCode = 192
+        versionName = "1.0.192"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Show updated friendly vehicle names in active drives and trip details.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

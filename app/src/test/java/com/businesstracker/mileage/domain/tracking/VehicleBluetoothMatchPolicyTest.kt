@@ -40,4 +40,14 @@ class VehicleBluetoothMatchPolicyTest {
 
         assertNull(VehicleBluetoothMatchPolicy.match(listOf(saved), setOf("AA:BB:CC:DD:EE:01")))
     }
+
+    @Test
+    fun tripFriendlyNameUsesLatestSavedNameByVehicleId() {
+        val saved = vehicle("car-1", "Old name", "AA:BB:CC:DD:EE:01")
+        val renamed = saved.copy(name = "Updated friendly name", updatedAt = 2L)
+
+        assertEquals("Updated friendly name", VehicleFriendlyNameResolver.resolve(saved.id, listOf(renamed)))
+        assertEquals("Unknown vehicle", VehicleFriendlyNameResolver.resolve("missing-id", listOf(renamed)))
+        assertEquals("Unknown vehicle", VehicleFriendlyNameResolver.resolve(null, listOf(renamed)))
+    }
 }

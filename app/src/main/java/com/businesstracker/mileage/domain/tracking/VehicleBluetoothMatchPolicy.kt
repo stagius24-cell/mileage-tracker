@@ -14,3 +14,14 @@ object VehicleBluetoothMatchPolicy {
 
     fun normalizeAddress(address: String): String = address.trim().uppercase()
 }
+
+/** Resolves the current friendly name by persisted trip vehicle ID, never by a name snapshot. */
+object VehicleFriendlyNameResolver {
+    const val UNKNOWN_VEHICLE = "Unknown vehicle"
+
+    fun resolve(vehicleId: String?, vehicles: List<VehicleEntity>): String =
+        vehicleId?.let { id -> vehicles.firstOrNull { it.id == id }?.name }
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
+            ?: UNKNOWN_VEHICLE
+}
