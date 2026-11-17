@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 192
-        versionName = "1.0.192"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Show updated friendly vehicle names in active drives and trip details.\"")
+        versionCode = 193
+        versionName = "1.0.193"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Show vehicle details inside the Trip Details More info card.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -45,8 +45,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -158,7 +156,6 @@ fun TripDetailScreen(
     DisposableEffect(trip.id) { onDispose { addressViewModel.cancelLookup() } }
     val startAddress = addressState.takeIf { it.tripId == trip.id }?.start ?: trip.startAddress
     val endAddress = addressState.takeIf { it.tripId == trip.id }?.end ?: trip.endAddress
-    val tripVehicle = vehicleDirectoryState.vehicles.firstOrNull { it.id == trip.vehicleId }
     val tripVehicleName = VehicleFriendlyNameResolver.resolve(trip.vehicleId, vehicleDirectoryState.vehicles)
 
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
@@ -388,38 +385,6 @@ fun TripDetailScreen(
                 }
             }
 
-            Card(
-                modifier = Modifier.fillMaxWidth().clickable { showVehiclePicker = true },
-                shape = RoundedCornerShape(15.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 58.dp).padding(horizontal = 14.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Surface(shape = RoundedCornerShape(12.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
-                        Icon(
-                            imageVector = if (tripVehicle?.bluetoothAddress != null) Icons.Default.Bluetooth else Icons.Default.DirectionsCar,
-                            contentDescription = null,
-                            tint = SucculentPrimary,
-                            modifier = Modifier.padding(10.dp).size(20.dp)
-                        )
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text("Vehicle", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(
-                            tripVehicleName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Icon(Icons.Default.Edit, contentDescription = "Edit trip vehicle", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                }
-            }
-
             // Route and more-info tabs matching container roundness.
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -520,6 +485,8 @@ fun TripDetailScreen(
                             trip = trip,
                             durationMinutes = durationMinutes,
                             classificationColor = classificationColor,
+                            vehicleName = tripVehicleName,
+                            onEditVehicle = { showVehiclePicker = true },
                             onEdit = { showEditSheet = true },
                             onDelete = { showDeleteConfirmation = true }
                         )
@@ -1113,6 +1080,8 @@ private fun TripStatusTab(
     trip: TripEntity,
     durationMinutes: Long,
     classificationColor: Color,
+    vehicleName: String,
+    onEditVehicle: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -1163,6 +1132,19 @@ private fun TripStatusTab(
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            StatusValue("Vehicle", vehicleName, Modifier.weight(1f))
+            IconButton(
+                onClick = onEditVehicle,
+                modifier = Modifier.size(40.dp).semantics { contentDescription = "Edit trip vehicle" }
+            ) {
+                Icon(Icons.Default.Edit, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(17.dp))
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             StatusValue("Trip type", trip.classification, Modifier.weight(1f), classificationColor)
             StatusValue("Sync status", trip.syncStatus, Modifier.weight(1f), if (trip.syncStatus == "SYNCED") SucculentPrimary else SlateNeutral)

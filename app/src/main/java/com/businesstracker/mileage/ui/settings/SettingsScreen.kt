@@ -1511,6 +1511,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.193 (Build 193)" to "Show vehicle details inside the Trip Details More info card.",
                 "Version 1.0.192 (Build 192)" to "Show updated friendly vehicle names in active drives and trip details.",
                 "Version 1.0.191 (Build 191)" to "Identify vehicles from paired Bluetooth devices and show vehicle details on trips.",
                 "Version 1.0.190 (Build 190)" to "Re-arm automatic drive detection after an interrupted stationary verification.",
