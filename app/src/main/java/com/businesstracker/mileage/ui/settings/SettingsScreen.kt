@@ -1511,6 +1511,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.197 (Build 197)" to "Tighten Vehicle row and separate average and maximum speed.",
                 "Version 1.0.196 (Build 196)" to "Refine Trip Details More info alignment and spacing.",
                 "Version 1.0.195 (Build 195)" to "Increase Trip Details More info text size and separate speed values.",
                 "Version 1.0.194 (Build 194)" to "Compact Trip Details More info and show trip purpose inline.",

@@ -1133,7 +1133,7 @@ private fun TripStatusTab(
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1159,23 +1159,23 @@ private fun TripStatusTab(
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             StatusValue(tripTypePurpose.label, tripTypePurpose.value, Modifier.weight(1f), classificationColor)
             StatusValue("Sync status", trip.syncStatus, Modifier.weight(1f), if (trip.syncStatus == "SYNCED") SucculentPrimary else SlateNeutral)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
             StatusValue("Duration", "$durationMinutes min", Modifier.weight(1f))
             StatusValue("Tracking", TripDetailsDisplayFormatter.trackingMethod(trip.trackingMethod), Modifier.weight(1f))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-            StatusValue("Speed", speedSummary, Modifier.weight(1f), maxLines = 2)
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+            StatusValue("Speed", speedSummary, Modifier.weight(1f), maxLines = 4)
             StatusValue("IRS rate", TripDetailsDisplayFormatter.irsRate(trip.applicableRate), Modifier.weight(1f))
         }
         if (!trip.notes.isNullOrBlank()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-            StatusValue("Notes", trip.notes, Modifier.fillMaxWidth().padding(vertical = 6.dp))
+            StatusValue("Notes", trip.notes, Modifier.fillMaxWidth().padding(vertical = 8.dp))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         Row(

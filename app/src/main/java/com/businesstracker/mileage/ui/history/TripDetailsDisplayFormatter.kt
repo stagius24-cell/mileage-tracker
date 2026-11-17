@@ -44,7 +44,7 @@ internal object TripDetailsDisplayFormatter {
             ?.let { String.format(Locale.US, "%.1f mph", it) } ?: "--"
         val maximum = maxMph.takeIf { it.isFinite() && it > 0.0 }
             ?.let { String.format(Locale.US, "%.1f mph", it) } ?: "--"
-        return "Avg $average · Max $maximum"
+        return "Avg $average\nMax $maximum"
     }
 
     fun irsRate(rate: Double): String = String.format(Locale.US, "$%.2f / mi", rate)
