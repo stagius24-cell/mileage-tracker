@@ -1119,54 +1119,49 @@ private fun TripStatusTab(
 
         Pair(avgMph, maxMph)
     }
-    val avgSpeedStr = remember(speedMetrics) {
-        if (speedMetrics.first > 0.0) "${String.format(Locale.US, "%.1f", speedMetrics.first)} mph" else "--"
+    val speedSummary = remember(speedMetrics) {
+        TripDetailsDisplayFormatter.speedSummary(speedMetrics.first, speedMetrics.second)
     }
-    val maxSpeedStr = remember(speedMetrics) {
-        if (speedMetrics.second > 0.0) "${String.format(Locale.US, "%.1f", speedMetrics.second)} mph" else "--"
+    val tripTypePurpose = remember(trip.classification, trip.purpose) {
+        TripDetailsDisplayFormatter.tripTypeAndPurpose(trip.classification, trip.purpose)
     }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             StatusValue("Vehicle", vehicleName, Modifier.weight(1f))
             IconButton(
                 onClick = onEditVehicle,
-                modifier = Modifier.size(40.dp).semantics { contentDescription = "Edit trip vehicle" }
+                modifier = Modifier.size(48.dp).semantics { contentDescription = "Edit trip vehicle" }
             ) {
                 Icon(Icons.Default.Edit, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(17.dp))
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-            StatusValue("Trip type", trip.classification, Modifier.weight(1f), classificationColor)
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+            StatusValue(tripTypePurpose.label, tripTypePurpose.value, Modifier.weight(1f), classificationColor)
             StatusValue("Sync status", trip.syncStatus, Modifier.weight(1f), if (trip.syncStatus == "SYNCED") SucculentPrimary else SlateNeutral)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
             StatusValue("Duration", "$durationMinutes min", Modifier.weight(1f))
-            StatusValue("Tracking", trip.trackingMethod, Modifier.weight(1f))
+            StatusValue("Tracking", TripDetailsDisplayFormatter.trackingMethod(trip.trackingMethod), Modifier.weight(1f))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-            StatusValue("Average speed", avgSpeedStr, Modifier.weight(1f))
-            StatusValue("Max speed", maxSpeedStr, Modifier.weight(1f))
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-            StatusValue("Purpose", trip.purpose, Modifier.weight(1f))
-            StatusValue("IRS rate", "\$${trip.applicableRate} / mi", Modifier.weight(1f))
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+            StatusValue("Speed", speedSummary, Modifier.weight(1f))
+            StatusValue("IRS rate", TripDetailsDisplayFormatter.irsRate(trip.applicableRate), Modifier.weight(1f))
         }
         if (!trip.notes.isNullOrBlank()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-            StatusValue("Notes", trip.notes, Modifier.fillMaxWidth().padding(vertical = 8.dp))
+            StatusValue("Notes", trip.notes, Modifier.fillMaxWidth().padding(vertical = 5.dp))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         Row(
@@ -1174,11 +1169,11 @@ private fun TripStatusTab(
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onEdit, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onEdit, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Default.Edit, contentDescription = "Edit trip", tint = SucculentPrimary, modifier = Modifier.size(18.dp))
             }
             Spacer(modifier = Modifier.width(4.dp))
-            IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Default.DeleteOutline, contentDescription = "Delete trip", tint = SpeedRed, modifier = Modifier.size(18.dp))
             }
         }
