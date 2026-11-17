@@ -84,4 +84,7 @@ interface ActiveTripDao {
 
     @Query("UPDATE active_trip SET isPaused = :isPaused WHERE id = :tripId")
     suspend fun setPausedState(tripId: String, isPaused: Boolean)
+
+    @Query("UPDATE active_trip SET vehicleId = :vehicleId WHERE id = :tripId AND vehicleId IS NULL")
+    suspend fun assignVehicleIfAbsent(tripId: String, vehicleId: String): Int
 }

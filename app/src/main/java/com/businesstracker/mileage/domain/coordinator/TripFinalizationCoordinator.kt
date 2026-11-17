@@ -205,7 +205,8 @@ class TripFinalizationCoordinator @Inject constructor(
                     com.businesstracker.mileage.domain.model.TripClassification.PERSONAL.value
                 } else {
                     null
-                }
+                },
+                vehicleId = activeTrip.vehicleId
             )
 
             // 7. Atomic database transaction: persists trip, marks lifecycle FINALIZED,

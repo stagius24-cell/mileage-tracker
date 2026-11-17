@@ -41,5 +41,8 @@ data class ActiveTripEntity(
     val pausedDurationMillis: Long = 0L,
 
     @ColumnInfo(name = "suggestedBusiness")
-    val suggestedBusiness: String = "MySucculentCorner"
+    val suggestedBusiness: String = "MySucculentCorner",
+
+    @ColumnInfo(name = "vehicleId", defaultValue = "NULL")
+    val vehicleId: String? = null
 )

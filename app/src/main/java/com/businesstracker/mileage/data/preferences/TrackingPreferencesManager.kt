@@ -56,6 +56,7 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_BLUETOOTH_AUTO_STOP_ENABLED = booleanPreferencesKey("bluetooth_auto_stop_enabled")
         private val KEY_VEHICLE_BLUETOOTH_ADDRESS = stringPreferencesKey("vehicle_bluetooth_address")
         private val KEY_VEHICLE_BLUETOOTH_NAME = stringPreferencesKey("vehicle_bluetooth_name")
+        private val KEY_CURRENT_VEHICLE_ID = stringPreferencesKey("current_vehicle_id")
         private val KEY_BLUETOOTH_DISCONNECT_PENDING = booleanPreferencesKey("bluetooth_disconnect_pending")
         private val KEY_CAR_BLUETOOTH_CONNECTED = booleanPreferencesKey("car_bluetooth_connected")
         private val KEY_APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
@@ -565,6 +566,14 @@ class TrackingPreferencesManager @Inject constructor(
         context.dataStore.edit { prefs ->
             prefs[KEY_DEFAULT_VEHICLE] = vehicle
         }
+    }
+
+    val currentVehicleId: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CURRENT_VEHICLE_ID]
+    }
+
+    suspend fun setCurrentVehicleId(vehicleId: String) {
+        context.dataStore.edit { prefs -> prefs[KEY_CURRENT_VEHICLE_ID] = vehicleId }
     }
 
     val customCategories: Flow<String> = context.dataStore.data.map { prefs ->

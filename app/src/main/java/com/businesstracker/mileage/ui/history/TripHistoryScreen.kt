@@ -231,6 +231,7 @@ fun TripHistoryScreen(
                 viewModel.updateTripDetails(id, classification, entity, purpose, notes, onError, onSuccess)
             },
             onDeleteTrip = { id -> viewModel.deleteTrip(id) },
+            onVehicleSelected = { id, vehicleId -> viewModel.updateTripVehicle(id, vehicleId) },
             customPurposes = state.customPurposes,
             smartNames = state.smartNamesMap[selectedTrip.id],
             onSaveLocation = { name, lat, lng, address, radius, icon, pref, entity, onSuccess, onError ->

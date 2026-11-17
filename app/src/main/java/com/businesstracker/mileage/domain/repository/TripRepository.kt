@@ -19,6 +19,7 @@ interface TripRepository {
     fun observeTripById(tripId: String): Flow<TripEntity?>
     suspend fun insertTrip(trip: TripEntity)
     suspend fun updateTrip(trip: TripEntity)
+    suspend fun updateVehicleId(tripId: String, vehicleId: String?) {}
     suspend fun deleteTrip(tripId: String)
     suspend fun classifyTrip(
         tripId: String,

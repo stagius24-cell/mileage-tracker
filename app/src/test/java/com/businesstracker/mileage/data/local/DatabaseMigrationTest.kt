@@ -555,4 +555,29 @@ class DatabaseMigrationTest {
         cursor.close()
         db.close()
     }
+
+    @Test
+    fun migrate8To9_addsVehicleAttributionWithoutRewritingHistoricalTrips() {
+        val db = helper.createDatabase(TEST_DB, 8).apply {
+            execSQL("""
+                INSERT INTO trips (id, date, startTime, endTime, startLatitude, startLongitude, endLatitude, endLongitude, totalDistanceMiles, businessMiles, businessEntity, purpose, trackingMethod, classification, applicableRate, calculatedDeduction, waypointsJson, syncStatus, classificationSource)
+                VALUES ('historical-unassigned', '2026-11-14', 1000, 2000, 37.3, -121.8, 37.4, -121.9, 4.0, 0.0, 'Personal', 'Personal', 'AUTO_DETECTED', 'PERSONAL', 0.67, 0.0, '[]', 'SYNCED', 'MANUAL')
+            """.trimIndent())
+            close()
+        }
+
+        val migrated = helper.runMigrationsAndValidate(TEST_DB, 9, true, ExpenseTrackerDatabase.MIGRATION_8_9)
+        val oldTrip = migrated.query("SELECT vehicleId FROM trips WHERE id = 'historical-unassigned'")
+        assertTrue(oldTrip.moveToFirst())
+        assertTrue("historical trips remain unassigned; migration must not guess", oldTrip.isNull(0))
+        oldTrip.close()
+
+        migrated.execSQL("INSERT INTO vehicles (id, name, bluetoothAddress, bluetoothDeviceName, createdAt, updatedAt) VALUES ('vehicle-a', 'Blue Sedan', 'AA:BB:CC:DD:EE:01', 'Car Bluetooth', 1, 1)")
+        val vehicle = migrated.query("SELECT id, name FROM vehicles WHERE bluetoothAddress = 'AA:BB:CC:DD:EE:01'")
+        assertTrue(vehicle.moveToFirst())
+        assertEquals("vehicle-a", vehicle.getString(0))
+        assertEquals("Blue Sedan", vehicle.getString(1))
+        vehicle.close()
+        migrated.close()
+    }
 }

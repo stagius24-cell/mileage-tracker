@@ -4,9 +4,12 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.businesstracker.mileage.data.local.entity.ActiveTripEntity
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.data.device.VehicleBluetoothMatcher
+import com.businesstracker.mileage.data.local.entity.VehicleEntity
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.Waypoint
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
+import com.businesstracker.mileage.domain.repository.VehicleRepository
 import com.businesstracker.mileage.domain.tracking.AutoDriveAction
 import com.businesstracker.mileage.domain.tracking.AutoDriveDecisionEngine
 import com.businesstracker.mileage.domain.tracking.TripStopDecision
@@ -265,7 +268,17 @@ class AutomaticDriveRegressionAuditTest {
             preferencesManager,
             LocationServices.getFusedLocationProviderClient(context)
         ).apply { activityUpdateUnregistrar = {} }
-        val handler = VehicleBluetoothEventHandler(preferencesManager, repo, scheduler, monitor)
+        val vehicleRepository = object : VehicleRepository {
+            override fun observeVehicles() = kotlinx.coroutines.flow.flowOf(emptyList<VehicleEntity>())
+            override suspend fun getVehicles(): List<VehicleEntity> = emptyList()
+            override suspend fun getVehicle(id: String): VehicleEntity? = null
+            override suspend fun getVehicleForBluetoothAddress(address: String): VehicleEntity? = null
+            override suspend fun save(vehicle: VehicleEntity) = Unit
+        }
+        val handler = VehicleBluetoothEventHandler(
+            preferencesManager, repo, scheduler, monitor,
+            VehicleBluetoothMatcher(context, vehicleRepository, preferencesManager)
+        )
 
         // Disconnect
         handler.handle(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED, "AA:BB:CC:DD:EE:FF")

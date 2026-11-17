@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BrightnessLow
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsNotFixed
 import androidx.compose.material.icons.filled.Pause
@@ -157,6 +158,23 @@ fun TrackTripScreen(
                     letterSpacing = 2.sp,
                     color = MaterialTheme.colorScheme.primary
                 )
+
+                if (serviceState.isTracking) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            serviceState.vehicleName ?: "Vehicle not identified",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                        if (serviceState.vehicleBluetoothConnected) {
+                            Spacer(Modifier.width(4.dp))
+                            Icon(Icons.Default.Bluetooth, contentDescription = "Vehicle Bluetooth connected",
+                                tint = SucculentPrimary, modifier = Modifier.size(16.dp))
+                        }
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(24.dp))
 

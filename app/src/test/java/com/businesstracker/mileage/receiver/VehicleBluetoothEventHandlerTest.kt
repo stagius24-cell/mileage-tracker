@@ -1,35 +1,47 @@
 package com.businesstracker.mileage.receiver
 
 import android.bluetooth.BluetoothDevice
+import android.Manifest
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.businesstracker.mileage.data.local.entity.ActiveTripEntity
+import com.businesstracker.mileage.data.local.entity.VehicleEntity
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.data.device.VehicleBluetoothMatcher
 import com.google.android.gms.location.LocationServices
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.Waypoint
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
+import com.businesstracker.mileage.domain.repository.VehicleRepository
+import kotlinx.coroutines.flow.flowOf
 import com.businesstracker.mileage.worker.TripDebounceScheduler
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.Shadows
+import android.app.Application
 
 @RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34])
 class VehicleBluetoothEventHandlerTest {
     private lateinit var preferences: TrackingPreferencesManager
     private lateinit var repository: FakeActiveTripRepository
     private lateinit var scheduler: RecordingScheduler
+    private lateinit var vehicleCatalog: FakeVehicleRepository
     private lateinit var handler: VehicleBluetoothEventHandler
 
     @Before
     fun setUp() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
+        Shadows.shadowOf(context.applicationContext as Application).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         preferences = TrackingPreferencesManager(context)
         preferences.setBluetoothAutoStopEnabled(false)
         preferences.setBluetoothDisconnectPending(false)
@@ -42,7 +54,11 @@ class VehicleBluetoothEventHandlerTest {
             preferences,
             LocationServices.getFusedLocationProviderClient(context)
         ).apply { activityUpdateUnregistrar = {} }
-        handler = VehicleBluetoothEventHandler(preferences, repository, scheduler, monitor)
+        vehicleCatalog = FakeVehicleRepository()
+        handler = VehicleBluetoothEventHandler(
+            preferences, repository, scheduler, monitor,
+            VehicleBluetoothMatcher(context, vehicleCatalog, preferences)
+        )
     }
 
     @Test
@@ -107,6 +123,27 @@ class VehicleBluetoothEventHandlerTest {
         assertTrue(preferences.isInVehicle())
     }
 
+    @Test
+    fun matchedVehicleIsAssignedOnConnectAndPreservedAfterDisconnect() = runBlocking {
+        vehicleCatalog.save(VehicleEntity("vehicle-car", "Blue Sedan", CAR_ADDRESS, "Duplicate device name", 1L, 1L))
+        repository.activeTrip.value = autoTrip()
+
+        handler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, CAR_ADDRESS)
+        assertEquals("vehicle-car", repository.activeTrip.value?.vehicleId)
+
+        handler.handle(BluetoothDevice.ACTION_ACL_DISCONNECTED, CAR_ADDRESS)
+        assertEquals("vehicle-car", repository.activeTrip.value?.vehicleId)
+    }
+
+    @Test
+    fun unknownBluetoothDeviceDoesNotChangeTripVehicle() = runBlocking {
+        repository.activeTrip.value = autoTrip().copy(vehicleId = "known-car")
+
+        handler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, "AA:BB:CC:DD:EE:99")
+
+        assertEquals("known-car", repository.activeTrip.value?.vehicleId)
+    }
+
     private fun autoTrip() = ActiveTripEntity(
         id = "active-trip",
         startTime = 1L,
@@ -156,6 +193,25 @@ class VehicleBluetoothEventHandlerTest {
         override fun observeWaypoints(tripId: String): Flow<List<Waypoint>> = MutableStateFlow(emptyList())
         override suspend fun clearActiveTrip(tripId: String) {
             if (activeTrip.value?.id == tripId) activeTrip.value = null
+        }
+        override suspend fun assignVehicleIfAbsent(tripId: String, vehicleId: String): Boolean {
+            val current = activeTrip.value?.takeIf { it.id == tripId && it.vehicleId == null } ?: return false
+            activeTrip.value = current.copy(vehicleId = vehicleId)
+            return true
+        }
+    }
+
+    private class FakeVehicleRepository : VehicleRepository {
+        private val values = mutableListOf<VehicleEntity>()
+        override fun observeVehicles() = flowOf(values.toList())
+        override suspend fun getVehicles() = values.toList()
+        override suspend fun getVehicle(id: String) = values.firstOrNull { it.id == id }
+        override suspend fun getVehicleForBluetoothAddress(address: String) = values.firstOrNull {
+            it.bluetoothAddress.equals(address.trim(), ignoreCase = true)
+        }
+        override suspend fun save(vehicle: VehicleEntity) {
+            values.removeAll { it.id == vehicle.id }
+            values.add(vehicle)
         }
     }
 

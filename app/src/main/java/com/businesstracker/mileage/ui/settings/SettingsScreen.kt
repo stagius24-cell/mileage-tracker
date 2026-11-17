@@ -168,6 +168,9 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val vehicleDirectoryViewModel: VehicleDirectoryViewModel = hiltViewModel()
+    val vehicleDirectoryState by vehicleDirectoryViewModel.state.collectAsStateWithLifecycle()
+    val currentVehicle = vehicleDirectoryState.currentVehicle
     val context = androidx.compose.ui.platform.LocalContext.current
 
     val googleSignInLauncher = rememberLauncherForActivityResult(
@@ -192,6 +195,11 @@ fun SettingsScreen(
     var showVersionHistoryDialog by rememberSaveable { mutableStateOf(false) }
     var showDisconnectConfirmation by rememberSaveable { mutableStateOf(false) }
     var showEditVehicle by rememberSaveable { mutableStateOf(false) }
+    var showVehicleManager by rememberSaveable { mutableStateOf(false) }
+    var editingVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
+    var editingVehicleBluetoothAddress by rememberSaveable { mutableStateOf("") }
+    var editingVehicleBluetoothName by rememberSaveable { mutableStateOf("") }
+    var bluetoothPickerForVehicle by rememberSaveable { mutableStateOf(false) }
     var vehicleNameDraft by rememberSaveable { mutableStateOf("") }
     var vehicleNameError by rememberSaveable { mutableStateOf<String?>(null) }
     var isSavingVehicle by remember { mutableStateOf(false) }
@@ -259,11 +267,11 @@ fun SettingsScreen(
                     Row(Modifier.fillMaxWidth().heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
                         VehicleSettingsIcon(Icons.Default.DirectionsCar)
                         Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
+                        Column(Modifier.weight(1f).clip(RoundedCornerShape(8.dp)).clickable { showVehicleManager = true }) {
                             Text("Vehicle", style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold)
                             Spacer(Modifier.height(3.dp))
-                            Text(state.defaultVehicle, style = MaterialTheme.typography.bodyMedium,
+                            Text(currentVehicle?.name ?: state.defaultVehicle, style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -272,7 +280,10 @@ fun SettingsScreen(
                         Surface(shape = RoundedCornerShape(14.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
                             IconButton(
                                 onClick = {
-                                    vehicleNameDraft = state.defaultVehicle
+                                    editingVehicleId = currentVehicle?.id
+                                    vehicleNameDraft = currentVehicle?.name ?: state.defaultVehicle
+                                    editingVehicleBluetoothAddress = currentVehicle?.bluetoothAddress.orEmpty()
+                                    editingVehicleBluetoothName = currentVehicle?.bluetoothDeviceName.orEmpty()
                                     vehicleNameError = null
                                     showEditVehicle = true
                                 },
@@ -725,11 +736,94 @@ fun SettingsScreen(
         }
     }
 
+    if (showVehicleManager) {
+        AppFloatingBottomSheet(
+            onDismissRequest = { showVehicleManager = false },
+            title = "Saved Vehicles",
+            onClose = { showVehicleManager = false }
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                vehicleDirectoryState.vehicles.forEach { vehicle ->
+                    val selected = vehicle.id == vehicleDirectoryState.currentVehicleId
+                    Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (selected) SucculentPrimary.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f))
+                            .clickable {
+                                coroutineScope.launch {
+                                    vehicleDirectoryViewModel.selectCurrentVehicle(vehicle.id)
+                                    showVehicleManager = false
+                                }
+                            }.padding(start = 12.dp, end = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                            Text(vehicle.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                vehicle.bluetoothDeviceName?.let { "Bluetooth · $it" } ?: "No Bluetooth device linked",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (selected) Icon(Icons.Default.CheckCircle, contentDescription = "Current vehicle", tint = SucculentPrimary, modifier = Modifier.size(20.dp))
+                        IconButton(onClick = {
+                            editingVehicleId = vehicle.id
+                            vehicleNameDraft = vehicle.name
+                            editingVehicleBluetoothAddress = vehicle.bluetoothAddress.orEmpty()
+                            editingVehicleBluetoothName = vehicle.bluetoothDeviceName.orEmpty()
+                            vehicleNameError = null
+                            showVehicleManager = false
+                            showEditVehicle = true
+                        }) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit ${vehicle.name}", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                Button(
+                    onClick = {
+                        editingVehicleId = null
+                        vehicleNameDraft = ""
+                        editingVehicleBluetoothAddress = ""
+                        editingVehicleBluetoothName = ""
+                        vehicleNameError = null
+                        showVehicleManager = false
+                        showEditVehicle = true
+                    },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add Vehicle")
+                }
+            }
+        }
+    }
+
     if (showBluetoothDevicePicker) {
         AppFloatingBottomSheet(
-            onDismissRequest = { if (!isSavingBluetoothDevice) showBluetoothDevicePicker = false },
-            title = "Select Bluetooth Device",
-            onClose = { if (!isSavingBluetoothDevice) showBluetoothDevicePicker = false },
+            onDismissRequest = {
+                if (!isSavingBluetoothDevice) {
+                    showBluetoothDevicePicker = false
+                    if (bluetoothPickerForVehicle) showEditVehicle = true
+                    bluetoothPickerForVehicle = false
+                }
+            },
+            title = if (bluetoothPickerForVehicle) "Link Vehicle Bluetooth" else "Select Bluetooth Device",
+            onClose = {
+                if (!isSavingBluetoothDevice) {
+                    showBluetoothDevicePicker = false
+                    if (bluetoothPickerForVehicle) showEditVehicle = true
+                    bluetoothPickerForVehicle = false
+                }
+            },
             isDismissible = !isSavingBluetoothDevice
         ) {
             Column(
@@ -753,7 +847,10 @@ fun SettingsScreen(
                     ) { Text("Allow access") }
                 } else {
                     state.pairedBluetoothDevices.forEach { device ->
-                        val selected = device.address.equals(state.vehicleBluetoothAddress, ignoreCase = true)
+                        val selected = device.address.equals(
+                            if (bluetoothPickerForVehicle) editingVehicleBluetoothAddress else state.vehicleBluetoothAddress,
+                            ignoreCase = true
+                        )
                         Row(
                             modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)
                                 .clip(RoundedCornerShape(12.dp))
@@ -762,14 +859,22 @@ fun SettingsScreen(
                                     else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                                 )
                                 .clickable(enabled = !isSavingBluetoothDevice) {
-                                    isSavingBluetoothDevice = true
                                     bluetoothPickerError = null
-                                    coroutineScope.launch {
-                                        val result = viewModel.selectVehicleBluetoothDevice(device)
-                                        isSavingBluetoothDevice = false
-                                        if (result.isSuccess) showBluetoothDevicePicker = false
-                                        else bluetoothPickerError = result.exceptionOrNull()?.localizedMessage
-                                            ?: "Could not save device. Try again."
+                                    if (bluetoothPickerForVehicle) {
+                                        editingVehicleBluetoothAddress = device.address
+                                        editingVehicleBluetoothName = device.name
+                                        bluetoothPickerForVehicle = false
+                                        showBluetoothDevicePicker = false
+                                        showEditVehicle = true
+                                    } else {
+                                        isSavingBluetoothDevice = true
+                                        coroutineScope.launch {
+                                            val result = viewModel.selectVehicleBluetoothDevice(device)
+                                            isSavingBluetoothDevice = false
+                                            if (result.isSuccess) showBluetoothDevicePicker = false
+                                            else bluetoothPickerError = result.exceptionOrNull()?.localizedMessage
+                                                ?: "Could not save device. Try again."
+                                        }
                                     }
                                 }.padding(horizontal = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -801,7 +906,7 @@ fun SettingsScreen(
         val isValidName = trimmedName.isNotEmpty() && trimmedName.length <= 60
         AppFloatingBottomSheet(
             onDismissRequest = { if (!isSavingVehicle) showEditVehicle = false },
-            title = "Edit Vehicle Name",
+            title = if (editingVehicleId == null) "Add Vehicle" else "Edit Vehicle",
             onClose = { if (!isSavingVehicle) showEditVehicle = false },
             isDismissible = !isSavingVehicle
         ) {
@@ -836,6 +941,39 @@ fun SettingsScreen(
                         imeAction = ImeAction.Done
                     )
                 )
+                Surface(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable {
+                            bluetoothPickerForVehicle = true
+                            showEditVehicle = false
+                            viewModel.refreshPairedBluetoothDevices()
+                            showBluetoothDevicePicker = true
+                        },
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                ) {
+                    Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Bluetooth, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(20.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f).padding(vertical = 8.dp)) {
+                            Text("Paired Bluetooth device", style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(editingVehicleBluetoothName.ifBlank { "Not linked" }, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium)
+                        }
+                        if (editingVehicleBluetoothAddress.isNotBlank()) {
+                            TextButton(onClick = {
+                                editingVehicleBluetoothAddress = ""
+                                editingVehicleBluetoothName = ""
+                            }) { Text("Remove") }
+                        } else {
+                            Icon(Icons.Default.ExpandMore, contentDescription = "Choose paired device",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Button(
                         onClick = { showEditVehicle = false },
@@ -851,7 +989,12 @@ fun SettingsScreen(
                         onClick = {
                             isSavingVehicle = true
                             coroutineScope.launch {
-                                val result = viewModel.saveVehicleName(trimmedName)
+                                val result = vehicleDirectoryViewModel.saveVehicle(
+                                    editingVehicleId,
+                                    trimmedName,
+                                    editingVehicleBluetoothAddress.ifBlank { null },
+                                    editingVehicleBluetoothName.ifBlank { null }
+                                )
                                 isSavingVehicle = false
                                 if (result.isSuccess) {
                                     keyboardController?.hide()
@@ -862,7 +1005,11 @@ fun SettingsScreen(
                                 }
                             }
                         },
-                        enabled = isValidName && trimmedName != state.defaultVehicle && !isSavingVehicle,
+                        enabled = isValidName && !isSavingVehicle && (
+                            editingVehicleId == null ||
+                                trimmedName != vehicleDirectoryState.vehicles.firstOrNull { it.id == editingVehicleId }?.name ||
+                                editingVehicleBluetoothAddress != vehicleDirectoryState.vehicles.firstOrNull { it.id == editingVehicleId }?.bluetoothAddress.orEmpty()
+                            ),
                         modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                         shape = RoundedCornerShape(13.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
@@ -1364,6 +1511,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.191 (Build 191)" to "Identify vehicles from paired Bluetooth devices and show vehicle details on trips.",
                 "Version 1.0.190 (Build 190)" to "Re-arm automatic drive detection after an interrupted stationary verification.",
                 "Version 1.0.189 (Build 189)" to "Fix Dashboard navigation after Smart Classification notifications and correct the Undo classification label.",
                 "Version 1.0.188 (Build 188)" to "Add long-press actions to Trip History cards for quick category editing and trip deletion.",

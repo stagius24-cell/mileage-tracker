@@ -347,6 +347,16 @@ class TripHistoryViewModel @Inject constructor(
             }
         }
 
+    fun updateTripVehicle(tripId: String, vehicleId: String?) = viewModelScope.launch {
+        try {
+            tripRepository.updateVehicleId(tripId, vehicleId)
+            val updated = tripRepository.getTripById(tripId)
+            if (_selectedTripForDetails.value?.id == tripId) _selectedTripForDetails.value = updated
+        } catch (error: Exception) {
+            _actionErrorMessage.value = "Unable to update the trip vehicle. Please try again."
+        }
+    }
+
     fun clearAllFilters() {
         _searchQuery.value = ""
         _classificationFilter.value = "ALL"

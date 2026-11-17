@@ -14,6 +14,7 @@ import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.data.local.entity.TripLearningRecordEntity
 import com.businesstracker.mileage.data.local.entity.TripLifecycleEntity
 import com.businesstracker.mileage.data.local.entity.TripSequenceEntity
+import com.businesstracker.mileage.data.local.entity.VehicleEntity
 
 @Database(
     entities = [
@@ -26,9 +27,10 @@ import com.businesstracker.mileage.data.local.entity.TripSequenceEntity
         SavedLocationEntity::class,
         SavedLocationSyncQueueEntity::class,
         RoutePatternEntity::class,
-        TripLearningRecordEntity::class
+        TripLearningRecordEntity::class,
+        VehicleEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = true
 )
 abstract class ExpenseTrackerDatabase : RoomDatabase() {
@@ -42,6 +44,7 @@ abstract class ExpenseTrackerDatabase : RoomDatabase() {
     abstract fun savedLocationSyncQueueDao(): SavedLocationSyncQueueDao
     abstract fun routePatternDao(): RoutePatternDao
     abstract fun tripLearningRecordDao(): TripLearningRecordDao
+    abstract fun vehicleDao(): VehicleDao
 
     companion object {
         const val DATABASE_NAME = "EXPENSE_TRACKER_DB"
@@ -330,6 +333,25 @@ abstract class ExpenseTrackerDatabase : RoomDatabase() {
                 // 3. Add classification provenance columns to trips
                 db.execSQL("ALTER TABLE `trips` ADD COLUMN `classificationSource` TEXT NOT NULL DEFAULT 'UNCLASSIFIED'")
                 db.execSQL("ALTER TABLE `trips` ADD COLUMN `suggestedClassification` TEXT DEFAULT NULL")
+            }
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE `trips` ADD COLUMN `vehicleId` TEXT DEFAULT NULL")
+                db.execSQL("ALTER TABLE `active_trip` ADD COLUMN `vehicleId` TEXT DEFAULT NULL")
+                db.execSQL("""
+                    CREATE TABLE IF NOT EXISTS `vehicles` (
+                        `id` TEXT NOT NULL,
+                        `name` TEXT NOT NULL,
+                        `bluetoothAddress` TEXT,
+                        `bluetoothDeviceName` TEXT,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`)
+                    )
+                """.trimIndent())
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_vehicles_bluetoothAddress` ON `vehicles` (`bluetoothAddress`)")
             }
         }
 

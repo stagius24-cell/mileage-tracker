@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 190
-        versionName = "1.0.190"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Re-arm automatic drive detection after an interrupted stationary verification.\"")
+        versionCode = 191
+        versionName = "1.0.191"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Identify vehicles from paired Bluetooth devices and show vehicle details on trips.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

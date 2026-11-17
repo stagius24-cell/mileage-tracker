@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.BrightnessLow
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsNotFixed
 import androidx.compose.material.icons.filled.LocalFlorist
@@ -441,17 +442,33 @@ private fun DriveTrackingTable(
                                 text = if (serviceState.isRecoveryRequired) {
                                     serviceState.statusMessage ?: "Recovery Required • Preserved"
                                 } else {
-                                    "Tesla Model Y • Ready"
+                                    serviceState.vehicleName?.let { "$it • Ready" } ?: "Ready"
                                 },
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
-                        } else if (serviceState.isCandidate) {
-                            Text(
-                                text = "Verifying vehicle movement • Candidate",
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = serviceState.vehicleName ?: "Vehicle not identified",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (serviceState.vehicleBluetoothConnected) {
+                                    Spacer(Modifier.width(4.dp))
+                                    Icon(Icons.Default.Bluetooth, contentDescription = "Vehicle Bluetooth connected",
+                                        tint = SucculentPrimary, modifier = Modifier.size(14.dp))
+                                }
+                            }
+                            if (serviceState.isCandidate) {
+                                Text(
+                                    text = "Verifying vehicle movement • Candidate",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                )
+                            }
                         }
                     }
                 }

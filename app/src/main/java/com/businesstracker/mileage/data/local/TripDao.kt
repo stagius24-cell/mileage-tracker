@@ -50,6 +50,9 @@ interface TripDao {
     @Query("SELECT * FROM trips WHERE id = :tripId LIMIT 1")
     suspend fun getTripById(tripId: String): TripEntity?
 
+    @Query("UPDATE trips SET vehicleId = :vehicleId WHERE id = :tripId")
+    suspend fun updateVehicleId(tripId: String, vehicleId: String?): Int
+
     // Fill missing labels only. Never replace coordinates, trip totals, edits or existing addresses.
     @Query("""
         UPDATE trips SET

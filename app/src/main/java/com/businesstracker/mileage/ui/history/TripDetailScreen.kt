@@ -45,6 +45,9 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -137,7 +140,9 @@ fun TripDetailScreen(
     onSaveLocation: ((name: String, lat: Double, lng: Double, address: String, radius: Int, icon: String, pref: String?, entity: String?, onSuccess: (String) -> Unit, onError: (String) -> Unit) -> Unit)? = null,
     onNavigateToSavedLocations: ((String) -> Unit)? = null,
     onConfirmSmartSuggestion: ((tripId: String, category: String, entity: String?, purpose: String?) -> Unit)? = null,
-    onDismissSmartSuggestion: ((tripId: String) -> Unit)? = null
+    onDismissSmartSuggestion: ((tripId: String) -> Unit)? = null,
+    onVehicleSelected: ((tripId: String, vehicleId: String?) -> Unit)? = null,
+    vehicleDirectoryViewModel: com.businesstracker.mileage.ui.settings.VehicleDirectoryViewModel = hiltViewModel()
 ) {
     var showEditSheet by remember { mutableStateOf(false) }
     var showDeleteConfirmation by remember { mutableStateOf(false) }
@@ -146,10 +151,13 @@ fun TripDetailScreen(
     val coroutineScope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
     val addressState by addressViewModel.state.collectAsStateWithLifecycle()
+    val vehicleDirectoryState by vehicleDirectoryViewModel.state.collectAsStateWithLifecycle()
+    var showVehiclePicker by remember(trip.id) { mutableStateOf(false) }
     LaunchedEffect(trip.id, trip.startAddress, trip.endAddress) { addressViewModel.resolve(trip) }
     DisposableEffect(trip.id) { onDispose { addressViewModel.cancelLookup() } }
     val startAddress = addressState.takeIf { it.tripId == trip.id }?.start ?: trip.startAddress
     val endAddress = addressState.takeIf { it.tripId == trip.id }?.end ?: trip.endAddress
+    val tripVehicle = vehicleDirectoryState.vehicles.firstOrNull { it.id == trip.vehicleId }
 
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     val dateFormatter = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
@@ -378,6 +386,38 @@ fun TripDetailScreen(
                 }
             }
 
+            Card(
+                modifier = Modifier.fillMaxWidth().clickable { showVehiclePicker = true },
+                shape = RoundedCornerShape(15.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 58.dp).padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Surface(shape = RoundedCornerShape(12.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
+                        Icon(
+                            imageVector = if (tripVehicle?.bluetoothAddress != null) Icons.Default.Bluetooth else Icons.Default.DirectionsCar,
+                            contentDescription = null,
+                            tint = SucculentPrimary,
+                            modifier = Modifier.padding(10.dp).size(20.dp)
+                        )
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("Vehicle", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            tripVehicle?.name ?: "Vehicle not identified",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Icon(Icons.Default.Edit, contentDescription = "Edit trip vehicle", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                }
+            }
+
             // Route and more-info tabs matching container roundness.
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -482,6 +522,48 @@ fun TripDetailScreen(
                             onDelete = { showDeleteConfirmation = true }
                         )
                     }
+                }
+            }
+        }
+    }
+
+    if (showVehiclePicker) {
+        AppFloatingBottomSheet(
+            onDismissRequest = { showVehiclePicker = false },
+            title = "Select Vehicle",
+            onClose = { showVehiclePicker = false }
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val options = listOf<com.businesstracker.mileage.data.local.entity.VehicleEntity?>(null) + vehicleDirectoryState.vehicles
+                options.forEach { vehicle ->
+                    val selected = vehicle?.id == trip.vehicleId || (vehicle == null && trip.vehicleId == null)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (selected) SucculentPrimary.copy(alpha = 0.10f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f))
+                            .clickable {
+                                onVehicleSelected?.invoke(trip.id, vehicle?.id)
+                                showVehiclePicker = false
+                            }
+                            .padding(horizontal = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(vehicle?.name ?: "Not identified", fontWeight = FontWeight.SemiBold)
+                            vehicle?.bluetoothDeviceName?.let {
+                                Text("Bluetooth · $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        if (selected) Icon(Icons.Default.CheckCircle, contentDescription = "Selected", tint = SucculentPrimary, modifier = Modifier.size(20.dp))
+                    }
+                }
+                if (vehicleDirectoryState.vehicles.isEmpty()) {
+                    Text("Add vehicles in Settings to assign one to this trip.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

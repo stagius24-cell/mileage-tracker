@@ -14,5 +14,8 @@ data class TrackingServiceState(
     val lastWaypoint: Waypoint? = null,
     val waypointCount: Int = 0,
     val isRecoveryRequired: Boolean = false,
-    val statusMessage: String? = null
+    val statusMessage: String? = null,
+    val vehicleId: String? = null,
+    val vehicleName: String? = null,
+    val vehicleBluetoothConnected: Boolean = false
 )

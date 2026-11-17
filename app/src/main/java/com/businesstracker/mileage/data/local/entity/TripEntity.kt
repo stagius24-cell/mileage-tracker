@@ -86,5 +86,9 @@ data class TripEntity(
     val classificationSource: String = "UNCLASSIFIED",
 
     @ColumnInfo(name = "suggestedClassification")
-    val suggestedClassification: String? = null
+    val suggestedClassification: String? = null,
+
+    // Null for trips recorded before vehicle identification was introduced or when unknown.
+    @ColumnInfo(name = "vehicleId", defaultValue = "NULL")
+    val vehicleId: String? = null
 )

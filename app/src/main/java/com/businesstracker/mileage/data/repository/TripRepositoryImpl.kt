@@ -73,6 +73,12 @@ class TripRepositoryImpl @Inject constructor(
         tripDao.updateTrip(trip)
     }
 
+    override suspend fun updateVehicleId(tripId: String, vehicleId: String?) {
+        withContext(ioDispatcher) {
+        tripDao.updateVehicleId(tripId, vehicleId)
+        }
+    }
+
     override suspend fun deleteTrip(tripId: String) = withContext(ioDispatcher) {
         if (database != null) {
             database.withTransaction {

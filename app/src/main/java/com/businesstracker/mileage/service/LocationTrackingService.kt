@@ -17,6 +17,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
+import com.businesstracker.mileage.data.device.VehicleBluetoothMatcher
 import android.os.SystemClock
 import com.businesstracker.mileage.data.local.GpsInboxDao
 import com.businesstracker.mileage.data.local.TripLifecycleDao
@@ -29,6 +30,7 @@ import com.businesstracker.mileage.domain.model.FilterResult
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.Waypoint
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
+import com.businesstracker.mileage.domain.repository.VehicleRepository
 import com.businesstracker.mileage.domain.service.BootCountProvider
 import com.businesstracker.mileage.domain.tracking.MotionResumptionValidator
 import com.businesstracker.mileage.domain.tracking.MotionValidationResult
@@ -111,11 +113,23 @@ class LocationTrackingService : Service() {
             isDrainingGps.set(false)
             _serviceState.value = TrackingServiceState()
         }
+
+        fun updateVehicleDisplay(tripId: String, vehicleId: String, name: String, connected: Boolean) {
+            val state = _serviceState.value
+            if (state.tripId != tripId) return
+            _serviceState.value = state.copy(
+                vehicleId = state.vehicleId ?: vehicleId,
+                vehicleName = state.vehicleName ?: name,
+                vehicleBluetoothConnected = connected
+            )
+        }
     }
 
     @Inject lateinit var fusedLocationClient: FusedLocationProviderClient
     @Inject lateinit var filterGpsPointUseCase: FilterGpsPointUseCase
     @Inject lateinit var activeTripRepository: ActiveTripRepository
+    @Inject lateinit var vehicleRepository: VehicleRepository
+    @Inject lateinit var vehicleBluetoothMatcher: VehicleBluetoothMatcher
     @Inject lateinit var tripFinalizationCoordinator: TripFinalizationCoordinator
     @Inject lateinit var finalizeTripUseCase: FinalizeTripUseCase
     @Inject lateinit var notificationHelper: NotificationHelper
@@ -163,6 +177,9 @@ class LocationTrackingService : Service() {
     private var lastLocationReceivedElapsed: Long = 0L
     private val decisionMutex = Mutex()
     private var isPaused: Boolean = false
+    @Volatile private var currentVehicleId: String? = null
+    @Volatile private var currentVehicleName: String? = null
+    @Volatile private var currentVehicleBluetoothConnected: Boolean = false
     private var waypointCount: Int = 0
     private val stationaryAutoStopMonitor = StationaryAutoStopMonitor()
     private val stationaryAutoStopRequested = AtomicBoolean(false)
@@ -388,6 +405,10 @@ class LocationTrackingService : Service() {
                 stationaryAutoStopMonitor.reset()
                 stationaryAutoStopRequested.set(false)
                 currentTripId = activeTrip.id
+                currentVehicleId = activeTrip.vehicleId
+                currentVehicleName = null
+                currentVehicleBluetoothConnected = false
+                launchVehicleIdentification(activeTrip.id)
                 trackingMethod = TrackingMethod.fromString(activeTrip.trackingMethod)
                 tripStartTime = activeTrip.startTime
                 totalDistanceMeters = activeTrip.totalDistanceMeters
@@ -674,6 +695,10 @@ class LocationTrackingService : Service() {
                         suggestedBusiness = suggestedBusiness
                     )
                     currentTripId = activeTrip.id
+                    currentVehicleId = activeTrip.vehicleId
+                    currentVehicleName = null
+                    currentVehicleBluetoothConnected = false
+                    launchVehicleIdentification(activeTrip.id)
                     preferencesManager.setActiveTripId(currentTripId)
 
                     // Crash-safe sequence reconciliation across trip_sequence, gps_inbox, and active_waypoints
@@ -1411,8 +1436,40 @@ class LocationTrackingService : Service() {
             durationMillis = duration,
             currentSpeedMph = currentSpeedMph,
             lastWaypoint = lastAcceptedWaypoint,
-            waypointCount = waypointCount
+            waypointCount = waypointCount,
+            vehicleId = currentVehicleId,
+            vehicleName = currentVehicleName,
+            vehicleBluetoothConnected = currentVehicleBluetoothConnected
         )
+    }
+
+    private fun launchVehicleIdentification(tripId: String) {
+        serviceScope.launch(safeIoDispatcher) {
+            try {
+                val active = activeTripRepository.getActiveTrip()?.takeIf { it.id == tripId } ?: return@launch
+                val match = vehicleBluetoothMatcher.currentlyConnectedVehicle()
+                if (active.vehicleId == null && match != null) {
+                    activeTripRepository.assignVehicleIfAbsent(tripId, match.id)
+                }
+                val persisted = activeTripRepository.getActiveTrip()?.takeIf { it.id == tripId } ?: return@launch
+                val vehicleId = persisted.vehicleId
+                val vehicle = vehicleId?.let { vehicleRepository.getVehicle(it) }
+                if (currentTripId != tripId) return@launch
+                currentVehicleId = vehicleId
+                currentVehicleName = vehicle?.name
+                currentVehicleBluetoothConnected = vehicleId != null && match?.id == vehicleId
+                val state = _serviceState.value
+                if (state.tripId == tripId) {
+                    _serviceState.value = state.copy(
+                        vehicleId = currentVehicleId,
+                        vehicleName = currentVehicleName,
+                        vehicleBluetoothConnected = currentVehicleBluetoothConnected
+                    )
+                }
+            } catch (error: Exception) {
+                Log.i("LocationTrackingService", "Vehicle identification unavailable: ${error.javaClass.simpleName}")
+            }
+        }
     }
 
     private fun updateServiceState() {

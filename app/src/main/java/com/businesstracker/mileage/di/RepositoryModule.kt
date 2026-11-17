@@ -4,11 +4,13 @@ import com.businesstracker.mileage.data.repository.ActiveTripRepositoryImpl
 import com.businesstracker.mileage.data.repository.SavedLocationRepositoryImpl
 import com.businesstracker.mileage.data.repository.SmartTripRepositoryImpl
 import com.businesstracker.mileage.data.repository.TripRepositoryImpl
+import com.businesstracker.mileage.data.repository.VehicleRepositoryImpl
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
 import com.businesstracker.mileage.domain.repository.SavedLocationBackupScheduler
 import com.businesstracker.mileage.domain.repository.SavedLocationRepository
 import com.businesstracker.mileage.domain.repository.SmartTripRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
+import com.businesstracker.mileage.domain.repository.VehicleRepository
 import com.businesstracker.mileage.worker.WorkManagerSavedLocationBackupScheduler
 import dagger.Binds
 import dagger.Module
@@ -49,4 +51,8 @@ abstract class RepositoryModule {
     abstract fun bindSmartTripRepository(
         smartTripRepositoryImpl: SmartTripRepositoryImpl
     ): SmartTripRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindVehicleRepository(vehicleRepositoryImpl: VehicleRepositoryImpl): VehicleRepository
 }

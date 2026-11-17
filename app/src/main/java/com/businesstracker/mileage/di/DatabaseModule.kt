@@ -12,6 +12,7 @@ import com.businesstracker.mileage.data.local.TripDao
 import com.businesstracker.mileage.data.local.TripLearningRecordDao
 import com.businesstracker.mileage.data.local.TripLifecycleDao
 import com.businesstracker.mileage.data.local.TripSequenceDao
+import com.businesstracker.mileage.data.local.VehicleDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -61,7 +62,8 @@ object DatabaseModule {
             ExpenseTrackerDatabase.MIGRATION_4_8,
             ExpenseTrackerDatabase.MIGRATION_3_8,
             ExpenseTrackerDatabase.MIGRATION_2_8,
-            ExpenseTrackerDatabase.MIGRATION_1_8
+            ExpenseTrackerDatabase.MIGRATION_1_8,
+            ExpenseTrackerDatabase.MIGRATION_8_9
         )
         .build()
     }
@@ -119,4 +121,8 @@ object DatabaseModule {
     fun provideTripLearningRecordDao(database: ExpenseTrackerDatabase): TripLearningRecordDao {
         return database.tripLearningRecordDao()
     }
+
+    @Provides
+    @Singleton
+    fun provideVehicleDao(database: ExpenseTrackerDatabase): VehicleDao = database.vehicleDao()
 }

@@ -8,6 +8,8 @@ import com.businesstracker.mileage.data.local.ExpenseTrackerDatabase
 import com.businesstracker.mileage.data.local.TripDao
 import com.businesstracker.mileage.data.local.entity.ActiveTripEntity
 import com.businesstracker.mileage.data.local.entity.ActiveWaypointEntity
+import com.businesstracker.mileage.data.local.entity.TripEntity
+import com.businesstracker.mileage.data.local.entity.VehicleEntity
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.data.repository.ActiveTripRepositoryImpl
 import com.businesstracker.mileage.data.repository.TripRepositoryImpl
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -104,6 +107,38 @@ class ActiveTripDaoTest {
         assertNotNull("Active trip must exist in database", activeInDb)
         assertEquals("Database must contain exactly the winning active trip", result1.id, activeInDb?.id)
     }
+
+    @Test
+    fun vehicleAssociationPersistsOnActiveAndCompletedTripsAndCanBeCorrected() = runBlocking {
+        val vehicle = VehicleEntity("car-1", "Blue Sedan", "AA:BB:CC:DD:EE:01", "Handsfree", 1L, 1L)
+        database.vehicleDao().insert(vehicle)
+        activeTripDao.insertActiveTrip(
+            ActiveTripEntity(
+                id = "vehicle-active", startTime = 1L, startLatitude = 1.0, startLongitude = 1.0,
+                lastLatitude = 1.1, lastLongitude = 1.1, lastTimestamp = 2L,
+                totalDistanceMeters = 300.0, trackingMethod = "AUTO_DETECTED"
+            )
+        )
+        assertTrue(activeTripRepository.assignVehicleIfAbsent("vehicle-active", vehicle.id))
+        assertEquals(vehicle.id, activeTripRepository.getActiveTrip()?.vehicleId)
+        assertFalse(activeTripRepository.assignVehicleIfAbsent("vehicle-active", "wrong-car"))
+
+        val trip = sampleTrip("vehicle-active", vehicle.id)
+        tripDao.insertTrip(trip)
+        assertEquals(vehicle.id, tripDao.getTripById(trip.id)?.vehicleId)
+        tripDao.updateVehicleId(trip.id, "corrected-car")
+        assertEquals("corrected-car", tripDao.getTripById(trip.id)?.vehicleId)
+    }
+
+    private fun sampleTrip(id: String, vehicleId: String?) = TripEntity(
+        id = id, date = "2026-11-17", startTime = 1L, endTime = 2L,
+        startAddress = null, endAddress = null, startLatitude = 1.0, startLongitude = 1.0,
+        endLatitude = 1.1, endLongitude = 1.1, totalDistanceMiles = 1.0, businessMiles = 0.0,
+        businessEntity = "Personal", purpose = "Personal Drive", trackingMethod = "AUTO_DETECTED",
+        classification = "PERSONAL", applicableRate = 0.67, calculatedDeduction = 0.0,
+        notes = null, waypointsJson = "[]", syncStatus = "PENDING", syncedAt = null,
+        vehicleId = vehicleId
+    )
 
     // FIX 5 - Requirement 5: Worker and Service concurrent finalization results in exactly one finalized trip
     @Test
