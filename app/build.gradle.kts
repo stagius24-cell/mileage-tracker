@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 197
-        versionName = "1.0.197"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Tighten Vehicle row and separate average and maximum speed.\"")
+        versionCode = 198
+        versionName = "1.0.198"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Remove excess vertical spacing from the Vehicle row.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
