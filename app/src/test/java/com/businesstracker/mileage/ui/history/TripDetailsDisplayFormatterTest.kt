@@ -41,7 +41,7 @@ class TripDetailsDisplayFormatterTest {
     @Test fun trackingSpeedAndRateUseFriendlyAccurateValues() {
         assertEquals("Auto detected", TripDetailsDisplayFormatter.trackingMethod("AUTO_DETECTED"))
         assertEquals("Manual GPS", TripDetailsDisplayFormatter.trackingMethod("MANUAL_GPS"))
-        assertEquals("Avg 21.8 mph\nMax 62.8 mph", TripDetailsDisplayFormatter.speedSummary(21.8, 62.8))
+        assertEquals("Avg 21.8 mph · Max 62.8 mph", TripDetailsDisplayFormatter.speedSummary(21.8, 62.8))
         assertEquals("$0.76 / mi", TripDetailsDisplayFormatter.irsRate(0.76))
     }
 }
