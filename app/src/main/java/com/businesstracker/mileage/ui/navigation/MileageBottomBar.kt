@@ -39,7 +39,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 
@@ -127,25 +126,7 @@ fun MileageBottomBar(
                                 .fillMaxHeight()
                                 .clip(RoundedCornerShape(14.dp))
                                 .clickable {
-                                    val isCurrent = currentBaseRoute == screen.route
-                                    val startDestId = navController.graph.findStartDestination().id
-                                    if (!isCurrent) {
-                                        navController.navigate(screen.route) {
-                                            popUpTo(startDestId) {
-                                                saveState = true
-                                            }
-                                            launchSingleTop = true
-                                            restoreState = screen != Screen.History
-                                        }
-                                    } else if (screen == Screen.History) {
-                                        // Reset to top-level clean History if already on History (e.g. filtered view)
-                                        navController.navigate(Screen.History.route) {
-                                            popUpTo(startDestId) {
-                                                saveState = false
-                                            }
-                                            launchSingleTop = true
-                                        }
-                                    }
+                                    navController.navigateToBottomTab(screen)
                                 },
                             contentAlignment = Alignment.Center
                         ) {

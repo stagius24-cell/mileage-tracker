@@ -33,6 +33,7 @@ import com.businesstracker.mileage.domain.model.AppThemeMode
 import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.ui.navigation.MileageBottomBar
 import com.businesstracker.mileage.ui.navigation.MileageNavHost
+import com.businesstracker.mileage.ui.navigation.navigateToNotificationTrip
 import com.businesstracker.mileage.ui.theme.BusinessMileageTrackerTheme
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import dagger.hilt.android.AndroidEntryPoint
@@ -43,6 +44,12 @@ import javax.inject.Inject
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    private data class PendingTripNotification(
+        val tripId: String,
+        val openConfirmation: Boolean,
+        val requestId: Long
+    )
+
     @Inject lateinit var activityTransitionManager: ActivityTransitionManager
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
 
@@ -52,10 +59,8 @@ class MainActivity : ComponentActivity() {
         internal set
     var showBackgroundSettingsDialog by mutableStateOf(false)
         internal set
-    var pendingNotificationTripId by mutableStateOf<String?>(null)
-        internal set
-    var pendingOpenConfirmation by mutableStateOf(false)
-        internal set
+    private var pendingTripNotification by mutableStateOf<PendingTripNotification?>(null)
+    private var nextNotificationRequestId = 0L
 
     private val backgroundLocationLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -100,14 +105,17 @@ class MainActivity : ComponentActivity() {
             BusinessMileageTrackerTheme(themeMode = themeMode) {
                 val navController = rememberNavController()
 
-                androidx.compose.runtime.LaunchedEffect(pendingNotificationTripId) {
-                    val tripId = pendingNotificationTripId
-                    if (!tripId.isNullOrBlank()) {
-                        val encodedId = android.net.Uri.encode(tripId)
-                        navController.navigate("${com.businesstracker.mileage.ui.navigation.Screen.History.route}?selectedTripId=$encodedId&openConfirmation=$pendingOpenConfirmation") {
-                            launchSingleTop = true
+                androidx.compose.runtime.LaunchedEffect(pendingTripNotification) {
+                    val notification = pendingTripNotification
+                    if (notification != null) {
+                        navController.navigateToNotificationTrip(
+                            tripId = notification.tripId,
+                            openConfirmation = notification.openConfirmation
+                        )
+                        if (pendingTripNotification?.requestId == notification.requestId) {
+                            pendingTripNotification = null
+                            clearNotificationIntentExtras()
                         }
-                        pendingNotificationTripId = null
                     }
                 }
 
@@ -160,12 +168,24 @@ class MainActivity : ComponentActivity() {
         val tripId = intent?.getStringExtra("EXTRA_TRIP_ID")
             ?: intent?.getStringExtra(com.businesstracker.mileage.service.NotificationHelper.EXTRA_TRIP_ID)
         if (!tripId.isNullOrBlank()) {
-            pendingNotificationTripId = tripId
-            pendingOpenConfirmation = intent?.getBooleanExtra(
-                com.businesstracker.mileage.service.NotificationHelper.EXTRA_OPEN_CONFIRMATION,
-                false
-            ) ?: false
+            pendingTripNotification = PendingTripNotification(
+                tripId = tripId,
+                openConfirmation = intent?.getBooleanExtra(
+                    com.businesstracker.mileage.service.NotificationHelper.EXTRA_OPEN_CONFIRMATION,
+                    false
+                ) ?: false,
+                requestId = ++nextNotificationRequestId
+            )
         }
+    }
+
+    private fun clearNotificationIntentExtras() {
+        val cleanIntent = Intent(intent).apply {
+            removeExtra("EXTRA_TRIP_ID")
+            removeExtra(com.businesstracker.mileage.service.NotificationHelper.EXTRA_TRIP_ID)
+            removeExtra(com.businesstracker.mileage.service.NotificationHelper.EXTRA_OPEN_CONFIRMATION)
+        }
+        setIntent(cleanIntent)
     }
 
     private fun checkAndRegisterTransitions() {

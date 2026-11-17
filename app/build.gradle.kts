@@ -16,7 +16,7 @@ android {
         targetSdk = 35
         versionCode = 189
         versionName = "1.0.189"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Show the selected Business or Personal classification in the Dashboard undo message.\"")
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix Dashboard navigation after Smart Classification notifications and correct the Undo classification label.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -161,6 +161,7 @@ dependencies {
 
     // Unit Testing
     testImplementation(libs.junit)
+    testImplementation("androidx.navigation:navigation-testing:2.8.3")
     testImplementation("androidx.room:room-testing:2.6.1")
     testImplementation("androidx.test:core:1.6.1")
     testImplementation("org.robolectric:robolectric:4.13")

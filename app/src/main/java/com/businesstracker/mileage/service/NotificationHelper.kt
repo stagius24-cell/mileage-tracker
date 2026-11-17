@@ -143,7 +143,7 @@ class NotificationHelper @Inject constructor(
     fun showTripDetectedNotification(tripId: String, distanceMiles: Double) {
         // App launch or classification screen pending intent
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra("EXTRA_TRIP_ID", tripId)
         }
         val pendingIntent = launchIntent?.let {
@@ -184,7 +184,7 @@ class NotificationHelper @Inject constructor(
         }
 
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(EXTRA_TRIP_ID, tripId)
             putExtra(EXTRA_OPEN_CONFIRMATION, true)
         }
@@ -230,7 +230,7 @@ class NotificationHelper @Inject constructor(
         }
 
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)?.apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(EXTRA_TRIP_ID, tripId)
         }
         val pendingIntent = launchIntent?.let {
