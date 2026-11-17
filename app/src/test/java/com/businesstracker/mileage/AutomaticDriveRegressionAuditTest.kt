@@ -11,11 +11,13 @@ import com.businesstracker.mileage.domain.tracking.AutoDriveAction
 import com.businesstracker.mileage.domain.tracking.AutoDriveDecisionEngine
 import com.businesstracker.mileage.domain.tracking.TripStopDecision
 import com.businesstracker.mileage.receiver.VehicleBluetoothEventHandler
+import com.businesstracker.mileage.receiver.BluetoothArmedDriveMonitor
 import com.businesstracker.mileage.service.LocationTrackingService
 import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.transition.TransitionRegistrationState
 import com.businesstracker.mileage.worker.TripDebounceScheduler
 import com.google.android.gms.location.DetectedActivity
+import com.google.android.gms.location.LocationServices
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -258,7 +260,12 @@ class AutomaticDriveRegressionAuditTest {
         )
         val scheduler = TestRecordingScheduler(context)
         val repo = TestActiveTripRepository(activeTrip)
-        val handler = VehicleBluetoothEventHandler(preferencesManager, repo, scheduler)
+        val monitor = BluetoothArmedDriveMonitor(
+            context,
+            preferencesManager,
+            LocationServices.getFusedLocationProviderClient(context)
+        ).apply { activityUpdateUnregistrar = {} }
+        val handler = VehicleBluetoothEventHandler(preferencesManager, repo, scheduler, monitor)
 
         // Disconnect
         handler.handle(android.bluetooth.BluetoothDevice.ACTION_ACL_DISCONNECTED, "AA:BB:CC:DD:EE:FF")

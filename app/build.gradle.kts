@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 189
-        versionName = "1.0.189"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix Dashboard navigation after Smart Classification notifications and correct the Undo classification label.\"")
+        versionCode = 190
+        versionName = "1.0.190"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Re-arm automatic drive detection after an interrupted stationary verification.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

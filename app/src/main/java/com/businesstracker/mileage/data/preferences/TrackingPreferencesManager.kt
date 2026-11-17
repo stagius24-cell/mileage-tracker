@@ -159,7 +159,11 @@ class TrackingPreferencesManager @Inject constructor(
 
     suspend fun setVehicleBluetoothDevice(address: String, name: String) {
         context.dataStore.edit { prefs ->
-            prefs[KEY_VEHICLE_BLUETOOTH_ADDRESS] = address.trim().uppercase()
+            val normalizedAddress = address.trim().uppercase()
+            if (prefs[KEY_VEHICLE_BLUETOOTH_ADDRESS] != normalizedAddress) {
+                prefs[KEY_CAR_BLUETOOTH_CONNECTED] = false
+            }
+            prefs[KEY_VEHICLE_BLUETOOTH_ADDRESS] = normalizedAddress
             prefs[KEY_VEHICLE_BLUETOOTH_NAME] = name.trim()
             prefs[KEY_BLUETOOTH_DISCONNECT_PENDING] = false
         }

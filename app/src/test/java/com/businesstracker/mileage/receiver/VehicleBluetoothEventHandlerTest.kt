@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.businesstracker.mileage.data.local.entity.ActiveTripEntity
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.google.android.gms.location.LocationServices
 import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.Waypoint
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
@@ -36,7 +37,12 @@ class VehicleBluetoothEventHandlerTest {
         preferences.setVehicleBluetoothDevice(CAR_ADDRESS, "My Car")
         repository = FakeActiveTripRepository(autoTrip())
         scheduler = RecordingScheduler(context)
-        handler = VehicleBluetoothEventHandler(preferences, repository, scheduler)
+        val monitor = BluetoothArmedDriveMonitor(
+            context,
+            preferences,
+            LocationServices.getFusedLocationProviderClient(context)
+        ).apply { activityUpdateUnregistrar = {} }
+        handler = VehicleBluetoothEventHandler(preferences, repository, scheduler, monitor)
     }
 
     @Test
@@ -71,6 +77,15 @@ class VehicleBluetoothEventHandlerTest {
 
         assertFalse(scheduler.scheduled)
         assertTrue(preferences.isInVehicle())
+    }
+
+    @Test
+    fun selectedDeviceConnectionIsRememberedEvenWhenAutoStopIsDisabled() = runBlocking {
+        handler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, CAR_ADDRESS)
+
+        assertTrue(preferences.isCarBluetoothConnected())
+        handler.handle(BluetoothDevice.ACTION_ACL_DISCONNECTED, CAR_ADDRESS)
+        assertFalse(preferences.isCarBluetoothConnected())
     }
 
     @Test

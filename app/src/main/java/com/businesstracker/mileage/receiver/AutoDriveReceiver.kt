@@ -22,6 +22,7 @@ import com.businesstracker.mileage.service.LocationTrackingService
 import com.businesstracker.mileage.worker.TripDebounceWorker
 import com.google.android.gms.location.ActivityTransition
 import com.google.android.gms.location.ActivityTransitionResult
+import com.google.android.gms.location.ActivityRecognitionResult
 import com.google.android.gms.location.DetectedActivity
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
@@ -48,13 +49,30 @@ class AutoDriveReceiver : BroadcastReceiver() {
     @Inject lateinit var activeTripRepository: ActiveTripRepository
     @Inject lateinit var tripLifecycleDao: TripLifecycleDao
     @Inject lateinit var decisionEngine: AutoDriveDecisionEngine
+    @Inject lateinit var bluetoothArmedDriveMonitor: BluetoothArmedDriveMonitor
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
     @Inject lateinit var bootCountProvider: BootCountProvider
 
     private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onReceive(context: Context, intent: Intent?) {
-        if (intent == null || !ActivityTransitionResult.hasResult(intent)) return
+        if (intent == null) return
+
+        if (intent.action == BluetoothArmedDriveMonitor.ACTION_ACTIVITY_UPDATE &&
+            ActivityRecognitionResult.hasResult(intent)
+        ) {
+            val activityResult = ActivityRecognitionResult.extractResult(intent) ?: return
+            val pendingResult = goAsync()
+            receiverScope.launch(ioDispatcher) {
+                try {
+                    handleArmedActivityUpdate(context, activityResult.probableActivities)
+                } finally {
+                    pendingResult?.finish()
+                }
+            }
+            return
+        }
+        if (!ActivityTransitionResult.hasResult(intent)) return
 
         val result = ActivityTransitionResult.extractResult(intent) ?: return
         val pendingResult = goAsync()
@@ -135,6 +153,30 @@ class AutoDriveReceiver : BroadcastReceiver() {
         }
     }
 
+    internal suspend fun handleArmedActivityUpdate(
+        context: Context,
+        probableActivities: List<DetectedActivity>
+    ) {
+        val isAutoTrackingEnabled = preferencesManager.isAutoTrackingEnabled.first()
+        val hasSelectedDevice = preferencesManager.getVehicleBluetoothAddress().isNotBlank()
+        val isCarConnected = preferencesManager.isCarBluetoothConnected()
+        if (!isAutoTrackingEnabled || !hasSelectedDevice || !isCarConnected) {
+            TrackingDiagnostics.logArmedMonitor("UPDATE_IGNORED", "tracking/device/connection gate is false")
+            return
+        }
+
+        // Candidate and active sessions already have bounded location verification. Do not
+        // request additional location samples or create another trip while one exists.
+        if (LocationTrackingService.serviceState.value.isTracking ||
+            activeTripRepository.getActiveTrip() != null
+        ) return
+
+        if (bluetoothArmedDriveMonitor.observeActivityUpdate(probableActivities)) {
+            TrackingDiagnostics.logArmedMonitor("MOVEMENT_CONFIRMED", "starting existing automatic candidate flow")
+            handleVehicleEnter(context)
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private suspend fun handleVehicleEnter(context: Context) {
         // 1. Strict permission verification (Foreground location and Activity Recognition)
@@ -194,6 +236,10 @@ class AutoDriveReceiver : BroadcastReceiver() {
             outsideScheduleBehavior = outsideBehavior
         )
         android.util.Log.d(TAG, "evaluateVehicleEnter result: $action (autoTrack=$isAutoTrackingEnabled, isTracking=$isTracking)")
+        TrackingDiagnostics.logArmedMonitor(
+            "VEHICLE_ENTER_DECISION",
+            "result=${action::class.simpleName} autoTracking=$isAutoTrackingEnabled active=$isTracking permissions=${hasForegroundLocation && hasBackgroundLocation && hasActivity}"
+        )
 
         when (action) {
             is AutoDriveAction.CancelDebounce -> {

@@ -34,6 +34,7 @@ import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.ui.navigation.MileageBottomBar
 import com.businesstracker.mileage.ui.navigation.MileageNavHost
 import com.businesstracker.mileage.ui.navigation.navigateToNotificationTrip
+import com.businesstracker.mileage.receiver.BluetoothArmedDriveMonitor
 import com.businesstracker.mileage.ui.theme.BusinessMileageTrackerTheme
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import dagger.hilt.android.AndroidEntryPoint
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
     )
 
     @Inject lateinit var activityTransitionManager: ActivityTransitionManager
+    @Inject lateinit var bluetoothArmedDriveMonitor: BluetoothArmedDriveMonitor
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
 
     var hasRequestedBackgroundPermission = false
@@ -194,8 +196,12 @@ class MainActivity : ComponentActivity() {
                 val autoTrackEnabled = preferencesManager.isAutoTrackingEnabled.first()
                 if (autoTrackEnabled && hasRequiredPermissions()) {
                     activityTransitionManager.registerTransitions()
+                    bluetoothArmedDriveMonitor.reconcile()
                 } else if (!autoTrackEnabled) {
                     activityTransitionManager.unregisterTransitions()
+                    bluetoothArmedDriveMonitor.stop()
+                } else {
+                    bluetoothArmedDriveMonitor.stop()
                 }
             } catch (_: Exception) {}
         }

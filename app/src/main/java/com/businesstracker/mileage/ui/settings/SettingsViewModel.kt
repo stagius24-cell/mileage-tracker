@@ -189,6 +189,7 @@ private data class LocationBackupStatusState(
 class SettingsViewModel @Inject constructor(
     private val preferencesManager: TrackingPreferencesManager,
     private val activityTransitionManager: ActivityTransitionManager,
+    private val bluetoothArmedDriveMonitor: com.businesstracker.mileage.receiver.BluetoothArmedDriveMonitor,
     private val tripRepository: TripRepository,
     private val sheetsSyncService: GoogleSheetsSyncService,
     private val savedLocationsSheetsService: SavedLocationsSheetsService,
@@ -486,6 +487,7 @@ class SettingsViewModel @Inject constructor(
                 } else {
                     activityTransitionManager.unregisterTransitions()
                 }
+                bluetoothArmedDriveMonitor.reconcile()
             } catch (_: Exception) {}
         }
     }
@@ -494,6 +496,7 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 activityTransitionManager.registerTransitions(force = true)
+                bluetoothArmedDriveMonitor.reconcile()
             } catch (_: Exception) {}
         }
     }
@@ -608,7 +611,10 @@ class SettingsViewModel @Inject constructor(
     }
 
     suspend fun selectVehicleBluetoothDevice(device: VehicleBluetoothDevice): Result<Unit> =
-        runCatching { preferencesManager.setVehicleBluetoothDevice(device.address, device.name) }
+        runCatching {
+            preferencesManager.setVehicleBluetoothDevice(device.address, device.name)
+            bluetoothArmedDriveMonitor.reconcile()
+        }
 
     @SuppressLint("MissingPermission")
     fun refreshPairedBluetoothDevices() {

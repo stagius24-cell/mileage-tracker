@@ -31,6 +31,7 @@ import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.GeocodeLocationUseCase
 import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
 import com.businesstracker.mileage.receiver.AutoDriveReceiver
+import com.businesstracker.mileage.receiver.BluetoothArmedDriveMonitor
 import com.businesstracker.mileage.service.GpsLocationQueue
 import com.businesstracker.mileage.service.LocationTrackingService
 import com.businesstracker.mileage.service.NotificationHelper
@@ -40,7 +41,9 @@ import com.google.android.gms.common.internal.safeparcel.SafeParcelableSerialize
 import com.google.android.gms.location.ActivityTransition
 import com.google.android.gms.location.ActivityTransitionEvent
 import com.google.android.gms.location.ActivityTransitionResult
+import com.google.android.gms.location.ActivityRecognitionResult
 import com.google.android.gms.location.DetectedActivity
+import com.google.android.gms.location.LocationServices
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -78,7 +81,9 @@ class AutoDriveFalseStartAndStopTest {
         val app = ApplicationProvider.getApplicationContext<Application>()
         shadowOf(app).grantPermissions(
             android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION
+            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+            android.Manifest.permission.ACTIVITY_RECOGNITION
         )
 
         preferencesManager = TrackingPreferencesManager(context)
@@ -893,6 +898,88 @@ class AutoDriveFalseStartAndStopTest {
         assertFalse("Expired candidate session under 200m must be discarded", preferencesManager.isInVehicle())
         assertNull("Candidate deadline must be cleared", preferencesManager.getCandidateDeadline())
         assertFalse("Service must not be tracking after discarded recovery", LocationTrackingService.serviceState.value.isTracking)
+    }
+
+    @Test
+    fun bluetoothRemainsConnectedAndActualActivityReceiverStartsTripAfterTwoMinuteInterruption() = runBlocking {
+        preferencesManager.setAutoTrackingEnabled(true)
+        preferencesManager.setActiveTripId(null)
+        preferencesManager.setInVehicleState(false)
+        preferencesManager.setVehicleBluetoothDevice("11:22:33:44:55:66", "Test Car")
+        preferencesManager.setCarBluetoothConnected(true)
+        preferencesManager.setOutsideScheduleBehavior(
+            com.businesstracker.mileage.data.preferences.TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL
+        )
+
+        var nowElapsed = 10_000L
+        val locationSamples = ArrayDeque<Location>().apply {
+            add(Location("test").apply {
+                latitude = 37.0
+                longitude = -122.0
+                accuracy = 8f
+                speed = 0f
+                elapsedRealtimeNanos = nowElapsed * 1_000_000L
+            })
+            add(Location("test").apply {
+                latitude = 37.00055
+                longitude = -122.0
+                accuracy = 8f
+                speed = 0f
+                elapsedRealtimeNanos = 130_000L * 1_000_000L
+            })
+        }
+        val monitor = BluetoothArmedDriveMonitor(
+            context,
+            preferencesManager,
+            LocationServices.getFusedLocationProviderClient(context)
+        ).apply {
+            elapsedClock = { nowElapsed }
+            locationProvider = { locationSamples.removeFirstOrNull() }
+        }
+        val receiver = AutoDriveReceiver().apply {
+            preferencesManager = this@AutoDriveFalseStartAndStopTest.preferencesManager
+            activeTripRepository = this@AutoDriveFalseStartAndStopTest.activeTripRepo
+            tripLifecycleDao = database.tripLifecycleDao()
+            decisionEngine = this@AutoDriveFalseStartAndStopTest.decisionEngine
+            ioDispatcher = testDispatcher
+            bootCountProvider = object : BootCountProvider {
+                override fun getBootCount(): Int = 1
+            }
+            bluetoothArmedDriveMonitor = monitor
+        }
+        val activity = listOf(DetectedActivity(DetectedActivity.IN_VEHICLE, 92))
+
+        val firstIntent = activityUpdateIntent(activity)
+        assertTrue(ActivityRecognitionResult.hasResult(firstIntent))
+        assertNotNull(ActivityRecognitionResult.extractResult(firstIntent))
+
+        receiver.handleArmedActivityUpdate(
+            context,
+            ActivityRecognitionResult.extractResult(firstIntent)!!.probableActivities
+        )
+        assertNull("Stationary connected vehicle must not start a trip", preferencesManager.activeTripId.first())
+        assertEquals("First low-power location should establish the baseline", 1, locationSamples.size)
+
+        nowElapsed = 130_000L // Same Bluetooth session; no second ACL_CONNECTED event.
+        receiver.handleArmedActivityUpdate(
+            context,
+            ActivityRecognitionResult.extractResult(activityUpdateIntent(activity))!!.probableActivities
+        )
+
+        assertEquals("Second low-power location should confirm movement", 0, locationSamples.size)
+        assertNotNull("Corroborated movement after the interruption must start a candidate", preferencesManager.activeTripId.first())
+        assertTrue("Car Bluetooth remains connected during re-arm", preferencesManager.isCarBluetoothConnected())
+    }
+
+    private fun activityUpdateIntent(activities: List<DetectedActivity>): Intent {
+        val result = ActivityRecognitionResult(activities, System.currentTimeMillis(), SystemClock.elapsedRealtimeNanos())
+        return Intent(BluetoothArmedDriveMonitor.ACTION_ACTIVITY_UPDATE).also {
+            SafeParcelableSerializer.serializeToIntentExtra(
+                result,
+                it,
+                "com.google.android.location.internal.EXTRA_ACTIVITY_RESULT"
+            )
+        }
     }
 
     // =========================================================================

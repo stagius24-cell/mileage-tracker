@@ -1364,6 +1364,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.190 (Build 190)" to "Re-arm automatic drive detection after an interrupted stationary verification.",
                 "Version 1.0.189 (Build 189)" to "Fix Dashboard navigation after Smart Classification notifications and correct the Undo classification label.",
                 "Version 1.0.188 (Build 188)" to "Add long-press actions to Trip History cards for quick category editing and trip deletion.",
                 "Version 1.0.187 (Build 187)" to "Update Business purposes subtitle to '<count> business purposes' and replace arrow navigation button with plus action button in management cards.",

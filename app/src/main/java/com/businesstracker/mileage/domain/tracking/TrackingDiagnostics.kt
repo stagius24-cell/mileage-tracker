@@ -104,4 +104,12 @@ object TrackingDiagnostics {
             "[StopDeadline] trip=$tripId action=$action deadline=${deadlineMs}ms reason=$reason"
         )
     }
+
+    fun logArmedMonitor(action: String, reason: String) {
+        Log.i(
+            TAG,
+            "[BluetoothArmedMonitor] v${BuildConfig.VERSION_NAME}(${BuildConfig.VERSION_CODE}) " +
+                "action=$action reason=$reason"
+        )
+    }
 }

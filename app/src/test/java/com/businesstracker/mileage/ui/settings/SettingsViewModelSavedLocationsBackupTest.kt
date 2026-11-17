@@ -8,6 +8,7 @@ import com.businesstracker.mileage.data.local.entity.SavedLocationEntity
 import com.businesstracker.mileage.data.local.model.BusinessEntitySummary
 import com.businesstracker.mileage.data.local.model.ClassificationCount
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.receiver.BluetoothArmedDriveMonitor
 import com.businesstracker.mileage.data.remote.CustomPurposesRestoreResult
 import com.businesstracker.mileage.data.remote.CustomPurposesSheetsService
 import com.businesstracker.mileage.data.remote.CustomPurposesSyncResult
@@ -147,6 +148,11 @@ class SettingsViewModelSavedLocationsBackupTest {
         return SettingsViewModel(
             preferencesManager = preferencesManager,
             activityTransitionManager = ActivityTransitionManager(context),
+            bluetoothArmedDriveMonitor = BluetoothArmedDriveMonitor(
+                context,
+                preferencesManager,
+                LocationServices.getFusedLocationProviderClient(context)
+            ),
             tripRepository = emptyTripRepo,
             sheetsSyncService = tripsSyncService,
             savedLocationsSheetsService = fakeLocationsService,

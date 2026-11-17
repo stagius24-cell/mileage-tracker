@@ -15,17 +15,36 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 
 @AndroidEntryPoint
 class VehicleBluetoothReceiver : BroadcastReceiver() {
     @Inject lateinit var eventHandler: VehicleBluetoothEventHandler
+    @Inject lateinit var preferencesManager: TrackingPreferencesManager
+    @Inject lateinit var bluetoothArmedDriveMonitor: BluetoothArmedDriveMonitor
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
 
     override fun onReceive(context: Context, intent: Intent?) {
         val action = intent?.action ?: return
         if (action != BluetoothDevice.ACTION_ACL_CONNECTED &&
-            action != BluetoothDevice.ACTION_ACL_DISCONNECTED
+            action != BluetoothDevice.ACTION_ACL_DISCONNECTED &&
+            action != BluetoothAdapter.ACTION_STATE_CHANGED
         ) return
+
+        if (action == BluetoothAdapter.ACTION_STATE_CHANGED) {
+            if (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR) == BluetoothAdapter.STATE_OFF) {
+                val pendingResult = goAsync()
+                CoroutineScope(SupervisorJob() + ioDispatcher).launch {
+                    try {
+                        preferencesManager.setCarBluetoothConnected(false)
+                        bluetoothArmedDriveMonitor.reconcile()
+                    } finally {
+                        pendingResult?.finish()
+                    }
+                }
+            }
+            return
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) !=

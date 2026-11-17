@@ -23,6 +23,7 @@ import javax.inject.Inject
 class BootReceiver : BroadcastReceiver() {
 
     @Inject lateinit var activityTransitionManager: ActivityTransitionManager
+    @Inject lateinit var bluetoothArmedDriveMonitor: BluetoothArmedDriveMonitor
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
     @Inject lateinit var activeTripRepository: ActiveTripRepository
     @Inject lateinit var tripLifecycleDao: TripLifecycleDao
@@ -57,6 +58,13 @@ class BootReceiver : BroadcastReceiver() {
                     // 1. Reconcile in-progress trips from previous boot without data loss
                     reconcileBootActiveTrip()
 
+                    // Bluetooth ACL connection state is not valid across a device reboot.
+                    if (action == Intent.ACTION_BOOT_COMPLETED ||
+                        action == "android.intent.action.QUICKBOOT_POWERON"
+                    ) {
+                        prefsManager.setCarBluetoothConnected(false)
+                    }
+
                     // 2. Register Activity Transitions if auto tracking enabled and permission granted
                     val isAutoTrackingEnabled = prefsManager.isAutoTrackingEnabled.first()
                     val hasActivityRecognition = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
@@ -72,6 +80,9 @@ class BootReceiver : BroadcastReceiver() {
                         } else {
                             transitionManager.registerTransitions()
                         }
+                        if (::bluetoothArmedDriveMonitor.isInitialized) bluetoothArmedDriveMonitor.reconcile()
+                    } else {
+                        if (::bluetoothArmedDriveMonitor.isInitialized) bluetoothArmedDriveMonitor.stop()
                     }
                 } finally {
                     pendingResult?.finish()
