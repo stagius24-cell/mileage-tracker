@@ -304,31 +304,16 @@ fun SettingsScreen(
                         VehicleSettingsIcon(Icons.Default.Bluetooth)
                         Spacer(Modifier.width(12.dp))
                         Column(
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable {
-                                    bluetoothPickerError = null
-                                    viewModel.refreshPairedBluetoothDevices()
-                                    showBluetoothDevicePicker = true
-                                },
+                            modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.Center
                         ) {
-                            Text("Bluetooth auto-stop", style = MaterialTheme.typography.bodyLarge,
-                                fontWeight = FontWeight.SemiBold, maxLines = 2,
-                                overflow = TextOverflow.Ellipsis)
-                            Spacer(Modifier.height(3.dp))
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(
-                                    state.vehicleBluetoothName.ifBlank { "Select Bluetooth device" },
-                                    modifier = Modifier.weight(1f, fill = false),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis
-                                )
-                                Icon(Icons.Default.ExpandMore, contentDescription = "Select Bluetooth device",
-                                    modifier = Modifier.size(18.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+                            Text(
+                                "Bluetooth auto-stop",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                         Spacer(Modifier.width(8.dp))
                         SettingsToggle(

@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 199
-        versionName = "1.0.199"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix Bluetooth vehicle identification using profile proxies and event-driven recognition.\"")
+        versionCode = 200
+        versionName = "1.0.200"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Apply Bluetooth auto-stop across all connected car Bluetooth devices and remove single-car picker from Settings.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -125,7 +125,7 @@ jobs:
       - name: Upload Verified Update-Ready APK
         uses: actions/upload-artifact@v4
         with:
-          name: BusinessMileageTracker-v1.0.199-bluetooth-vehicle-recognition
+          name: BusinessMileageTracker-v1.0.200-universal-bluetooth-autostop
           path: ${{ steps.find_apk.outputs.apk_path }}
           retention-days: 30
           if-no-files-found: error

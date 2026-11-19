@@ -86,6 +86,35 @@ class VehicleBluetoothEventHandlerTest {
     }
 
     @Test
+    fun anySavedCarDisconnect_startsSafeStopSignal() = runBlocking {
+        // Vehicle directory has a car that is different from preferences.vehicleBluetoothDevice
+        val secondCarAddress = "22:33:44:55:66:77"
+        vehicleCatalog.save(VehicleEntity("second-car-id", "Second Car", secondCarAddress, "Second BT", 1L, 1L))
+        preferences.setBluetoothAutoStopEnabled(true)
+
+        handler.handle(BluetoothDevice.ACTION_ACL_DISCONNECTED, secondCarAddress.lowercase())
+
+        assertTrue(scheduler.scheduled)
+        assertFalse(preferences.isInVehicle())
+        assertTrue(preferences.isBluetoothDisconnectPending())
+    }
+
+    @Test
+    fun anySavedCarReconnect_cancelsPendingStop() = runBlocking {
+        val secondCarAddress = "22:33:44:55:66:77"
+        vehicleCatalog.save(VehicleEntity("second-car-id", "Second Car", secondCarAddress, "Second BT", 1L, 1L))
+        preferences.setBluetoothAutoStopEnabled(true)
+        preferences.setBluetoothDisconnectPending(true)
+        preferences.setInVehicleState(false)
+
+        handler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, secondCarAddress)
+
+        assertTrue(scheduler.cancelled)
+        assertTrue(preferences.isInVehicle())
+        assertFalse(preferences.isBluetoothDisconnectPending())
+    }
+
+    @Test
     fun otherDeviceDisconnect_isIgnored() = runBlocking {
         preferences.setBluetoothAutoStopEnabled(true)
 
