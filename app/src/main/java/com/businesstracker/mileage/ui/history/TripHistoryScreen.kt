@@ -1,4 +1,6 @@
 package com.businesstracker.mileage.ui.history
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Info
@@ -804,6 +806,7 @@ private fun HistoryControls(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
                     .padding(top = 2.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
@@ -815,7 +818,6 @@ private fun HistoryControls(
                     if (choseAllMonths) "All" else "Dates"
                 }
                 CompactPillFilterButton(
-                    modifier = Modifier.weight(1f),
                     icon = Icons.Default.CalendarToday,
                     label = datesLabel,
                     isActive = datesActive,
@@ -831,7 +833,6 @@ private fun HistoryControls(
                     else -> if (choseAllCategories) "All" else "Type"
                 }
                 CompactPillFilterButton(
-                    modifier = Modifier.weight(1f),
                     icon = Icons.Default.LocalOffer,
                     label = categoryLabel,
                     isActive = categoryActive,
@@ -849,7 +850,6 @@ private fun HistoryControls(
                     }
                 }
                 CompactPillFilterButton(
-                    modifier = Modifier.weight(1f),
                     icon = Icons.Default.DirectionsCar,
                     label = vehicleLabel,
                     isActive = vehicleActive,
@@ -867,7 +867,6 @@ private fun HistoryControls(
                     else -> "Sort"
                 }
                 CompactPillFilterButton(
-                    modifier = Modifier.weight(1f),
                     icon = Icons.Default.SwapVert,
                     label = sortLabel,
                     isActive = sortActive,
@@ -1022,15 +1021,9 @@ private fun CompactPillFilterButton(
         if (dark) MaterialTheme.colorScheme.onSurface else Color(0xFF334155)
     }
 
-    val chevronColor = if (isActive) {
-        contentColor.copy(alpha = 0.8f)
-    } else {
-        if (dark) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else Color(0xFF94A3B8)
-    }
-
     Surface(
         modifier = modifier
-            .height(42.dp)
+            .height(38.dp)
             .clip(CircleShape)
             .clickable(onClick = onClick),
         shape = CircleShape,
@@ -1040,8 +1033,7 @@ private fun CompactPillFilterButton(
     ) {
         Row(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 7.dp),
+                .padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.Center
         ) {
@@ -1051,7 +1043,7 @@ private fun CompactPillFilterButton(
                 tint = contentColor,
                 modifier = Modifier.size(15.dp)
             )
-            Spacer(Modifier.width(3.dp))
+            Spacer(Modifier.width(5.dp))
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelMedium.copy(
@@ -1061,15 +1053,7 @@ private fun CompactPillFilterButton(
                 fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,
                 color = contentColor,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
-            )
-            Spacer(Modifier.width(2.dp))
-            Icon(
-                imageVector = Icons.Default.KeyboardArrowDown,
-                contentDescription = null,
-                tint = chevronColor,
-                modifier = Modifier.size(14.dp)
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
