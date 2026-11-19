@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.local.entity.SavedLocationEntity
 import com.businesstracker.mileage.data.local.entity.TripEntity
+import com.businesstracker.mileage.data.local.entity.VehicleEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.ClassificationSource
 import com.businesstracker.mileage.domain.model.SortOrder
@@ -15,6 +16,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.flowOf
 import com.businesstracker.mileage.domain.repository.SavedLocationRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
+import com.businesstracker.mileage.domain.repository.VehicleRepository
 import com.businesstracker.mileage.domain.usecase.ResolveSmartTripNamesUseCase
 import com.businesstracker.mileage.domain.usecase.SmartTripNames
 import android.content.Context
@@ -37,6 +39,7 @@ data class TripHistoryUiState(
     val trips: List<TripEntity> = emptyList(),
     val smartNamesMap: Map<String, SmartTripNames> = emptyMap(),
     val savedLocations: List<SavedLocationEntity> = emptyList(),
+    val vehicles: List<VehicleEntity> = emptyList(),
     val totalFilteredMiles: Double = 0.0,
     val totalFilteredDeduction: Double = 0.0,
     val totalRecordedTripsCount: Int = 0,
@@ -44,6 +47,7 @@ data class TripHistoryUiState(
     val searchQuery: String = "",
     val selectedClassificationFilter: String = "ALL", // "ALL", "BUSINESS", "PERSONAL", "UNREVIEWED"
     val selectedBusinessEntityFilter: String = "ALL", // "ALL", "MySucculentCorner", "Personal"
+    val selectedVehicleFilter: String = "ALL",        // "ALL", "UNKNOWN", or vehicle ID
     val selectedSyncStatusFilter: String = "ALL",     // "ALL", "SYNCED", "PENDING", "FAILED"
     val startDateFilter: String = "",
     val endDateFilter: String = "",
@@ -61,6 +65,7 @@ data class TripHistoryUiState(
 class TripHistoryViewModel @Inject constructor(
     private val tripRepository: TripRepository,
     private val savedLocationRepository: SavedLocationRepository? = null,
+    private val vehicleRepository: VehicleRepository? = null,
     private val resolveSmartTripNamesUseCase: ResolveSmartTripNamesUseCase? = null,
     private val preferencesManager: TrackingPreferencesManager? = null,
     @ApplicationContext private val context: Context? = null
@@ -69,6 +74,7 @@ class TripHistoryViewModel @Inject constructor(
     private val _searchQuery = MutableStateFlow("")
     private val _classificationFilter = MutableStateFlow("ALL")
     private val _businessEntityFilter = MutableStateFlow("ALL")
+    private val _vehicleFilter = MutableStateFlow("ALL")
     private val _syncStatusFilter = MutableStateFlow("ALL")
     private val _startDateFilter = MutableStateFlow("")
     private val _endDateFilter = MutableStateFlow("")
@@ -86,37 +92,46 @@ class TripHistoryViewModel @Inject constructor(
     val uiState: StateFlow<TripHistoryUiState> = combine(
         tripRepository.getAllTrips(),
         (savedLocationRepository?.getAllLocationsFlow() ?: flowOf(emptyList())).catch { emit(emptyList()) },
+        (vehicleRepository?.observeVehicles() ?: flowOf(emptyList())).catch { emit(emptyList()) },
         _searchQuery,
-        _classificationFilter,
-        _businessEntityFilter
-    ) { allTrips, savedLocations, query, classification, entity ->
-        FilterStatePart1(allTrips, savedLocations, query, classification, entity)
+        _classificationFilter
+    ) { allTrips, savedLocations, vehicles, query, classification ->
+        FilterStatePart1(allTrips, savedLocations, vehicles, query, classification)
     }.combine(
         combine(
+            _businessEntityFilter,
+            _vehicleFilter,
             _syncStatusFilter,
             _startDateFilter,
-            _endDateFilter,
-            _sortOrder,
-            combine(_selectedTripForDetails, _selectedTripForConfirmationSheet) { details, sheet ->
-                Pair(details, sheet)
-            }
-        ) { syncStatus, start, end, sort, (selectedTrip, sheetTrip) ->
+            _endDateFilter
+        ) { entity, vehicle, syncStatus, start, end ->
             FilterStatePart2(
+                entity = entity,
+                vehicle = vehicle,
                 syncStatus = syncStatus,
                 startDate = start,
-                endDate = end,
-                sortOrder = sort,
-                selectedTrip = selectedTrip,
-                selectedTripForConfirmationSheet = sheetTrip,
-                customPurposes = emptyList()
+                endDate = end
             )
         }
     ) { part1, part2 ->
         Pair(part1, part2)
     }.combine(
-        preferencesManager?.customPurposes ?: flowOf(emptyList())
-    ) { (part1, part2), customPurposes ->
-        Triple(part1, part2.copy(customPurposes = customPurposes), Unit)
+        combine(
+            _sortOrder,
+            combine(_selectedTripForDetails, _selectedTripForConfirmationSheet) { details, sheet ->
+                Pair(details, sheet)
+            },
+            preferencesManager?.customPurposes ?: flowOf(emptyList())
+        ) { sort, (selectedTrip, sheetTrip), customPurposes ->
+            FilterStatePart3(
+                sortOrder = sort,
+                selectedTrip = selectedTrip,
+                selectedTripForConfirmationSheet = sheetTrip,
+                customPurposes = customPurposes
+            )
+        }
+    ) { (part1, part2), part3 ->
+        Triple(part1, part2, part3)
     }.combine(
         combine(
             _recentlyDeletedTrips,
@@ -126,7 +141,7 @@ class TripHistoryViewModel @Inject constructor(
         ) { deletedTrips, restoreFailed, isRestoring, actionError ->
             UndoState(deletedTrips.lastOrNull(), restoreFailed, isRestoring, actionError)
         }
-    ) { (part1, part2, _), undoState ->
+    ) { (part1, part2, part3), undoState ->
         // Compute smart names map
         val namesMap = if (resolveSmartTripNamesUseCase != null && part1.savedLocations.isNotEmpty()) {
             part1.allTrips.associate { trip ->
@@ -157,8 +172,15 @@ class TripHistoryViewModel @Inject constructor(
                     trip.classification.equals(part1.classification, ignoreCase = true)
 
             // Business entity filter
-            val matchesEntity = part1.entity == "ALL" ||
-                    trip.businessEntity.equals(part1.entity, ignoreCase = true)
+            val matchesEntity = part2.entity == "ALL" ||
+                    trip.businessEntity.equals(part2.entity, ignoreCase = true)
+
+            // Vehicle filter
+            val matchesVehicle = when (part2.vehicle) {
+                "ALL" -> true
+                "UNKNOWN" -> trip.vehicleId.isNullOrBlank()
+                else -> trip.vehicleId == part2.vehicle
+            }
 
             // Sync status filter
             val matchesSync = part2.syncStatus == "ALL" ||
@@ -168,11 +190,11 @@ class TripHistoryViewModel @Inject constructor(
             val matchesStartDate = part2.startDate.isBlank() || trip.date >= part2.startDate
             val matchesEndDate = part2.endDate.isBlank() || trip.date <= part2.endDate
 
-            matchesQuery && matchesClassification && matchesEntity && matchesSync && matchesStartDate && matchesEndDate
+            matchesQuery && matchesClassification && matchesEntity && matchesVehicle && matchesSync && matchesStartDate && matchesEndDate
         }
 
         // Sorting
-        val sorted = when (part2.sortOrder) {
+        val sorted = when (part3.sortOrder) {
             SortOrder.NEWEST_FIRST -> filtered.sortedByDescending { it.startTime }
             SortOrder.OLDEST_FIRST -> filtered.sortedBy { it.startTime }
             SortOrder.HIGHEST_MILEAGE -> filtered.sortedByDescending { it.totalDistanceMiles }
@@ -189,20 +211,22 @@ class TripHistoryViewModel @Inject constructor(
             trips = sorted,
             smartNamesMap = namesMap,
             savedLocations = part1.savedLocations,
+            vehicles = part1.vehicles,
             totalFilteredMiles = kotlin.math.round(totalMiles * 100.0) / 100.0,
             totalFilteredDeduction = kotlin.math.round(totalDeduction * 100.0) / 100.0,
             totalRecordedTripsCount = part1.allTrips.size,
             availableMonths = part1.allTrips.map { it.date.take(7) }.filter { it.matches(Regex("\\d{4}-\\d{2}")) }.distinct().sortedDescending(),
             searchQuery = part1.query,
             selectedClassificationFilter = part1.classification,
-            selectedBusinessEntityFilter = part1.entity,
+            selectedBusinessEntityFilter = part2.entity,
+            selectedVehicleFilter = part2.vehicle,
             selectedSyncStatusFilter = part2.syncStatus,
             startDateFilter = part2.startDate,
             endDateFilter = part2.endDate,
-            sortOrder = part2.sortOrder,
-            selectedTripForDetails = part2.selectedTrip,
-            selectedTripForConfirmationSheet = part2.selectedTripForConfirmationSheet,
-            customPurposes = part2.customPurposes,
+            sortOrder = part3.sortOrder,
+            selectedTripForDetails = part3.selectedTrip,
+            selectedTripForConfirmationSheet = part3.selectedTripForConfirmationSheet,
+            customPurposes = part3.customPurposes,
             recentlyDeletedTrip = undoState.recentlyDeleted,
             restoreFailedTrip = undoState.restoreFailed,
             isRestoring = undoState.isRestoring,
@@ -224,6 +248,10 @@ class TripHistoryViewModel @Inject constructor(
 
     fun setBusinessEntityFilter(entity: String) {
         _businessEntityFilter.value = entity
+    }
+
+    fun setVehicleFilter(vehicleId: String) {
+        _vehicleFilter.value = vehicleId
     }
 
     fun setSyncStatusFilter(status: String) {
@@ -361,6 +389,7 @@ class TripHistoryViewModel @Inject constructor(
         _searchQuery.value = ""
         _classificationFilter.value = "ALL"
         _businessEntityFilter.value = "ALL"
+        _vehicleFilter.value = "ALL"
         _syncStatusFilter.value = "ALL"
         _startDateFilter.value = ""
         _endDateFilter.value = ""
@@ -502,16 +531,21 @@ class TripHistoryViewModel @Inject constructor(
 
     private data class FilterStatePart1(
         val allTrips: List<TripEntity>,
-        val savedLocations: List<com.businesstracker.mileage.data.local.entity.SavedLocationEntity>,
+        val savedLocations: List<SavedLocationEntity>,
+        val vehicles: List<VehicleEntity>,
         val query: String,
-        val classification: String,
-        val entity: String
+        val classification: String
     )
 
     private data class FilterStatePart2(
+        val entity: String,
+        val vehicle: String,
         val syncStatus: String,
         val startDate: String,
-        val endDate: String,
+        val endDate: String
+    )
+
+    private data class FilterStatePart3(
         val sortOrder: SortOrder,
         val selectedTrip: TripEntity?,
         val selectedTripForConfirmationSheet: TripEntity? = null,

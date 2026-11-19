@@ -6,6 +6,12 @@ import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.LocalOffer
+import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -338,6 +344,7 @@ fun TripHistoryScreen(
                     onSearchChange = viewModel::setSearchQuery,
                     onSortChange = viewModel::setSortOrder,
                     onClassificationChange = viewModel::setClassificationFilter,
+                    onVehicleChange = viewModel::setVehicleFilter,
                     onEntityChange = viewModel::setBusinessEntityFilter,
                     onSyncChange = viewModel::setSyncStatusFilter,
                     onClearDateFilter = { viewModel.setDateRange("", "") },
@@ -351,7 +358,7 @@ fun TripHistoryScreen(
                     },
                     onBackToReports = onBackToReports,
                     showTitle = true,
-                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 8.dp)
+                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 4.dp)
                 )
                 EmptyHistory(
                     state = state,
@@ -405,6 +412,7 @@ fun TripHistoryScreen(
                         onSearchChange = viewModel::setSearchQuery,
                         onSortChange = viewModel::setSortOrder,
                         onClassificationChange = viewModel::setClassificationFilter,
+                        onVehicleChange = viewModel::setVehicleFilter,
                         onEntityChange = viewModel::setBusinessEntityFilter,
                         onSyncChange = viewModel::setSyncStatusFilter,
                         onClearDateFilter = { viewModel.setDateRange("", "") },
@@ -418,7 +426,7 @@ fun TripHistoryScreen(
                         },
                         onBackToReports = onBackToReports,
                         showTitle = false,
-                        modifier = Modifier.padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 6.dp)
+                        modifier = Modifier.padding(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 2.dp)
                     )
                 }
 
@@ -651,6 +659,7 @@ private fun HistoryControls(
     onSearchChange: (String) -> Unit,
     onSortChange: (SortOrder) -> Unit,
     onClassificationChange: (String) -> Unit,
+    onVehicleChange: (String) -> Unit,
     onEntityChange: (String) -> Unit,
     onSyncChange: (String) -> Unit,
     onClearDateFilter: () -> Unit,
@@ -661,25 +670,27 @@ private fun HistoryControls(
     modifier: Modifier = Modifier
 ) {
     val hasActiveFilter = state.selectedClassificationFilter != "ALL" ||
+        state.selectedVehicleFilter != "ALL" ||
         state.startDateFilter.isNotBlank() ||
         state.endDateFilter.isNotBlank() ||
-        state.searchQuery.isNotBlank()
-    var isSortExpanded by remember(hasActiveFilter) { mutableStateOf(hasActiveFilter) }
+        state.searchQuery.isNotBlank() ||
+        state.sortOrder != SortOrder.NEWEST_FIRST
+
+    var isFilterBarExpanded by remember { mutableStateOf(true) }
     var openPicker by remember { mutableStateOf<String?>(null) }
     var choseAllMonths by remember { mutableStateOf(false) }
     var choseAllCategories by remember { mutableStateOf(false) }
+    var choseAllVehicles by remember { mutableStateOf(false) }
 
     val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val primaryText = if (dark) MaterialTheme.colorScheme.onSurface else Color(0xFF192A40)
-    val secondaryText = if (dark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF718096)
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         if (showTitle) HistoryTitle(onBackToReports)
 
-        // Search Bar & Sort Toggle Button
+        // Search Bar & Green Filter Button
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -746,76 +757,109 @@ private fun HistoryControls(
                 }
             }
 
-            // Collapsible sort toggle button
+            // Green filter button: mint container background with SucculentPrimary filter icon
             Surface(
                 modifier = Modifier
                     .size(44.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .clickable { isSortExpanded = !isSortExpanded },
+                    .clickable { isFilterBarExpanded = !isFilterBarExpanded },
                 shape = RoundedCornerShape(12.dp),
-                color = if (isSortExpanded) SucculentPrimary else MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, if (isSortExpanded) SucculentPrimary else MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+                color = if (hasActiveFilter) SucculentPrimary.copy(alpha = 0.22f) else SucculentPrimary.copy(alpha = 0.12f),
+                border = BorderStroke(1.dp, SucculentPrimary.copy(alpha = if (hasActiveFilter) 0.5f else 0.25f))
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector = Icons.Default.Sort,
-                        contentDescription = "Sort and filter options",
-                        tint = if (isSortExpanded) Color.White else MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(22.dp)
+                        imageVector = Icons.Default.FilterAlt,
+                        contentDescription = "Toggle filters",
+                        tint = SucculentPrimary,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
         }
 
+        // Four compact equal-width filter buttons: Dates, Type, Vehicle, Sort
         AnimatedVisibility(
-            visible = isSortExpanded,
+            visible = isFilterBarExpanded,
             enter = expandVertically() + fadeIn(),
             exit = shrinkVertically() + fadeOut()
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                listOf("Months", "Category", "Sort").forEach { picker ->
-                    val label = when (picker) {
-                        "Months" -> {
-                            if (state.startDateFilter.isNotBlank() || state.endDateFilter.isNotBlank()) {
-                                formatDateRangeFilter(state.startDateFilter, state.endDateFilter)
-                            } else {
-                                if (choseAllMonths) "All dates" else "Dates"
-                            }
-                        }
-                        "Category" -> state.selectedClassificationFilter.takeIf { it != "ALL" }
-                            ?.lowercase()?.replaceFirstChar { it.uppercase() }
-                            ?: if (choseAllCategories) "All" else "Category"
-                        else -> when (state.sortOrder) {
-                            SortOrder.HIGHEST_MILEAGE -> "High to low"
-                            SortOrder.LOWEST_MILEAGE -> "Low to high"
-                            SortOrder.MOST_MONEY -> "Most money"
-                            SortOrder.LEAST_MONEY -> "Least money"
-                            else -> "Sort"
-                        }
-                    }
-                    Box(
-                        modifier = Modifier.weight(1f).height(48.dp).clickable { openPicker = picker },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth().height(38.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            color = SucculentPrimary.copy(alpha = 0.14f)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(label, style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold, color = SucculentPrimary,
-                                    maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
+                // 1. Dates button
+                val datesActive = state.startDateFilter.isNotBlank() || state.endDateFilter.isNotBlank()
+                val datesLabel = if (datesActive) {
+                    formatDateRangeFilter(state.startDateFilter, state.endDateFilter)
+                } else {
+                    if (choseAllMonths) "All" else "Dates"
+                }
+                CompactFilterButton(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.CalendarToday,
+                    label = datesLabel,
+                    isActive = datesActive,
+                    onClick = { openPicker = "Dates" }
+                )
+
+                // 2. Type (Category) button
+                val categoryActive = state.selectedClassificationFilter != "ALL"
+                val categoryLabel = when (state.selectedClassificationFilter) {
+                    "BUSINESS" -> "Business"
+                    "PERSONAL" -> "Personal"
+                    "UNREVIEWED" -> "Review"
+                    else -> if (choseAllCategories) "All" else "Type"
+                }
+                CompactFilterButton(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.LocalOffer,
+                    label = categoryLabel,
+                    isActive = categoryActive,
+                    onClick = { openPicker = "Category" }
+                )
+
+                // 3. Vehicle button
+                val vehicleActive = state.selectedVehicleFilter != "ALL"
+                val vehicleLabel = when (state.selectedVehicleFilter) {
+                    "ALL" -> if (choseAllVehicles) "All" else "Vehicle"
+                    "UNKNOWN" -> "Unknown"
+                    else -> {
+                        val friendly = state.vehicles.firstOrNull { it.id == state.selectedVehicleFilter }?.name
+                        friendly?.takeIf { it.isNotBlank() } ?: "Vehicle"
                     }
                 }
+                CompactFilterButton(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.DirectionsCar,
+                    label = vehicleLabel,
+                    isActive = vehicleActive,
+                    onClick = { openPicker = "Vehicle" }
+                )
+
+                // 4. Sort button
+                val sortActive = state.sortOrder != SortOrder.NEWEST_FIRST
+                val sortLabel = when (state.sortOrder) {
+                    SortOrder.HIGHEST_MILEAGE -> "High"
+                    SortOrder.LOWEST_MILEAGE -> "Low"
+                    SortOrder.MOST_MONEY -> "Most $"
+                    SortOrder.LEAST_MONEY -> "Least $"
+                    SortOrder.OLDEST_FIRST -> "Oldest"
+                    else -> "Sort"
+                }
+                CompactFilterButton(
+                    modifier = Modifier.weight(1f),
+                    icon = Icons.Default.SwapVert,
+                    label = sortLabel,
+                    isActive = sortActive,
+                    onClick = { openPicker = "Sort" }
+                )
             }
         }
 
+        // Mobile-optimized swipeable bottom sheet for filters
         if (openPicker != null) {
             val picker = openPicker!!
             val todayStr = LocalDate.now().toString()
@@ -825,23 +869,46 @@ private fun HistoryControls(
             val monthEnd = LocalDate.now().withDayOfMonth(LocalDate.now().lengthOfMonth()).toString()
 
             val options: List<Pair<String, String>> = when (picker) {
-                "Months" -> listOf(
+                "Dates" -> listOf(
                     "All dates" to "ALL",
                     "Today" to "TODAY",
                     "This Week" to "THIS_WEEK",
                     "This Month" to "THIS_MONTH"
                 ) + state.availableMonths.map { formatMonthFilter("$it-01") to it }
-                "Category" -> listOf("All" to "ALL", "Business" to "BUSINESS", "Personal" to "PERSONAL")
+                "Category" -> listOf(
+                    "All" to "ALL",
+                    "Business" to "BUSINESS",
+                    "Personal" to "PERSONAL"
+                )
+                "Vehicle" -> {
+                    val list = mutableListOf<Pair<String, String>>()
+                    list.add("All vehicles" to "ALL")
+                    state.vehicles.forEach { v ->
+                        list.add(v.name to v.id)
+                    }
+                    list.add("Unknown vehicle" to "UNKNOWN")
+                    list
+                }
                 else -> listOf(
+                    "Newest first" to SortOrder.NEWEST_FIRST.name,
+                    "Oldest first" to SortOrder.OLDEST_FIRST.name,
                     "High to low" to SortOrder.HIGHEST_MILEAGE.name,
                     "Low to high" to SortOrder.LOWEST_MILEAGE.name,
                     "Most money" to SortOrder.MOST_MONEY.name,
                     "Least money" to SortOrder.LEAST_MONEY.name
                 )
             }
+
+            val sheetTitle = when (picker) {
+                "Dates" -> "Filter by date"
+                "Category" -> "Filter by category"
+                "Vehicle" -> "Filter by vehicle"
+                else -> "Sort trips"
+            }
+
             AppFloatingBottomSheet(
                 onDismissRequest = { openPicker = null },
-                title = if (picker == "Months") "Filter by date" else if (picker == "Category") "Filter by category" else "Sort trips",
+                title = sheetTitle,
                 onClose = { openPicker = null }
             ) {
                 LazyColumn(
@@ -852,7 +919,7 @@ private fun HistoryControls(
                     items(options.size) { index ->
                         val (label, value) = options[index]
                         val selected = when (picker) {
-                            "Months" -> when (value) {
+                            "Dates" -> when (value) {
                                 "ALL", "" -> state.startDateFilter.isBlank() && state.endDateFilter.isBlank()
                                 "TODAY" -> state.startDateFilter == todayStr && state.endDateFilter == todayStr
                                 "THIS_WEEK" -> state.startDateFilter == mondayStr && state.endDateFilter == sundayStr
@@ -860,6 +927,7 @@ private fun HistoryControls(
                                 else -> state.startDateFilter.startsWith(value) && value.isNotEmpty()
                             }
                             "Category" -> state.selectedClassificationFilter == value
+                            "Vehicle" -> state.selectedVehicleFilter == value
                             else -> state.sortOrder.name == value
                         }
                         Row(
@@ -868,7 +936,7 @@ private fun HistoryControls(
                                 .heightIn(min = 52.dp)
                                 .clickable {
                                     when (picker) {
-                                        "Months" -> {
+                                        "Dates" -> {
                                             when (value) {
                                                 "ALL", "" -> { choseAllMonths = true; onClearDateFilter() }
                                                 "TODAY" -> { choseAllMonths = false; onDateRangeChange(todayStr, todayStr) }
@@ -877,7 +945,14 @@ private fun HistoryControls(
                                                 else -> { choseAllMonths = false; onMonthChange(value) }
                                             }
                                         }
-                                        "Category" -> { choseAllCategories = value == "ALL"; onClassificationChange(value) }
+                                        "Category" -> {
+                                            choseAllCategories = value == "ALL"
+                                            onClassificationChange(value)
+                                        }
+                                        "Vehicle" -> {
+                                            choseAllVehicles = value == "ALL"
+                                            onVehicleChange(value)
+                                        }
                                         else -> onSortChange(SortOrder.valueOf(value))
                                     }
                                     openPicker = null
@@ -885,12 +960,74 @@ private fun HistoryControls(
                                 .padding(horizontal = 24.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(label, modifier = Modifier.weight(1f), color = if (selected) SucculentPrimary else MaterialTheme.colorScheme.onSurface)
+                            Text(
+                                text = label,
+                                modifier = Modifier.weight(1f),
+                                color = if (selected) SucculentPrimary else MaterialTheme.colorScheme.onSurface,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+                            )
                             if (selected) Icon(Icons.Default.Check, contentDescription = "Selected", tint = SucculentPrimary)
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CompactFilterButton(
+    icon: ImageVector,
+    label: String,
+    isActive: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val bgColor = if (isActive) {
+        SucculentPrimary.copy(alpha = 0.22f)
+    } else {
+        SucculentPrimary.copy(alpha = 0.10f)
+    }
+    val borderColor = if (isActive) {
+        SucculentPrimary.copy(alpha = 0.55f)
+    } else {
+        SucculentPrimary.copy(alpha = 0.18f)
+    }
+
+    Surface(
+        modifier = modifier
+            .height(54.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = bgColor,
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 4.dp, vertical = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = SucculentPrimary,
+                modifier = Modifier.size(19.dp)
+            )
+            Spacer(Modifier.height(3.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 11.5.sp,
+                    lineHeight = 13.sp
+                ),
+                fontWeight = if (isActive) FontWeight.Bold else FontWeight.SemiBold,
+                color = SucculentPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -1034,6 +1171,7 @@ private fun EmptyHistory(
 ) {
     val isFilterActive = state.selectedClassificationFilter != "ALL" ||
         state.selectedBusinessEntityFilter != "ALL" ||
+        state.selectedVehicleFilter != "ALL" ||
         state.selectedSyncStatusFilter != "ALL" ||
         state.startDateFilter.isNotBlank() ||
         state.endDateFilter.isNotBlank()

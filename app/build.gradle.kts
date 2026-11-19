@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 201
-        versionName = "1.0.201"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Update live tracking notification title to 'Active tracking'.\"")
+        versionCode = 202
+        versionName = "1.0.202"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip History: Compact 4-filter bar (Dates, Type, Vehicle, Sort) with vehicle filter and bottom sheet selection.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

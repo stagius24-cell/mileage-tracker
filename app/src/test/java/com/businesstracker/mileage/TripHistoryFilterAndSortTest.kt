@@ -563,4 +563,116 @@ class TripHistoryFilterAndSortTest {
         assertEquals("Today", com.businesstracker.mileage.ui.history.formatDateRangeFilter(todayStr, todayStr))
         assertEquals("Dates", com.businesstracker.mileage.ui.history.formatDateRangeFilter("", ""))
     }
+
+    @Test
+    fun vehicleFilter_byVehicleId_returnsOnlyMatchingTrips() = runTest {
+        val tripsWithVehicles = listOf(
+            createTrip("101", "2026-11-01", 1000L, 12.0, "BUSINESS").copy(vehicleId = "veh_tesla"),
+            createTrip("102", "2026-11-02", 2000L, 8.0, "BUSINESS").copy(vehicleId = "veh_honda"),
+            createTrip("103", "2026-11-03", 3000L, 5.0, "PERSONAL").copy(vehicleId = null),
+            createTrip("104", "2026-11-04", 4000L, 15.0, "BUSINESS").copy(vehicleId = "")
+        )
+        val repo = object : TripRepository by fakeRepository {
+            override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(tripsWithVehicles)
+        }
+        val viewModel = TripHistoryViewModel(repo)
+        advanceUntilIdle()
+
+        // 1. Initial: all trips visible
+        assertEquals(4, viewModel.uiState.value.trips.size)
+
+        // 2. Filter by specific vehicle "veh_tesla"
+        viewModel.setVehicleFilter("veh_tesla")
+        advanceUntilIdle()
+        val teslaState = viewModel.uiState.value
+        assertEquals("veh_tesla", teslaState.selectedVehicleFilter)
+        assertEquals(1, teslaState.trips.size)
+        assertEquals("101", teslaState.trips.first().id)
+        assertEquals(12.0, teslaState.totalFilteredMiles, 0.01)
+
+        // 3. Filter by "UNKNOWN" (trips with null or blank vehicleId)
+        viewModel.setVehicleFilter("UNKNOWN")
+        advanceUntilIdle()
+        val unknownState = viewModel.uiState.value
+        assertEquals("UNKNOWN", unknownState.selectedVehicleFilter)
+        assertEquals(2, unknownState.trips.size)
+        assertTrue(unknownState.trips.any { it.id == "103" })
+        assertTrue(unknownState.trips.any { it.id == "104" })
+        assertEquals(20.0, unknownState.totalFilteredMiles, 0.01)
+
+        // 4. Reset to "ALL"
+        viewModel.setVehicleFilter("ALL")
+        advanceUntilIdle()
+        assertEquals(4, viewModel.uiState.value.trips.size)
+    }
+
+    @Test
+    fun combinedFilters_vehicleDateCategoryAndSearch_combinesCorrectly() = runTest {
+        val dataset = listOf(
+            createTrip("201", "2026-11-01", 1000L, 10.0, "BUSINESS", purpose = "Nursery Restock").copy(vehicleId = "veh_tesla"),
+            createTrip("202", "2026-11-02", 2000L, 20.0, "BUSINESS", purpose = "Deliver Plants").copy(vehicleId = "veh_tesla"),
+            createTrip("203", "2026-11-03", 3000L, 15.0, "PERSONAL", purpose = "Grocery Drive").copy(vehicleId = "veh_tesla"),
+            createTrip("204", "2026-11-02", 2500L, 25.0, "BUSINESS", purpose = "Nursery Restock").copy(vehicleId = "veh_truck"),
+            createTrip("205", "2026-11-05", 5000L, 30.0, "BUSINESS", purpose = "Nursery Restock").copy(vehicleId = "veh_tesla")
+        )
+        val repo = object : TripRepository by fakeRepository {
+            override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(dataset)
+        }
+        val viewModel = TripHistoryViewModel(repo)
+        advanceUntilIdle()
+
+        // Apply Vehicle = "veh_tesla", Category = "BUSINESS", Dates = "2026-11-01" to "2026-11-03", Search = "Restock"
+        viewModel.setVehicleFilter("veh_tesla")
+        viewModel.setClassificationFilter("BUSINESS")
+        viewModel.setDateRange("2026-11-01", "2026-11-03")
+        viewModel.setSearchQuery("Restock")
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals(1, state.trips.size)
+        assertEquals("201", state.trips.first().id)
+        assertEquals(10.0, state.totalFilteredMiles, 0.01)
+        assertEquals(7.60, state.totalFilteredDeduction, 0.01)
+
+        // Clear all filters resets vehicle filter as well
+        viewModel.clearAllFilters()
+        advanceUntilIdle()
+        val clearedState = viewModel.uiState.value
+        assertEquals("ALL", clearedState.selectedVehicleFilter)
+        assertEquals("ALL", clearedState.selectedClassificationFilter)
+        assertEquals("", clearedState.startDateFilter)
+        assertEquals("", clearedState.searchQuery)
+        assertEquals(5, clearedState.trips.size)
+    }
+
+    @Test
+    fun stateRestoration_selectedTripForDetails_preservesActiveVehicleFilter() = runTest {
+        val trips = listOf(
+            createTrip("301", "2026-11-01", 1000L, 14.0, "BUSINESS").copy(vehicleId = "veh_tesla"),
+            createTrip("302", "2026-11-02", 2000L, 18.0, "BUSINESS").copy(vehicleId = "veh_bmw")
+        )
+        val repo = object : TripRepository by fakeRepository {
+            override fun getAllTrips(): Flow<List<TripEntity>> = flowOf(trips)
+        }
+        val viewModel = TripHistoryViewModel(repo)
+        advanceUntilIdle()
+
+        // Filter by veh_tesla
+        viewModel.setVehicleFilter("veh_tesla")
+        advanceUntilIdle()
+        assertEquals(1, viewModel.uiState.value.trips.size)
+
+        // Navigate to details
+        val targetTrip = viewModel.uiState.value.trips.first()
+        viewModel.selectTripForDetails(targetTrip)
+        advanceUntilIdle()
+        assertEquals(targetTrip.id, viewModel.uiState.value.selectedTripForDetails?.id)
+
+        // Navigate back
+        viewModel.selectTripForDetails(null)
+        advanceUntilIdle()
+        org.junit.Assert.assertNull(viewModel.uiState.value.selectedTripForDetails)
+        assertEquals("veh_tesla", viewModel.uiState.value.selectedVehicleFilter)
+        assertEquals(1, viewModel.uiState.value.trips.size)
+    }
 }
