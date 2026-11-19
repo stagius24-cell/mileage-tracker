@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 202
-        versionName = "1.0.202"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip History: Compact 4-filter bar (Dates, Type, Vehicle, Sort) with vehicle filter and bottom sheet selection.\"")
+        versionCode = 203
+        versionName = "1.0.203"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip History: Modernized search and filter UI matching mockup with white pill filters and outline funnel toggle.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

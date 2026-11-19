@@ -14,6 +14,9 @@ import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.BusinessCenter
+import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.outlined.FilterAlt
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
@@ -676,7 +679,8 @@ private fun HistoryControls(
         state.searchQuery.isNotBlank() ||
         state.sortOrder != SortOrder.NEWEST_FIRST
 
-    var isFilterBarExpanded by remember { mutableStateOf(true) }
+    // Default to collapsed when entering Trip History unless an active filter exists
+    var isFilterBarExpanded by remember(hasActiveFilter) { mutableStateOf(hasActiveFilter) }
     var openPicker by remember { mutableStateOf<String?>(null) }
     var choseAllMonths by remember { mutableStateOf(false) }
     var choseAllCategories by remember { mutableStateOf(false) }
@@ -686,35 +690,37 @@ private fun HistoryControls(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         if (showTitle) HistoryTitle(onBackToReports)
 
-        // Search Bar & Green Filter Button
+        // Search Bar (Always Visible) & Clean Lucide-Style Outline Filter Toggle Button
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Search Bar: White background with softly rounded corners, subtle border
             Surface(
                 modifier = Modifier
                     .weight(1f)
                     .height(44.dp),
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+                shape = RoundedCornerShape(22.dp),
+                color = if (dark) MaterialTheme.colorScheme.surface else Color.White,
+                border = BorderStroke(1.dp, if (dark) MaterialTheme.colorScheme.outline.copy(alpha = 0.25f) else Color(0xFFE2E8F0)),
+                shadowElevation = if (dark) 0.dp else 1.dp
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 12.dp),
+                        .padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
                         imageVector = Icons.Default.Search,
                         contentDescription = null,
                         modifier = Modifier.size(19.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        tint = if (dark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF94A3B8)
                     )
                     Spacer(Modifier.width(8.dp))
                     Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
@@ -722,7 +728,7 @@ private fun HistoryControls(
                             Text(
                                 text = "Search trips",
                                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                color = if (dark) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else Color(0xFF94A3B8),
                                 maxLines = 1
                             )
                         }
@@ -732,7 +738,7 @@ private fun HistoryControls(
                             singleLine = true,
                             textStyle = MaterialTheme.typography.bodyMedium.copy(
                                 fontSize = 14.sp,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = if (dark) MaterialTheme.colorScheme.onSurface else Color(0xFF1E293B)
                             ),
                             cursorBrush = SolidColor(SucculentPrimary),
                             modifier = Modifier.fillMaxWidth()
@@ -757,32 +763,43 @@ private fun HistoryControls(
                 }
             }
 
-            // Green filter button: mint container background with SucculentPrimary filter icon
-            Surface(
+            // Filter Toggle Button:
+            // No background color, no colored square, no outline border button.
+            // Simple outline funnel/filter icon with >= 48dp invisible touch target.
+            // Muted gray default, subtle green when active or expanded, optional tiny green dot indicator.
+            val filterIconTint = if (hasActiveFilter || isFilterBarExpanded) SucculentPrimary else (if (dark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF94A3B8))
+            Box(
                 modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(48.dp)
+                    .clip(CircleShape)
                     .clickable { isFilterBarExpanded = !isFilterBarExpanded },
-                shape = RoundedCornerShape(12.dp),
-                color = if (hasActiveFilter) SucculentPrimary.copy(alpha = 0.22f) else SucculentPrimary.copy(alpha = 0.12f),
-                border = BorderStroke(1.dp, SucculentPrimary.copy(alpha = if (hasActiveFilter) 0.5f else 0.25f))
+                contentAlignment = Alignment.Center
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Default.FilterAlt,
-                        contentDescription = "Toggle filters",
-                        tint = SucculentPrimary,
-                        modifier = Modifier.size(20.dp)
+                Icon(
+                    imageVector = Icons.Outlined.FilterAlt,
+                    contentDescription = if (isFilterBarExpanded) "Collapse filters" else "Expand filters",
+                    tint = filterIconTint,
+                    modifier = Modifier.size(24.dp)
+                )
+                if (hasActiveFilter && !isFilterBarExpanded) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 10.dp, end = 10.dp)
+                            .size(7.dp)
+                            .background(SucculentPrimary, CircleShape)
                     )
                 }
             }
         }
 
-        // Four compact equal-width filter buttons: Dates, Type, Vehicle, Sort
+        // Expanded Filter Row:
+        // Four compact pill-shaped buttons directly below the search bar in ONE horizontal row:
+        // 1. Dates (calendar), 2. Type (tag), 3. Vehicle (car, "All" when unselected), 4. Sort (arrows)
         AnimatedVisibility(
             visible = isFilterBarExpanded,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
+            enter = expandVertically(animationSpec = tween(durationMillis = 200)) + fadeIn(animationSpec = tween(durationMillis = 200)),
+            exit = shrinkVertically(animationSpec = tween(durationMillis = 180)) + fadeOut(animationSpec = tween(durationMillis = 180))
         ) {
             Row(
                 modifier = Modifier
@@ -797,7 +814,7 @@ private fun HistoryControls(
                 } else {
                     if (choseAllMonths) "All" else "Dates"
                 }
-                CompactFilterButton(
+                CompactPillFilterButton(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.CalendarToday,
                     label = datesLabel,
@@ -813,7 +830,7 @@ private fun HistoryControls(
                     "UNREVIEWED" -> "Review"
                     else -> if (choseAllCategories) "All" else "Type"
                 }
-                CompactFilterButton(
+                CompactPillFilterButton(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.LocalOffer,
                     label = categoryLabel,
@@ -821,17 +838,17 @@ private fun HistoryControls(
                     onClick = { openPicker = "Category" }
                 )
 
-                // 3. Vehicle button
+                // 3. Vehicle button (displays "All" when no vehicle is selected)
                 val vehicleActive = state.selectedVehicleFilter != "ALL"
                 val vehicleLabel = when (state.selectedVehicleFilter) {
-                    "ALL" -> if (choseAllVehicles) "All" else "Vehicle"
+                    "ALL" -> "All"
                     "UNKNOWN" -> "Unknown"
                     else -> {
                         val friendly = state.vehicles.firstOrNull { it.id == state.selectedVehicleFilter }?.name
-                        friendly?.takeIf { it.isNotBlank() } ?: "Vehicle"
+                        friendly?.takeIf { it.isNotBlank() } ?: "All"
                     }
                 }
-                CompactFilterButton(
+                CompactPillFilterButton(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.DirectionsCar,
                     label = vehicleLabel,
@@ -849,7 +866,7 @@ private fun HistoryControls(
                     SortOrder.OLDEST_FIRST -> "Oldest"
                     else -> "Sort"
                 }
-                CompactFilterButton(
+                CompactPillFilterButton(
                     modifier = Modifier.weight(1f),
                     icon = Icons.Default.SwapVert,
                     label = sortLabel,
@@ -976,57 +993,83 @@ private fun HistoryControls(
 }
 
 @Composable
-private fun CompactFilterButton(
+private fun CompactPillFilterButton(
     icon: ImageVector,
     label: String,
     isActive: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val dark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    // Inactive: White (or dark surface in dark mode), subtle light gray border, dark gray icon/text
+    // Active: Extremely light sage green background, subtle green border, dark green icon/text
     val bgColor = if (isActive) {
-        SucculentPrimary.copy(alpha = 0.22f)
+        if (dark) Color(0xFF163824) else Color(0xFFE8F5E9)
     } else {
-        SucculentPrimary.copy(alpha = 0.10f)
+        if (dark) MaterialTheme.colorScheme.surface else Color.White
     }
+
     val borderColor = if (isActive) {
-        SucculentPrimary.copy(alpha = 0.55f)
+        if (dark) SucculentPrimary.copy(alpha = 0.6f) else Color(0xFFA5D6A7)
     } else {
-        SucculentPrimary.copy(alpha = 0.18f)
+        if (dark) MaterialTheme.colorScheme.outline.copy(alpha = 0.25f) else Color(0xFFE2E8F0)
+    }
+
+    val contentColor = if (isActive) {
+        if (dark) Color(0xFF86EFAC) else Color(0xFF1B5E20)
+    } else {
+        if (dark) MaterialTheme.colorScheme.onSurface else Color(0xFF334155)
+    }
+
+    val chevronColor = if (isActive) {
+        contentColor.copy(alpha = 0.8f)
+    } else {
+        if (dark) MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f) else Color(0xFF94A3B8)
     }
 
     Surface(
         modifier = modifier
-            .height(54.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .height(42.dp)
+            .clip(CircleShape)
             .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
+        shape = CircleShape,
         color = bgColor,
-        border = BorderStroke(1.dp, borderColor)
+        border = BorderStroke(1.dp, borderColor),
+        shadowElevation = if (dark || isActive) 0.dp else 1.dp
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 4.dp, vertical = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+                .padding(horizontal = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = SucculentPrimary,
-                modifier = Modifier.size(19.dp)
+                tint = contentColor,
+                modifier = Modifier.size(15.dp)
             )
-            Spacer(Modifier.height(3.dp))
+            Spacer(Modifier.width(3.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 11.5.sp,
-                    lineHeight = 13.sp
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 12.sp,
+                    lineHeight = 14.sp
                 ),
-                fontWeight = if (isActive) FontWeight.Bold else FontWeight.SemiBold,
-                color = SucculentPrimary,
+                fontWeight = if (isActive) FontWeight.SemiBold else FontWeight.Medium,
+                color = contentColor,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Spacer(Modifier.width(2.dp))
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                tint = chevronColor,
+                modifier = Modifier.size(14.dp)
             )
         }
     }
