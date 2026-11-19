@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 204
-        versionName = "1.0.204"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip History: Optimized filter pill spacing, removed trailing chevrons, and enabled horizontal scrolling to prevent text truncation.\"")
+        versionCode = 205
+        versionName = "1.0.205"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Trip Finalization: Reflect true trip end time from last recorded movement/waypoint timestamp, eliminating debounce delay from duration.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

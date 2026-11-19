@@ -117,11 +117,17 @@ class TripFinalizationCoordinator @Inject constructor(
             }
 
             val startTime = activeTrip.startTime
-            val endTime = System.currentTimeMillis()
-            val dateString = rateCalculator.getFormattedDate(startTime)
-
             val firstRecordedPoint = waypoints.firstOrNull { it.hasUsableCoordinates() }
             val lastRecordedPoint = waypoints.lastOrNull { it.hasUsableCoordinates() }
+
+            // Option B: Reflect true end time using the timestamp of the last recorded movement/waypoint
+            // (or fallback to activeTrip.lastTimestamp / current time compensated by 4-5 minutes if delayed)
+            val now = System.currentTimeMillis()
+            val candidateEndTime = lastRecordedPoint?.timestamp?.takeIf { it > 0L }
+                ?: activeTrip.lastTimestamp.takeIf { it > 0L }
+                ?: (now - 4L * 60L * 1000L)
+            val endTime = candidateEndTime.coerceIn(startTime, now)
+            val dateString = rateCalculator.getFormattedDate(startTime)
             val startLat = if (hasUsableCoordinates(activeTrip.startLatitude, activeTrip.startLongitude)) {
                 activeTrip.startLatitude
             } else {

@@ -1496,6 +1496,12 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.205 (Build 205)" to "Reflect true trip end time using the timestamp of the last recorded movement/waypoint, eliminating the debounce delay from recorded trip duration.",
+                "Version 1.0.204 (Build 204)" to "Optimize Trip History filter pills: remove trailing chevrons and enable smooth horizontal scrolling to prevent text truncation.",
+                "Version 1.0.203 (Build 203)" to "Redesign Trip History search & filter UI: clean white pill filters with outline funnel toggle.",
+                "Version 1.0.202 (Build 202)" to "Add 4-filter compact bar with Vehicle filter bottom sheet in Trip History.",
+                "Version 1.0.201 (Build 201)" to "Change tracking notification title to Active tracking.",
+                "Version 1.0.200 (Build 200)" to "Apply Bluetooth auto-stop to all connected vehicles without requiring a specific car selection.",
                 "Version 1.0.199 (Build 199)" to "Fix Bluetooth vehicle identification using profile proxies and event-driven recognition.",
                 "Version 1.0.198 (Build 198)" to "Remove excess vertical spacing from the Vehicle row.",
                 "Version 1.0.197 (Build 197)" to "Tighten Vehicle row and separate average and maximum speed.",

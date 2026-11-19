@@ -387,4 +387,42 @@ class TripDebounceWorkerTest {
         assertEquals(ListenableWorker.Result.success(), createWorker(tripId = "manual-trip").doWork())
         assertNotNull(activeTripRepository.getActiveTrip())
     }
+
+    @Test
+    fun finalizedTripEndTime_reflectsTrueLastRecordedMovementTimestamp() = runBlocking {
+        val tripId = "trip-true-end-time"
+        val startTime = 1000L
+        val lastMovementTime = 5000L // Driver parked at 5000L
+        val activeTrip = ActiveTripEntity(
+            id = tripId,
+            startTime = startTime,
+            startLatitude = 37.3382,
+            startLongitude = -121.8863,
+            lastLatitude = 37.3450,
+            lastLongitude = -121.8863,
+            lastTimestamp = lastMovementTime,
+            totalDistanceMeters = 800.0,
+            trackingMethod = "AUTO_DETECTED",
+            suggestedBusiness = "MySucculentCorner"
+        )
+        database.activeTripDao().insertActiveTrip(activeTrip)
+        database.tripLifecycleDao().insertOrUpdate(
+            TripLifecycleEntity(tripId = tripId, state = TripLifecycleState.TRACKING.value)
+        )
+        database.activeTripDao().insertWaypoint(
+            ActiveWaypointEntity(
+                tripId = tripId,
+                latitude = 37.3450,
+                longitude = -121.8863,
+                altitude = 0.0,
+                timestamp = lastMovementTime,
+                speed = 15f,
+                accuracy = 4f
+            )
+        )
+
+        val finalizedTrip = coordinator.finalizeTrip(tripId)
+        assertNotNull(finalizedTrip)
+        assertEquals(lastMovementTime, finalizedTrip?.endTime)
+    }
 }
