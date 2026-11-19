@@ -2,6 +2,7 @@ package com.businesstracker.mileage.receiver
 
 import android.Manifest
 import android.app.PendingIntent
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
 import android.content.Context
@@ -24,8 +25,10 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.tasks.await
+import kotlin.coroutines.resume
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -122,19 +125,57 @@ class BluetoothArmedDriveMonitor @Inject constructor(
         }
     }
 
+    @VisibleForTesting
+    internal var connectionStateChecker: (suspend (String) -> Boolean)? = null
+
     @Suppress("DEPRECATION")
-    private fun isSelectedDeviceCurrentlyConnected(selectedAddress: String): Boolean {
+    private suspend fun isSelectedDeviceCurrentlyConnected(selectedAddress: String): Boolean {
+        val testChecker = connectionStateChecker
+        if (testChecker != null) return testChecker(selectedAddress)
+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) !=
             PackageManager.PERMISSION_GRANTED
         ) return false
 
         return try {
-            val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager ?: return false
-            listOf(BluetoothProfile.A2DP, BluetoothProfile.HEADSET, BluetoothProfile.GATT)
-                .asSequence()
-                .flatMap { profile -> manager.getConnectedDevices(profile).asSequence() }
-                .any { device -> device.address.equals(selectedAddress, ignoreCase = true) }
+            val manager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+            val gattConnected = manager?.getConnectedDevices(BluetoothProfile.GATT).orEmpty().any { device ->
+                device.address.equals(selectedAddress, ignoreCase = true)
+            }
+            if (gattConnected) return true
+
+            // A2DP and Headset proxy query
+            val adapter = runCatching { manager?.adapter }.getOrNull() ?: BluetoothAdapter.getDefaultAdapter()
+            if (adapter?.isEnabled == true) {
+                withTimeoutOrNull(2000L) {
+                    suspendCancellableCoroutine<Boolean> { continuation ->
+                        var proxyRef: BluetoothProfile? = null
+                        val listener = object : BluetoothProfile.ServiceListener {
+                            override fun onServiceConnected(profile: Int, proxy: BluetoothProfile?) {
+                                proxyRef = proxy
+                                val connected = proxy?.connectedDevices.orEmpty().any {
+                                    it.address.equals(selectedAddress, ignoreCase = true)
+                                }
+                                runCatching { adapter.closeProfileProxy(profile, proxy) }
+                                proxyRef = null
+                                if (continuation.isActive) continuation.resume(connected)
+                            }
+                            override fun onServiceDisconnected(profile: Int) {
+                                proxyRef?.let { runCatching { adapter.closeProfileProxy(profile, it) } }
+                                proxyRef = null
+                                if (continuation.isActive) continuation.resume(false)
+                            }
+                        }
+                        if (!adapter.getProfileProxy(context, listener, BluetoothProfile.A2DP)) {
+                            if (continuation.isActive) continuation.resume(false)
+                        }
+                        continuation.invokeOnCancellation {
+                            proxyRef?.let { runCatching { adapter.closeProfileProxy(BluetoothProfile.A2DP, it) } }
+                        }
+                    }
+                } ?: false
+            } else false
         } catch (_: SecurityException) {
             false
         } catch (_: Exception) {

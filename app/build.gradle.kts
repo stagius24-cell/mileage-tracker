@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 198
-        versionName = "1.0.198"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Remove excess vertical spacing from the Vehicle row.\"")
+        versionCode = 199
+        versionName = "1.0.199"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix Bluetooth vehicle identification using profile proxies and event-driven recognition.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

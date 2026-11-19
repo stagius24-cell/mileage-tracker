@@ -1511,6 +1511,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.199 (Build 199)" to "Fix Bluetooth vehicle identification using profile proxies and event-driven recognition.",
                 "Version 1.0.198 (Build 198)" to "Remove excess vertical spacing from the Vehicle row.",
                 "Version 1.0.197 (Build 197)" to "Tighten Vehicle row and separate average and maximum speed.",
                 "Version 1.0.196 (Build 196)" to "Refine Trip Details More info alignment and spacing.",

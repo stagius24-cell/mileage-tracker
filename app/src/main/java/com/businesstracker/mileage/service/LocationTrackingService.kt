@@ -1445,29 +1445,36 @@ class LocationTrackingService : Service() {
 
     private fun launchVehicleIdentification(tripId: String) {
         serviceScope.launch(safeIoDispatcher) {
-            try {
-                val active = activeTripRepository.getActiveTrip()?.takeIf { it.id == tripId } ?: return@launch
-                val match = vehicleBluetoothMatcher.currentlyConnectedVehicle()
-                if (active.vehicleId == null && match != null) {
-                    activeTripRepository.assignVehicleIfAbsent(tripId, match.id)
+            val retryDelays = longArrayOf(0L, 3_000L, 10_000L)
+            for (delayMs in retryDelays) {
+                if (delayMs > 0L) kotlinx.coroutines.delay(delayMs)
+                if (currentTripId != tripId || isStopping.get()) return@launch
+                try {
+                    val active = activeTripRepository.getActiveTrip()?.takeIf { it.id == tripId } ?: return@launch
+                    val match = vehicleBluetoothMatcher.currentlyConnectedVehicle()
+                    if (active.vehicleId == null && match != null) {
+                        activeTripRepository.assignVehicleIfAbsent(tripId, match.id)
+                    }
+                    val persisted = activeTripRepository.getActiveTrip()?.takeIf { it.id == tripId } ?: return@launch
+                    val vehicleId = persisted.vehicleId
+                    val vehicle = vehicleId?.let { vehicleRepository.getVehicle(it) }
+                    if (currentTripId != tripId) return@launch
+                    currentVehicleId = vehicleId
+                    currentVehicleName = vehicle?.name
+                    currentVehicleBluetoothConnected = vehicleId != null && match?.id == vehicleId
+                    val state = _serviceState.value
+                    if (state.tripId == tripId) {
+                        _serviceState.value = state.copy(
+                            vehicleId = currentVehicleId,
+                            vehicleName = currentVehicleName,
+                            vehicleBluetoothConnected = currentVehicleBluetoothConnected
+                        )
+                    }
+                    // If vehicle has been identified, no need to retry further
+                    if (vehicleId != null) break
+                } catch (error: Exception) {
+                    Log.i("LocationTrackingService", "Vehicle identification unavailable: ${error.javaClass.simpleName}")
                 }
-                val persisted = activeTripRepository.getActiveTrip()?.takeIf { it.id == tripId } ?: return@launch
-                val vehicleId = persisted.vehicleId
-                val vehicle = vehicleId?.let { vehicleRepository.getVehicle(it) }
-                if (currentTripId != tripId) return@launch
-                currentVehicleId = vehicleId
-                currentVehicleName = vehicle?.name
-                currentVehicleBluetoothConnected = vehicleId != null && match?.id == vehicleId
-                val state = _serviceState.value
-                if (state.tripId == tripId) {
-                    _serviceState.value = state.copy(
-                        vehicleId = currentVehicleId,
-                        vehicleName = currentVehicleName,
-                        vehicleBluetoothConnected = currentVehicleBluetoothConnected
-                    )
-                }
-            } catch (error: Exception) {
-                Log.i("LocationTrackingService", "Vehicle identification unavailable: ${error.javaClass.simpleName}")
             }
         }
     }
