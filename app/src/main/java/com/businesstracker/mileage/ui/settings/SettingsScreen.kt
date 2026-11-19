@@ -6,10 +6,9 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
-import androidx.compose.material3.SelectableDates
-import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material3.OutlinedButton
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -1584,68 +1583,159 @@ fun SettingsScreen(
     }
 
     if (showAutoTrackResumeDatePicker) {
-        val todayUtcMillis = remember {
-            java.time.LocalDate.now()
-                .atStartOfDay(java.time.ZoneOffset.UTC)
-                .toInstant()
-                .toEpochMilli()
+        val today = remember { java.time.LocalDate.now() }
+        var selectedDate by remember(state.autoTrackingResumeDate) {
+            mutableStateOf(
+                state.autoTrackingResumeDate?.let {
+                    runCatching { java.time.LocalDate.parse(it) }.getOrNull()
+                } ?: today
+            )
         }
-        val initialSelectedMillis = remember(state.autoTrackingResumeDate) {
-            state.autoTrackingResumeDate?.let { iso ->
-                runCatching {
-                    java.time.LocalDate.parse(iso)
-                        .atStartOfDay(java.time.ZoneOffset.UTC)
-                        .toInstant()
-                        .toEpochMilli()
-                }.getOrNull()
-            } ?: todayUtcMillis
+        var displayedMonth by remember(selectedDate) {
+            mutableStateOf(java.time.YearMonth.from(selectedDate))
         }
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = initialSelectedMillis,
-            selectableDates = object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                    return utcTimeMillis >= todayUtcMillis
-                }
-            }
-        )
-        DatePickerDialog(
+
+        AppFloatingBottomSheet(
             onDismissRequest = { showAutoTrackResumeDatePicker = false },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val selectedMillis = datePickerState.selectedDateMillis
-                        if (selectedMillis != null) {
-                            val selectedIso = java.time.Instant.ofEpochMilli(selectedMillis)
-                                .atZone(java.time.ZoneOffset.UTC)
-                                .toLocalDate()
-                                .toString()
-                            viewModel.scheduleAutoTrackingResume(selectedIso)
-                        }
-                        showAutoTrackResumeDatePicker = false
-                    }
+            title = "Schedule Reactivation",
+            onClose = { showAutoTrackResumeDatePicker = false }
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("Schedule")
+                    IconButton(
+                        onClick = { displayedMonth = displayedMonth.minusMonths(1) },
+                        enabled = displayedMonth.isAfter(java.time.YearMonth.from(today))
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            contentDescription = "Previous month"
+                        )
+                    }
+                    Text(
+                        text = displayedMonth.format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy")),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    IconButton(onClick = { displayedMonth = displayedMonth.plusMonths(1) }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "Next month"
+                        )
+                    }
                 }
-            },
-            dismissButton = {
-                Row {
+
+                val weekDays = listOf("S", "M", "T", "W", "T", "F", "S")
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    weekDays.forEach { dayLabel ->
+                        Box(
+                            modifier = Modifier.weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = dayLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                val firstOfMonth = displayedMonth.atDay(1)
+                val leadingEmpty = firstOfMonth.dayOfWeek.value % 7
+                val daysInMonth = displayedMonth.lengthOfMonth()
+                val totalCells = ((leadingEmpty + daysInMonth + 6) / 7) * 7
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (rowStart in 0 until totalCells step 7) {
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            for (offset in 0 until 7) {
+                                val dayNum = rowStart + offset - leadingEmpty + 1
+                                if (dayNum in 1..daysInMonth) {
+                                    val date = displayedMonth.atDay(dayNum)
+                                    val isSelectable = !date.isBefore(today)
+                                    val isSelected = date == selectedDate
+                                    val isToday = date == today
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(40.dp)
+                                            .padding(2.dp)
+                                            .clip(CircleShape)
+                                            .background(
+                                                when {
+                                                    isSelected -> SucculentPrimary
+                                                    isToday -> SucculentPrimary.copy(alpha = 0.12f)
+                                                    else -> Color.Transparent
+                                                }
+                                            )
+                                            .clickable(enabled = isSelectable) { selectedDate = date },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = dayNum.toString(),
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = if (isSelected || isToday) FontWeight.Bold else FontWeight.Normal,
+                                            color = when {
+                                                isSelected -> Color.White
+                                                !isSelectable -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.30f)
+                                                isToday -> SucculentPrimary
+                                                else -> MaterialTheme.colorScheme.onSurface
+                                            }
+                                        )
+                                    }
+                                } else {
+                                    Spacer(modifier = Modifier.weight(1f).height(40.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
                     if (!state.autoTrackingResumeDate.isNullOrBlank()) {
-                        TextButton(
+                        OutlinedButton(
                             onClick = {
                                 viewModel.scheduleAutoTrackingResume(null)
                                 showAutoTrackResumeDatePicker = false
-                            }
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(14.dp)
                         ) {
                             Text("Clear")
                         }
+                    } else {
+                        OutlinedButton(
+                            onClick = { showAutoTrackResumeDatePicker = false },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Text("Cancel")
+                        }
                     }
-                    TextButton(onClick = { showAutoTrackResumeDatePicker = false }) {
-                        Text("Cancel")
+                    Button(
+                        onClick = {
+                            viewModel.scheduleAutoTrackingResume(selectedDate.toString())
+                            showAutoTrackResumeDatePicker = false
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                    ) {
+                        Text("Schedule", color = Color.White)
                     }
                 }
             }
-        ) {
-            DatePicker(state = datePickerState)
         }
     }
 
