@@ -57,6 +57,9 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_VEHICLE_BLUETOOTH_ADDRESS = stringPreferencesKey("vehicle_bluetooth_address")
         private val KEY_VEHICLE_BLUETOOTH_NAME = stringPreferencesKey("vehicle_bluetooth_name")
         private val KEY_CURRENT_VEHICLE_ID = stringPreferencesKey("current_vehicle_id")
+        private val KEY_CONNECTED_CAR_ADDRESSES = stringSetPreferencesKey("connected_car_addresses")
+        private val KEY_LAST_BLUETOOTH_CONNECT_ELAPSED = longPreferencesKey("last_bluetooth_connect_elapsed")
+        private val KEY_MANUAL_VEHICLE_TRIP_ID = stringPreferencesKey("manual_vehicle_trip_id")
         private val KEY_BLUETOOTH_DISCONNECT_PENDING = booleanPreferencesKey("bluetooth_disconnect_pending")
         private val KEY_CAR_BLUETOOTH_CONNECTED = booleanPreferencesKey("car_bluetooth_connected")
         private val KEY_APP_THEME_MODE = stringPreferencesKey("app_theme_mode")
@@ -186,17 +189,104 @@ class TrackingPreferencesManager @Inject constructor(
         context.dataStore.data.first()[KEY_BLUETOOTH_DISCONNECT_PENDING] ?: false
 
     val isCarBluetoothConnected: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[KEY_CAR_BLUETOOTH_CONNECTED] ?: false
+        (prefs[KEY_CAR_BLUETOOTH_CONNECTED] ?: false) ||
+            !prefs[KEY_CONNECTED_CAR_ADDRESSES].isNullOrEmpty()
     }
 
     suspend fun setCarBluetoothConnected(connected: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[KEY_CAR_BLUETOOTH_CONNECTED] = connected
+            if (!connected) {
+                prefs.remove(KEY_CONNECTED_CAR_ADDRESSES)
+            }
         }
     }
 
     suspend fun isCarBluetoothConnected(): Boolean =
-        context.dataStore.data.first()[KEY_CAR_BLUETOOTH_CONNECTED] ?: false
+        context.dataStore.data.first().let { prefs ->
+            (prefs[KEY_CAR_BLUETOOTH_CONNECTED] ?: false) ||
+                !prefs[KEY_CONNECTED_CAR_ADDRESSES].isNullOrEmpty()
+        }
+
+    suspend fun addConnectedCarAddress(
+        address: String,
+        elapsedRealtimeMillis: Long = runCatching { android.os.SystemClock.elapsedRealtime() }.getOrDefault(0L)
+    ): Set<String> {
+        val normalized = address.trim().uppercase()
+        if (normalized.isEmpty()) return getConnectedCarAddresses()
+        var result = emptySet<String>()
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_CONNECTED_CAR_ADDRESSES] ?: emptySet()
+            val updated = current + normalized
+            prefs[KEY_CONNECTED_CAR_ADDRESSES] = updated
+            prefs[KEY_CAR_BLUETOOTH_CONNECTED] = updated.isNotEmpty()
+            if (elapsedRealtimeMillis > 0L) {
+                prefs[KEY_LAST_BLUETOOTH_CONNECT_ELAPSED] = elapsedRealtimeMillis
+            }
+            result = updated
+        }
+        return result
+    }
+
+    suspend fun removeConnectedCarAddress(address: String): Set<String> {
+        val normalized = address.trim().uppercase()
+        var result = emptySet<String>()
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_CONNECTED_CAR_ADDRESSES] ?: emptySet()
+            val updated = current.filterNot { it.equals(normalized, ignoreCase = true) }.toSet()
+            if (updated.isEmpty()) {
+                prefs.remove(KEY_CONNECTED_CAR_ADDRESSES)
+            } else {
+                prefs[KEY_CONNECTED_CAR_ADDRESSES] = updated
+            }
+            prefs[KEY_CAR_BLUETOOTH_CONNECTED] = updated.isNotEmpty()
+            result = updated
+        }
+        return result
+    }
+
+    suspend fun setConnectedCarAddresses(
+        addresses: Set<String>,
+        elapsedRealtimeMillis: Long = runCatching { android.os.SystemClock.elapsedRealtime() }.getOrDefault(0L)
+    ) {
+        val normalized = addresses.mapNotNull { it.trim().uppercase().ifEmpty { null } }.toSet()
+        context.dataStore.edit { prefs ->
+            if (normalized.isEmpty()) {
+                prefs.remove(KEY_CONNECTED_CAR_ADDRESSES)
+                prefs[KEY_CAR_BLUETOOTH_CONNECTED] = false
+            } else {
+                prefs[KEY_CONNECTED_CAR_ADDRESSES] = normalized
+                prefs[KEY_CAR_BLUETOOTH_CONNECTED] = true
+                if (elapsedRealtimeMillis > 0L) {
+                    prefs[KEY_LAST_BLUETOOTH_CONNECT_ELAPSED] = elapsedRealtimeMillis
+                }
+            }
+        }
+    }
+
+    suspend fun getConnectedCarAddresses(): Set<String> =
+        context.dataStore.data.first()[KEY_CONNECTED_CAR_ADDRESSES] ?: emptySet()
+
+    suspend fun getLastBluetoothConnectElapsed(): Long =
+        context.dataStore.data.first()[KEY_LAST_BLUETOOTH_CONNECT_ELAPSED] ?: 0L
+
+    suspend fun markManualVehicleAssignment(tripId: String) {
+        if (tripId.isBlank()) return
+        context.dataStore.edit { prefs ->
+            prefs[KEY_MANUAL_VEHICLE_TRIP_ID] = tripId
+        }
+    }
+
+    suspend fun isManualVehicleAssignment(tripId: String): Boolean {
+        if (tripId.isBlank()) return false
+        return context.dataStore.data.first()[KEY_MANUAL_VEHICLE_TRIP_ID] == tripId
+    }
+
+    suspend fun clearManualVehicleAssignment() {
+        context.dataStore.edit { prefs ->
+            prefs.remove(KEY_MANUAL_VEHICLE_TRIP_ID)
+        }
+    }
 
     val isSmartTripRecognitionEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_SMART_TRIP_RECOGNITION_ENABLED] ?: true
@@ -379,6 +469,9 @@ class TrackingPreferencesManager @Inject constructor(
                     prefs.remove(KEY_CANDIDATE_DEADLINE_ELAPSED)
                     prefs.remove(KEY_CANDIDATE_DEADLINE_BOOT)
                 }
+            }
+            if (prefs[KEY_MANUAL_VEHICLE_TRIP_ID] == tripId) {
+                prefs.remove(KEY_MANUAL_VEHICLE_TRIP_ID)
             }
         }
     }

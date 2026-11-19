@@ -113,10 +113,12 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.RadioButtonChecked
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
@@ -193,6 +195,8 @@ fun SettingsScreen(
     LaunchedEffect(Unit) { viewModel.refreshPairedBluetoothDevices() }
 
     var showVersionHistoryDialog by rememberSaveable { mutableStateOf(false) }
+    var showDiagnosticReportSheet by rememberSaveable { mutableStateOf(false) }
+    var diagnosticReportText by remember { mutableStateOf("") }
     var showDisconnectConfirmation by rememberSaveable { mutableStateOf(false) }
     var showEditVehicle by rememberSaveable { mutableStateOf(false) }
     var showVehicleManager by rememberSaveable { mutableStateOf(false) }
@@ -274,7 +278,24 @@ fun SettingsScreen(
                             Text(currentVehicle?.name ?: state.defaultVehicle, style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (currentVehicle != null) {
+                                Text(
+                                    text = if (!currentVehicle.bluetoothAddress.isNullOrBlank()) {
+                                        currentVehicle.bluetoothDeviceName?.let { "Bluetooth · $it" } ?: "Bluetooth linked"
+                                    } else {
+                                        "No Bluetooth linked · Tap to assign"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (!currentVehicle.bluetoothAddress.isNullOrBlank()) {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    } else {
+                                        MaterialTheme.colorScheme.error
+                                    },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                         Spacer(Modifier.width(8.dp))
                         Surface(shape = RoundedCornerShape(14.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
@@ -487,6 +508,43 @@ fun SettingsScreen(
                                 onBehaviorChange = viewModel::setOutsideScheduleBehavior
                             )
                         }
+                    }
+
+                    CompactSettingsDivider()
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable {
+                                val vehicleSummaries = vehicleDirectoryState.vehicles.map { v ->
+                                    "${v.name}(bt=${!v.bluetoothAddress.isNullOrBlank()})"
+                                }
+                                diagnosticReportText = viewModel.exportDiagnosticReport(vehicleSummaries)
+                                showDiagnosticReportSheet = true
+                            },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        VehicleSettingsIcon(Icons.Default.Info)
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = "Diagnostic report",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Redacted Bluetooth & auto-start log",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "Open diagnostic report",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -982,6 +1040,7 @@ fun SettingsScreen(
                                 )
                                 isSavingVehicle = false
                                 if (result.isSuccess) {
+                                    viewModel.reconcileBluetoothMonitor()
                                     keyboardController?.hide()
                                     showEditVehicle = false
                                 } else {
@@ -1493,9 +1552,89 @@ fun SettingsScreen(
         )
     }
 
+    if (showDiagnosticReportSheet) {
+        val reportClipboard = LocalClipboardManager.current
+        AppFloatingBottomSheet(
+            onDismissRequest = { showDiagnosticReportSheet = false },
+            title = "Diagnostic Report",
+            onClose = { showDiagnosticReportSheet = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Bluetooth MAC addresses and raw GPS coordinates are redacted for privacy.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 140.dp, max = 300.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ) {
+                    Text(
+                        text = diagnosticReportText,
+                        style = MaterialTheme.typography.bodySmall.copy(
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
+                        ),
+                        modifier = Modifier
+                            .verticalScroll(rememberScrollState())
+                            .padding(12.dp)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            reportClipboard.setText(AnnotatedString(diagnosticReportText))
+                            Toast.makeText(context, "Diagnostic report copied", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Copy")
+                    }
+                    Button(
+                        onClick = {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, "Mileage Tracker Diagnostic Report")
+                                putExtra(Intent.EXTRA_TEXT, diagnosticReportText)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Share Diagnostic Report"))
+                        },
+                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Share")
+                    }
+                }
+            }
+        }
+    }
+
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.206 (Build 206)" to "Full GPS auto-start & multi-vehicle Bluetooth audit: separate drive detection from vehicle matching, prevent competing vehicle events from disarming tracking, prioritize active A2DP/HEADSET audio profiles, recover vehicle match after disconnect or 200m confirmation, add tap-to-pick active vehicle on Dashboard, and add redacted diagnostic report export in Settings.",
                 "Version 1.0.205 (Build 205)" to "Reflect true trip end time using the timestamp of the last recorded movement/waypoint, eliminating the debounce delay from recorded trip duration.",
                 "Version 1.0.204 (Build 204)" to "Optimize Trip History filter pills: remove trailing chevrons and enable smooth horizontal scrolling to prevent text truncation.",
                 "Version 1.0.203 (Build 203)" to "Redesign Trip History search & filter UI: clean white pill filters with outline funnel toggle.",

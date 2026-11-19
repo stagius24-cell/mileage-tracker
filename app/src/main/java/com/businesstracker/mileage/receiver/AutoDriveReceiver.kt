@@ -158,10 +158,15 @@ class AutoDriveReceiver : BroadcastReceiver() {
         probableActivities: List<DetectedActivity>
     ) {
         val isAutoTrackingEnabled = preferencesManager.isAutoTrackingEnabled.first()
-        val hasSelectedDevice = preferencesManager.getVehicleBluetoothAddress().isNotBlank()
-        val isCarConnected = preferencesManager.isCarBluetoothConnected()
-        if (!isAutoTrackingEnabled || !hasSelectedDevice || !isCarConnected) {
-            TrackingDiagnostics.logArmedMonitor("UPDATE_IGNORED", "tracking/device/connection gate is false")
+        val isCarConnected = preferencesManager.isCarBluetoothConnected() ||
+            preferencesManager.getConnectedCarAddresses().isNotEmpty()
+        if (!isAutoTrackingEnabled || !isCarConnected) {
+            TrackingDiagnostics.logAutoStartDecision(
+                source = "BT_ARMED",
+                accepted = false,
+                reasonCode = if (!isAutoTrackingEnabled) "AUTO_TRACKING_DISABLED" else "NO_CONNECTED_VEHICLE",
+                detail = "autoTracking=$isAutoTrackingEnabled btConnected=$isCarConnected"
+            )
             return
         }
 
@@ -169,16 +174,24 @@ class AutoDriveReceiver : BroadcastReceiver() {
         // request additional location samples or create another trip while one exists.
         if (LocationTrackingService.serviceState.value.isTracking ||
             activeTripRepository.getActiveTrip() != null
-        ) return
+        ) {
+            TrackingDiagnostics.logAutoStartDecision(
+                source = "BT_ARMED",
+                accepted = false,
+                reasonCode = "SESSION_ALREADY_ACTIVE",
+                detail = "serviceTracking=${LocationTrackingService.serviceState.value.isTracking}"
+            )
+            return
+        }
 
         if (bluetoothArmedDriveMonitor.observeActivityUpdate(probableActivities)) {
             TrackingDiagnostics.logArmedMonitor("MOVEMENT_CONFIRMED", "starting existing automatic candidate flow")
-            handleVehicleEnter(context)
+            handleVehicleEnter(context, source = "BT_ARMED")
         }
     }
 
     @SuppressLint("MissingPermission")
-    private suspend fun handleVehicleEnter(context: Context) {
+    private suspend fun handleVehicleEnter(context: Context, source: String = "ACTIVITY_TRANSITION") {
         // 1. Strict permission verification (Foreground location and Activity Recognition)
         val hasFine = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
@@ -236,9 +249,12 @@ class AutoDriveReceiver : BroadcastReceiver() {
             outsideScheduleBehavior = outsideBehavior
         )
         android.util.Log.d(TAG, "evaluateVehicleEnter result: $action (autoTrack=$isAutoTrackingEnabled, isTracking=$isTracking)")
-        TrackingDiagnostics.logArmedMonitor(
-            "VEHICLE_ENTER_DECISION",
-            "result=${action::class.simpleName} autoTracking=$isAutoTrackingEnabled active=$isTracking permissions=${hasForegroundLocation && hasBackgroundLocation && hasActivity}"
+        TrackingDiagnostics.logAutoStartDecision(
+            source = source,
+            accepted = action is AutoDriveAction.StartCandidateDrive || action is AutoDriveAction.RecoverTrip,
+            reasonCode = action::class.simpleName ?: "UNKNOWN",
+            detail = "autoTracking=$isAutoTrackingEnabled active=$isTracking withinSchedule=$isWithinSchedule outside=$outsideBehavior " +
+                "fgLoc=$hasForegroundLocation bgLoc=$hasBackgroundLocation act=$hasActivity"
         )
 
         when (action) {

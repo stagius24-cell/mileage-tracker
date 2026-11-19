@@ -143,4 +143,7 @@ class ActiveTripRepositoryImpl @Inject constructor(
 
     override suspend fun assignVehicleIfAbsent(tripId: String, vehicleId: String): Boolean =
         withContext(ioDispatcher) { activeTripDao.assignVehicleIfAbsent(tripId, vehicleId) > 0 }
+
+    override suspend fun assignVehicleExplicitly(tripId: String, vehicleId: String?): Boolean =
+        withContext(ioDispatcher) { activeTripDao.assignVehicleExplicitly(tripId, vehicleId) > 0 }
 }

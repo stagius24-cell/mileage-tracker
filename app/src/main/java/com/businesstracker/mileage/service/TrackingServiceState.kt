@@ -17,5 +17,6 @@ data class TrackingServiceState(
     val statusMessage: String? = null,
     val vehicleId: String? = null,
     val vehicleName: String? = null,
-    val vehicleBluetoothConnected: Boolean = false
+    val vehicleBluetoothConnected: Boolean = false,
+    val ambiguousVehicleCount: Int = 0
 )

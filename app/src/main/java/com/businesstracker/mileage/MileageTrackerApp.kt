@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.domain.tracking.TrackingDiagnostics
+import com.businesstracker.mileage.receiver.BluetoothArmedDriveMonitor
 import com.businesstracker.mileage.service.NotificationHelper
 import com.businesstracker.mileage.transition.ActivityTransitionManager
 import dagger.hilt.android.HiltAndroidApp
@@ -23,6 +25,7 @@ class MileageTrackerApp : Application(), Configuration.Provider {
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var notificationHelper: NotificationHelper
     @Inject lateinit var activityTransitionManager: ActivityTransitionManager
+    @Inject lateinit var bluetoothArmedDriveMonitor: BluetoothArmedDriveMonitor
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -34,6 +37,7 @@ class MileageTrackerApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        TrackingDiagnostics.initialize(applicationContext)
 
         try {
             com.google.android.gms.maps.MapsInitializer.initialize(applicationContext)
@@ -41,11 +45,12 @@ class MileageTrackerApp : Application(), Configuration.Provider {
             // Maps will initialize when MapView or GoogleMap is created
         }
 
-        // Initialize transition recognition if enabled by user
+        // Initialize transition recognition and Bluetooth armed monitoring if enabled by user
         appScope.launch {
             val autoTrackEnabled = preferencesManager.isAutoTrackingEnabled.first()
             if (autoTrackEnabled) {
                 activityTransitionManager.registerTransitions()
+                bluetoothArmedDriveMonitor.reconcile()
             }
         }
 

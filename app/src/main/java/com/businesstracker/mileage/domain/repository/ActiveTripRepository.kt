@@ -27,4 +27,5 @@ interface ActiveTripRepository {
     fun observeWaypoints(tripId: String): Flow<List<Waypoint>>
     suspend fun clearActiveTrip(tripId: String)
     suspend fun assignVehicleIfAbsent(tripId: String, vehicleId: String): Boolean = false
+    suspend fun assignVehicleExplicitly(tripId: String, vehicleId: String?): Boolean = false
 }

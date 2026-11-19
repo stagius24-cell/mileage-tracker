@@ -2,15 +2,19 @@ package com.businesstracker.mileage.ui.dashboard
 
 import android.content.Context
 import android.content.Intent
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import com.businesstracker.mileage.data.local.TripLifecycleDao
 import com.businesstracker.mileage.data.local.entity.TripEntity
 import com.businesstracker.mileage.data.local.entity.TripLifecycleState
+import com.businesstracker.mileage.data.local.entity.VehicleEntity
 import com.businesstracker.mileage.domain.model.BusinessEntity
 import com.businesstracker.mileage.domain.model.DashboardSummary
 import com.businesstracker.mileage.domain.model.TimeFilter
@@ -18,6 +22,9 @@ import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
+import com.businesstracker.mileage.domain.repository.VehicleRepository
+import com.businesstracker.mileage.domain.tracking.TrackingDiagnostics
+import com.businesstracker.mileage.domain.tracking.VehicleFriendlyNameResolver
 import com.businesstracker.mileage.domain.usecase.CalculateMileageRateUseCase
 import com.businesstracker.mileage.domain.usecase.GetDashboardSummaryUseCase
 import com.businesstracker.mileage.service.LocationTrackingService
@@ -62,7 +69,8 @@ class DashboardViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val activeTripRepository: ActiveTripRepository? = null,
     private val tripLifecycleDao: TripLifecycleDao? = null,
-    private val preferencesManager: TrackingPreferencesManager? = null
+    private val preferencesManager: TrackingPreferencesManager? = null,
+    private val vehicleRepository: VehicleRepository? = null
 ) : ViewModel() {
 
     private val now = LocalDate.now()
@@ -77,13 +85,34 @@ class DashboardViewModel @Inject constructor(
     private val _lastClassifiedTrip = MutableStateFlow<TripEntity?>(null)
     private val _lastClassificationLabel = MutableStateFlow<String?>(null)
 
+    private val vehiclesFlow: Flow<List<VehicleEntity>> = vehicleRepository?.observeVehicles() ?: flowOf(emptyList())
+
+    val savedVehicles: StateFlow<List<VehicleEntity>> = vehiclesFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.Eagerly,
+        initialValue = emptyList()
+    )
+
     val serviceState: StateFlow<TrackingServiceState> = if (activeTripRepository != null) {
         combine(
             LocationTrackingService.serviceState,
-            activeTripRepository.observeActiveTrip()
-        ) { liveState, activeTrip ->
+            activeTripRepository.observeActiveTrip(),
+            vehiclesFlow
+        ) { liveState, activeTrip, vehicles ->
+            val matchingActiveTrip = activeTrip?.takeIf { !liveState.isTracking || it.id == liveState.tripId }
+            val effectiveVehicleId = matchingActiveTrip?.vehicleId ?: liveState.vehicleId
+            val effectiveVehicleName = effectiveVehicleId?.let { id ->
+                VehicleFriendlyNameResolver.resolve(id, vehicles)
+                    .takeIf { it != VehicleFriendlyNameResolver.UNKNOWN_VEHICLE }
+                    ?: liveState.vehicleName.takeIf { liveState.vehicleId == id }
+            }
+
             if (liveState.isTracking) {
-                liveState
+                liveState.copy(
+                    vehicleId = effectiveVehicleId,
+                    vehicleName = effectiveVehicleName,
+                    ambiguousVehicleCount = if (effectiveVehicleId != null) 0 else liveState.ambiguousVehicleCount
+                )
             } else if (activeTrip != null) {
                 val lifecycleStateStr = tripLifecycleDao?.getState(activeTrip.id)
                 val lifecycle = TripLifecycleState.fromString(lifecycleStateStr)
@@ -101,7 +130,9 @@ class DashboardViewModel @Inject constructor(
                             distanceMeters = distanceM,
                             distanceMiles = distanceMi,
                             durationMillis = duration,
-                            statusMessage = "Drive Interrupted: Recovery Required"
+                            statusMessage = "Drive Interrupted: Recovery Required",
+                            vehicleId = effectiveVehicleId,
+                            vehicleName = effectiveVehicleName
                         )
                     }
                     TripLifecycleState.DRAINING,
@@ -113,7 +144,9 @@ class DashboardViewModel @Inject constructor(
                             distanceMeters = distanceM,
                             distanceMiles = distanceMi,
                             durationMillis = duration,
-                            statusMessage = "Finalizing Trip..."
+                            statusMessage = "Finalizing Trip...",
+                            vehicleId = effectiveVehicleId,
+                            vehicleName = effectiveVehicleName
                         )
                     }
                     TripLifecycleState.FINALIZED,
@@ -129,7 +162,9 @@ class DashboardViewModel @Inject constructor(
                                 distanceMeters = distanceM,
                                 distanceMiles = distanceMi,
                                 durationMillis = duration,
-                                statusMessage = "Trip Paused"
+                                statusMessage = "Trip Paused",
+                                vehicleId = effectiveVehicleId,
+                                vehicleName = effectiveVehicleName
                             )
                         } else {
                             TrackingServiceState(
@@ -139,7 +174,9 @@ class DashboardViewModel @Inject constructor(
                                 distanceMeters = distanceM,
                                 distanceMiles = distanceMi,
                                 durationMillis = duration,
-                                statusMessage = "Drive Interrupted: Recovery Required"
+                                statusMessage = "Drive Interrupted: Recovery Required",
+                                vehicleId = effectiveVehicleId,
+                                vehicleName = effectiveVehicleName
                             )
                         }
                     }
@@ -304,6 +341,35 @@ class DashboardViewModel @Inject constructor(
             action = LocationTrackingService.ACTION_RESUME
         }
         appContext.startService(intent)
+    }
+
+    fun selectActiveTripVehicle(vehicleId: String?): Job = viewModelScope.launch {
+        val activeTripId = activeTripRepository?.getActiveTrip()?.id
+            ?: serviceState.value.tripId
+            ?: return@launch
+        preferencesManager?.markManualVehicleAssignment(activeTripId)
+        activeTripRepository?.assignVehicleExplicitly(activeTripId, vehicleId)
+        val chosenName = vehicleId?.let { id ->
+            vehicleRepository?.getVehicle(id)?.name
+                ?: savedVehicles.value.firstOrNull { it.id == id }?.name
+        }
+        LocationTrackingService.updateExplicitVehicleDisplay(
+            tripId = activeTripId,
+            vehicleId = vehicleId,
+            name = chosenName,
+            connected = false
+        )
+        TrackingDiagnostics.logUiVehicleState(
+            tripId = activeTripId,
+            displayedName = chosenName ?: VehicleFriendlyNameResolver.UNKNOWN_VEHICLE,
+            connected = false,
+            ambiguousCount = 0
+        )
+    }
+
+    @VisibleForTesting
+    internal suspend fun clearForTesting() {
+        viewModelScope.coroutineContext[Job]?.cancelAndJoin()
     }
 
     fun endTracking() {

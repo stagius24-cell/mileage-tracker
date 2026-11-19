@@ -501,6 +501,26 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun reconcileBluetoothMonitor() {
+        viewModelScope.launch {
+            try {
+                bluetoothArmedDriveMonitor.reconcile()
+            } catch (_: Exception) {}
+        }
+    }
+
+    fun exportDiagnosticReport(vehicleSummaries: List<String>): String {
+        val current = uiState.value
+        val header = listOf(
+            "AutoTrackingEnabled: ${current.autoTrackingEnabled}",
+            "TransitionsRegistered: ${current.isTransitionsRegistered} (error=${current.transitionRegistrationError ?: "none"})",
+            "BgLocationPermission: ${current.hasBackgroundLocationPermission}",
+            "BluetoothAutoStop: ${current.bluetoothAutoStopEnabled}",
+            "SavedVehicles: ${vehicleSummaries.joinToString("; ").ifBlank { "none" }}"
+        )
+        return com.businesstracker.mileage.domain.tracking.TrackingDiagnostics.exportRedactedReport(context, header)
+    }
+
     fun setThemeMode(mode: AppThemeMode) {
         viewModelScope.launch {
             preferencesManager.setAppThemeMode(mode)

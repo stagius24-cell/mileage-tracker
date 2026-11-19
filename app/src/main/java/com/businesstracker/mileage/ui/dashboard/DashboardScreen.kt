@@ -18,9 +18,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +32,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.BrightnessLow
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Bluetooth
@@ -76,6 +80,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.service.TrackingServiceState
+import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
 import com.businesstracker.mileage.ui.components.SwipeableTripCard
 import com.businesstracker.mileage.ui.theme.AmoledBlack
 import com.businesstracker.mileage.ui.theme.HighAccuracyGreen
@@ -97,9 +102,11 @@ fun DashboardScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val serviceState by viewModel.serviceState.collectAsStateWithLifecycle()
+    val savedVehicles by viewModel.savedVehicles.collectAsStateWithLifecycle()
     var monthMenuExpanded by remember { mutableStateOf(false) }
     var isTimeFilterExpanded by remember { mutableStateOf(false) }
     var isAmoledDimmed by remember { mutableStateOf(false) }
+    var showActiveVehiclePicker by remember { mutableStateOf(false) }
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
@@ -242,7 +249,10 @@ fun DashboardScreen(
                     onStart = { viewModel.startManualTracking() },
                     onPause = { viewModel.pauseTracking() },
                     onResume = { viewModel.resumeTracking() },
-                    onEnd = { viewModel.endTracking() }
+                    onEnd = { viewModel.endTracking() },
+                    onSelectVehicle = if ((serviceState.isTracking || serviceState.isRecoveryRequired) && savedVehicles.isNotEmpty()) {
+                        { showActiveVehiclePicker = true }
+                    } else null
                 )
             }
 
@@ -366,6 +376,99 @@ fun DashboardScreen(
             }
         }
     }
+
+    if (showActiveVehiclePicker) {
+        AppFloatingBottomSheet(
+            onDismissRequest = { showActiveVehiclePicker = false },
+            title = "Select Trip Vehicle",
+            onClose = { showActiveVehiclePicker = false }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                savedVehicles.forEach { vehicle ->
+                    val selected = serviceState.vehicleId == vehicle.id
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(
+                                if (selected) SucculentPrimary.copy(alpha = 0.12f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                            )
+                            .clickable {
+                                viewModel.selectActiveTripVehicle(vehicle.id)
+                                showActiveVehiclePicker = false
+                            }
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = vehicle.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = vehicle.bluetoothDeviceName?.let { "Bluetooth · $it" } ?: "Saved vehicle",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (selected) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Selected vehicle",
+                                tint = SucculentPrimary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (serviceState.vehicleId == null) SucculentPrimary.copy(alpha = 0.12f)
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        )
+                        .clickable {
+                            viewModel.selectActiveTripVehicle(null)
+                            showActiveVehiclePicker = false
+                        }
+                        .padding(horizontal = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Unknown vehicle",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (serviceState.vehicleId == null) FontWeight.SemiBold else FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (serviceState.vehicleId == null) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Selected Unknown vehicle",
+                            tint = SucculentPrimary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -375,6 +478,7 @@ private fun DriveTrackingTable(
     onPause: () -> Unit,
     onResume: () -> Unit,
     onEnd: () -> Unit,
+    onSelectVehicle: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isHighAccuracy = (serviceState.lastWaypoint?.accuracy ?: 99f) <= 20f
@@ -448,11 +552,28 @@ private fun DriveTrackingTable(
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                             )
                         } else {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            val vehicleLabel = serviceState.vehicleName ?: if (serviceState.ambiguousVehicleCount > 1) {
+                                "Unknown vehicle · Select car"
+                            } else {
+                                "Unknown vehicle"
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = if (onSelectVehicle != null) {
+                                    Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .clickable(onClick = onSelectVehicle)
+                                        .padding(vertical = 2.dp)
+                                } else Modifier
+                            ) {
                                 Text(
-                                    text = serviceState.vehicleName ?: "Unknown vehicle",
+                                    text = vehicleLabel,
                                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                    color = if (serviceState.ambiguousVehicleCount > 1 && serviceState.vehicleName == null) {
+                                        SucculentPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                                    },
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -460,6 +581,15 @@ private fun DriveTrackingTable(
                                     Spacer(Modifier.width(4.dp))
                                     Icon(Icons.Default.Bluetooth, contentDescription = "Vehicle Bluetooth connected",
                                         tint = SucculentPrimary, modifier = Modifier.size(14.dp))
+                                }
+                                if (onSelectVehicle != null) {
+                                    Spacer(Modifier.width(2.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.ExpandMore,
+                                        contentDescription = "Select trip vehicle",
+                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                                        modifier = Modifier.size(14.dp)
+                                    )
                                 }
                             }
                             if (serviceState.isCandidate) {

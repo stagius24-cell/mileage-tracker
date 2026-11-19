@@ -37,6 +37,8 @@ import com.businesstracker.mileage.domain.tracking.MotionValidationResult
 import com.businesstracker.mileage.domain.tracking.StationaryAutoStopMonitor
 import com.businesstracker.mileage.domain.tracking.StationaryWatchdogPolicy
 import com.businesstracker.mileage.domain.tracking.TrackingDiagnostics
+import com.businesstracker.mileage.domain.tracking.VehicleResolutionResult
+import com.businesstracker.mileage.receiver.BluetoothArmedDriveMonitor
 import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.FinalizeTripUseCase
@@ -96,6 +98,9 @@ class LocationTrackingService : Service() {
         private val _serviceState = MutableStateFlow(TrackingServiceState())
         val serviceState: StateFlow<TrackingServiceState> = _serviceState.asStateFlow()
 
+        @Volatile
+        private var activeInstance: LocationTrackingService? = null
+
         // Atomic guard ensuring single-session initialization and preventing race conditions
         private val isStartingOrRunning = AtomicBoolean(false)
         private val isDrainingGps = AtomicBoolean(false)
@@ -109,18 +114,70 @@ class LocationTrackingService : Service() {
         }
 
         fun resetGuardForTesting() {
+            val instance = activeInstance
+            activeInstance = null
+            instance?.vehicleIdentificationJob?.cancel()
+            instance?.tickerJob?.cancel()
+            instance?.gpsLocationQueue?.stopConsumer()
             isStartingOrRunning.set(false)
             isDrainingGps.set(false)
             _serviceState.value = TrackingServiceState()
         }
 
-        fun updateVehicleDisplay(tripId: String, vehicleId: String, name: String, connected: Boolean) {
+        fun updateVehicleDisplay(
+            tripId: String,
+            vehicleId: String?,
+            name: String?,
+            connected: Boolean,
+            ambiguousCount: Int = 0
+        ) {
+            val instance = activeInstance?.takeIf { it.currentTripId == tripId }
+            if (instance != null) {
+                if (vehicleId != null && instance.currentVehicleId == null) {
+                    instance.currentVehicleId = vehicleId
+                    instance.currentVehicleName = name
+                } else if (vehicleId != null && instance.currentVehicleId == vehicleId && !name.isNullOrBlank()) {
+                    instance.currentVehicleName = name
+                }
+                instance.currentVehicleBluetoothConnected = connected
+                instance.currentAmbiguousVehicleCount = if ((vehicleId ?: instance.currentVehicleId) != null) 0 else ambiguousCount
+            }
+            val state = _serviceState.value
+            if (state.tripId != tripId) return
+            val resolvedId = state.vehicleId ?: vehicleId
+            val resolvedName = if (resolvedId != null && resolvedId == vehicleId && !name.isNullOrBlank()) {
+                name
+            } else {
+                state.vehicleName ?: name
+            }
+            _serviceState.value = state.copy(
+                vehicleId = resolvedId,
+                vehicleName = resolvedName,
+                vehicleBluetoothConnected = connected,
+                ambiguousVehicleCount = if (resolvedId != null) 0 else ambiguousCount
+            )
+        }
+
+        fun updateExplicitVehicleDisplay(
+            tripId: String,
+            vehicleId: String?,
+            name: String?,
+            connected: Boolean = false
+        ) {
+            val instance = activeInstance?.takeIf { it.currentTripId == tripId }
+            if (instance != null) {
+                instance.currentVehicleId = vehicleId
+                instance.currentVehicleName = name
+                instance.currentVehicleBluetoothConnected = connected
+                instance.currentAmbiguousVehicleCount = 0
+            }
             val state = _serviceState.value
             if (state.tripId != tripId) return
             _serviceState.value = state.copy(
-                vehicleId = state.vehicleId ?: vehicleId,
-                vehicleName = state.vehicleName ?: name,
-                vehicleBluetoothConnected = connected
+                vehicleId = vehicleId,
+                vehicleName = name,
+                vehicleBluetoothConnected = connected,
+                ambiguousVehicleCount = 0
             )
         }
     }
@@ -141,6 +198,7 @@ class LocationTrackingService : Service() {
     @Inject lateinit var database: ExpenseTrackerDatabase
     @Inject lateinit var bootCountProvider: BootCountProvider
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
+    @Inject lateinit var bluetoothArmedDriveMonitor: BluetoothArmedDriveMonitor
 
     private val safeBootCountProvider: BootCountProvider
         get() = if (::bootCountProvider.isInitialized) bootCountProvider else object : BootCountProvider {
@@ -153,6 +211,8 @@ class LocationTrackingService : Service() {
     private var serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var wakeLock: PowerManager.WakeLock? = null
     private var tickerJob: Job? = null
+    @VisibleForTesting
+    internal var vehicleIdentificationJob: Job? = null
     private var gpsLocationQueue: GpsLocationQueue? = null
     private var gpsHandlerThread: HandlerThread? = null
 
@@ -180,6 +240,7 @@ class LocationTrackingService : Service() {
     @Volatile private var currentVehicleId: String? = null
     @Volatile private var currentVehicleName: String? = null
     @Volatile private var currentVehicleBluetoothConnected: Boolean = false
+    @Volatile private var currentAmbiguousVehicleCount: Int = 0
     private var waypointCount: Int = 0
     private val stationaryAutoStopMonitor = StationaryAutoStopMonitor()
     private val stationaryAutoStopRequested = AtomicBoolean(false)
@@ -257,6 +318,7 @@ class LocationTrackingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        activeInstance = this
         acquireWakeLock()
     }
 
@@ -402,12 +464,14 @@ class LocationTrackingService : Service() {
                 }
 
                 isStopping.set(false)
+                activeInstance = this@LocationTrackingService
                 stationaryAutoStopMonitor.reset()
                 stationaryAutoStopRequested.set(false)
                 currentTripId = activeTrip.id
                 currentVehicleId = activeTrip.vehicleId
                 currentVehicleName = null
                 currentVehicleBluetoothConnected = false
+                currentAmbiguousVehicleCount = 0
                 launchVehicleIdentification(activeTrip.id)
                 trackingMethod = TrackingMethod.fromString(activeTrip.trackingMethod)
                 tripStartTime = activeTrip.startTime
@@ -594,10 +658,15 @@ class LocationTrackingService : Service() {
         }
 
         try {
+            activeInstance = this
             isStopping.set(false)
             stationaryAutoStopMonitor.reset()
             stationaryAutoStopRequested.set(false)
             currentTripId = tripId
+            currentVehicleId = null
+            currentVehicleName = null
+            currentVehicleBluetoothConnected = false
+            currentAmbiguousVehicleCount = 0
             trackingMethod = method
             isPaused = false
             isDisplacementConfirmed = false
@@ -698,6 +767,7 @@ class LocationTrackingService : Service() {
                     currentVehicleId = activeTrip.vehicleId
                     currentVehicleName = null
                     currentVehicleBluetoothConnected = false
+                    currentAmbiguousVehicleCount = 0
                     launchVehicleIdentification(activeTrip.id)
                     preferencesManager.setActiveTripId(currentTripId)
 
@@ -803,6 +873,7 @@ class LocationTrackingService : Service() {
         isStartingOrRunning.set(false)
         isStopping.set(false)
         isDrainingGps.set(false)
+        vehicleIdentificationJob?.cancel()
         gpsLocationQueue?.stopConsumer() // Never wipe or cancelEmergency persisted data!
         tickerJob?.cancel()
         try {
@@ -813,6 +884,10 @@ class LocationTrackingService : Service() {
             try { wakeLock?.release() } catch (_: Exception) {}
         }
         currentTripId = ""
+        currentVehicleId = null
+        currentVehicleName = null
+        currentVehicleBluetoothConnected = false
+        currentAmbiguousVehicleCount = 0
         totalDistanceMeters = 0.0
         waypointCount = 0
         lastAcceptedWaypoint = null
@@ -927,6 +1002,9 @@ class LocationTrackingService : Service() {
                                 } catch (_: Exception) {}
                             }
                         }
+                        if (currentVehicleId == null) {
+                            launchVehicleIdentification(currentTripId)
+                        }
                     }
                 }
 
@@ -974,6 +1052,9 @@ class LocationTrackingService : Service() {
                                     tripLifecycleDao.updateState(currentTripId, TripLifecycleState.TRACKING.value)
                                 } catch (_: Exception) {}
                             }
+                        }
+                        if (currentVehicleId == null) {
+                            launchVehicleIdentification(currentTripId)
                         }
                     }
                 }
@@ -1147,9 +1228,14 @@ class LocationTrackingService : Service() {
                         }
                     } catch (_: Throwable) {}
 
+                    vehicleIdentificationJob?.cancel()
                     motionResumptionValidator.reset()
                     _serviceState.value = TrackingServiceState(isTracking = false)
                     currentTripId = ""
+                    currentVehicleId = null
+                    currentVehicleName = null
+                    currentVehicleBluetoothConnected = false
+                    currentAmbiguousVehicleCount = 0
                     totalDistanceMeters = 0.0
                     waypointCount = 0
                     lastAcceptedWaypoint = null
@@ -1161,6 +1247,12 @@ class LocationTrackingService : Service() {
                     currentSpeedMph = 0.0
                     isStartingOrRunning.set(false)
                     isStopping.set(false)
+                    if (::bluetoothArmedDriveMonitor.isInitialized) {
+                        runCatching {
+                            bluetoothArmedDriveMonitor.resetTriggerCooldown()
+                            bluetoothArmedDriveMonitor.reconcile()
+                        }
+                    }
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                     return@withLock
@@ -1192,12 +1284,17 @@ class LocationTrackingService : Service() {
                     }
                 } catch (_: Throwable) {}
 
+                vehicleIdentificationJob?.cancel()
                 motionResumptionValidator.reset()
                 _serviceState.value = TrackingServiceState(isTracking = false)
                 evidenceRevision.incrementAndGet()
                 preferencesManager.saveStationaryEvidence(null)
                 lastPersistedStationaryEvidence = null
                 currentTripId = ""
+                currentVehicleId = null
+                currentVehicleName = null
+                currentVehicleBluetoothConnected = false
+                currentAmbiguousVehicleCount = 0
                 totalDistanceMeters = 0.0
                 waypointCount = 0
                 lastAcceptedWaypoint = null
@@ -1209,6 +1306,12 @@ class LocationTrackingService : Service() {
                 currentSpeedMph = 0.0
                 isStartingOrRunning.set(false)
                 isStopping.set(false)
+                if (::bluetoothArmedDriveMonitor.isInitialized) {
+                    runCatching {
+                        bluetoothArmedDriveMonitor.resetTriggerCooldown()
+                        bluetoothArmedDriveMonitor.reconcile()
+                    }
+                }
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -1340,9 +1443,14 @@ class LocationTrackingService : Service() {
                     }
                 } catch (_: Throwable) {}
 
+                vehicleIdentificationJob?.cancel()
                 motionResumptionValidator.reset()
                 _serviceState.value = TrackingServiceState(isTracking = false)
                 currentTripId = ""
+                currentVehicleId = null
+                currentVehicleName = null
+                currentVehicleBluetoothConnected = false
+                currentAmbiguousVehicleCount = 0
                 totalDistanceMeters = 0.0
                 waypointCount = 0
                 lastAcceptedWaypoint = null
@@ -1354,6 +1462,12 @@ class LocationTrackingService : Service() {
                 currentSpeedMph = 0.0
                 isStartingOrRunning.set(false)
                 isStopping.set(false)
+                if (::bluetoothArmedDriveMonitor.isInitialized) {
+                    runCatching {
+                        bluetoothArmedDriveMonitor.resetTriggerCooldown()
+                        bluetoothArmedDriveMonitor.reconcile()
+                    }
+                }
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
@@ -1439,21 +1553,31 @@ class LocationTrackingService : Service() {
             waypointCount = waypointCount,
             vehicleId = currentVehicleId,
             vehicleName = currentVehicleName,
-            vehicleBluetoothConnected = currentVehicleBluetoothConnected
+            vehicleBluetoothConnected = currentVehicleBluetoothConnected,
+            ambiguousVehicleCount = currentAmbiguousVehicleCount
         )
     }
 
     private fun launchVehicleIdentification(tripId: String) {
-        serviceScope.launch(safeIoDispatcher) {
-            val retryDelays = longArrayOf(0L, 3_000L, 10_000L)
+        if (!::vehicleBluetoothMatcher.isInitialized || !::vehicleRepository.isInitialized) return
+        vehicleIdentificationJob?.cancel()
+        vehicleIdentificationJob = serviceScope.launch(safeIoDispatcher) {
+            val retryDelays = if (::ioDispatcher.isInitialized && ioDispatcher !== Dispatchers.IO) {
+                longArrayOf(0L)
+            } else {
+                longArrayOf(0L, 3_000L, 10_000L, 25_000L, 45_000L, 90_000L)
+            }
             for (delayMs in retryDelays) {
-                if (delayMs > 0L) kotlinx.coroutines.delay(delayMs)
+                if (delayMs > 0L) delay(delayMs)
                 if (currentTripId != tripId || isStopping.get()) return@launch
                 try {
                     val active = activeTripRepository.getActiveTrip()?.takeIf { it.id == tripId } ?: return@launch
-                    val match = vehicleBluetoothMatcher.currentlyConnectedVehicle()
-                    if (active.vehicleId == null && match != null) {
-                        activeTripRepository.assignVehicleIfAbsent(tripId, match.id)
+                    val isManual = if (::preferencesManager.isInitialized) {
+                        preferencesManager.isManualVehicleAssignment(tripId)
+                    } else false
+                    val resolution = vehicleBluetoothMatcher.resolveConnectedVehicle()
+                    if (active.vehicleId == null && !isManual && resolution is VehicleResolutionResult.Matched) {
+                        activeTripRepository.assignVehicleIfAbsent(tripId, resolution.vehicle.id)
                     }
                     val persisted = activeTripRepository.getActiveTrip()?.takeIf { it.id == tripId } ?: return@launch
                     val vehicleId = persisted.vehicleId
@@ -1461,16 +1585,45 @@ class LocationTrackingService : Service() {
                     if (currentTripId != tripId) return@launch
                     currentVehicleId = vehicleId
                     currentVehicleName = vehicle?.name
-                    currentVehicleBluetoothConnected = vehicleId != null && match?.id == vehicleId
+                    currentVehicleBluetoothConnected = when {
+                        vehicleId != null && resolution is VehicleResolutionResult.Matched -> resolution.vehicle.id == vehicleId
+                        vehicleId != null && !vehicle?.bluetoothAddress.isNullOrBlank() ->
+                            vehicleBluetoothMatcher.isDeviceConnected(vehicle!!.bluetoothAddress!!)
+                        else -> false
+                    }
+                    currentAmbiguousVehicleCount = if (vehicleId == null && resolution is VehicleResolutionResult.Ambiguous) {
+                        resolution.candidates.size
+                    } else {
+                        0
+                    }
+                    TrackingDiagnostics.logVehicleResolution(
+                        tripId = tripId,
+                        resultCode = when {
+                            vehicleId != null -> "ASSIGNED"
+                            resolution is VehicleResolutionResult.Ambiguous -> "AMBIGUOUS"
+                            else -> "UNRESOLVED"
+                        },
+                        vehicleId = vehicleId,
+                        candidateCount = when (resolution) {
+                            is VehicleResolutionResult.Ambiguous -> resolution.candidates.size
+                            is VehicleResolutionResult.Matched -> 1
+                            VehicleResolutionResult.None -> 0
+                        },
+                        source = when (resolution) {
+                            is VehicleResolutionResult.Matched -> resolution.source
+                            is VehicleResolutionResult.Ambiguous -> resolution.source
+                            VehicleResolutionResult.None -> "NONE"
+                        }
+                    )
                     val state = _serviceState.value
                     if (state.tripId == tripId) {
                         _serviceState.value = state.copy(
                             vehicleId = currentVehicleId,
                             vehicleName = currentVehicleName,
-                            vehicleBluetoothConnected = currentVehicleBluetoothConnected
+                            vehicleBluetoothConnected = currentVehicleBluetoothConnected,
+                            ambiguousVehicleCount = currentAmbiguousVehicleCount
                         )
                     }
-                    // If vehicle has been identified, no need to retry further
                     if (vehicleId != null) break
                 } catch (error: Exception) {
                     Log.i("LocationTrackingService", "Vehicle identification unavailable: ${error.javaClass.simpleName}")
@@ -1500,8 +1653,12 @@ class LocationTrackingService : Service() {
         coordinator: TripFinalizationCoordinator? = null,
         dispatcher: CoroutineDispatcher? = null,
         scope: CoroutineScope? = null,
-        context: Context? = null
+        context: Context? = null,
+        vehicleRepo: VehicleRepository? = null,
+        matcher: VehicleBluetoothMatcher? = null,
+        armedMonitor: BluetoothArmedDriveMonitor? = null
     ) {
+        activeInstance = this
         if (context != null && baseContext == null) {
             attachBaseContext(context)
         }
@@ -1520,6 +1677,9 @@ class LocationTrackingService : Service() {
         fusedClient?.let { this.fusedLocationClient = it }
         dispatcher?.let { this.ioDispatcher = it }
         scope?.let { this.serviceScope = it }
+        vehicleRepo?.let { this.vehicleRepository = it }
+        matcher?.let { this.vehicleBluetoothMatcher = it }
+        armedMonitor?.let { this.bluetoothArmedDriveMonitor = it }
     }
 
     @VisibleForTesting
@@ -1532,6 +1692,7 @@ class LocationTrackingService : Service() {
         displacementConfirmed: Boolean = false,
         startTime: Long = System.currentTimeMillis()
     ) {
+        activeInstance = this
         this.currentTripId = tripId
         this.totalDistanceMeters = distanceMeters
         this.waypointCount = waypoints
@@ -1605,6 +1766,8 @@ class LocationTrackingService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (activeInstance === this) activeInstance = null
+        vehicleIdentificationJob?.cancel()
         isStartingOrRunning.set(false)
         isStopping.set(false)
         isDrainingGps.set(false)
