@@ -42,6 +42,7 @@ import javax.inject.Inject
 data class SettingsUiState(
     val themeMode: AppThemeMode = AppThemeMode.AUTO,
     val autoTrackingEnabled: Boolean = true,
+    val autoTrackingResumeDate: String? = null,
     val hasBackgroundLocationPermission: Boolean = true,
     val isAutoTrackingReady: Boolean = true,
     val isTransitionsRegistered: Boolean = false,
@@ -135,6 +136,7 @@ data class VehicleBluetoothDevice(
 
 private data class GeneralPrefs(
     val autoTrackingEnabled: Boolean,
+    val autoTrackingResumeDate: String?,
     val defaultVehicle: String,
     val themeMode: AppThemeMode,
     val customPurposes: List<String> = emptyList(),
@@ -225,8 +227,9 @@ class SettingsViewModel @Inject constructor(
 
     private val smartFlow = combine(
         preferencesManager.isSmartTripRecognitionEnabled,
-        preferencesManager.smartClassificationMode
-    ) { enabled, mode -> Pair(enabled, mode) }
+        preferencesManager.smartClassificationMode,
+        preferencesManager.autoTrackingResumeDate
+    ) { enabled, mode, resumeDate -> Triple(enabled, mode, resumeDate) }
 
     private val generalFlow = combine(
         preferencesManager.isAutoTrackingEnabled,
@@ -234,8 +237,8 @@ class SettingsViewModel @Inject constructor(
         preferencesManager.appThemeMode,
         preferencesManager.customPurposes,
         smartFlow
-    ) { autoTrack, vehicle, themeMode, customPurposes, (smartEnabled, smartMode) ->
-        GeneralPrefs(autoTrack, vehicle, themeMode, customPurposes, smartEnabled, smartMode)
+    ) { autoTrack, vehicle, themeMode, customPurposes, (smartEnabled, smartMode, resumeDate) ->
+        GeneralPrefs(autoTrack, resumeDate, vehicle, themeMode, customPurposes, smartEnabled, smartMode)
     }
 
     private val _workHoursStartInput = MutableStateFlow<String?>(null)
@@ -420,6 +423,7 @@ class SettingsViewModel @Inject constructor(
             SettingsUiState(
                 themeMode = config.general.themeMode,
                 autoTrackingEnabled = config.general.autoTrackingEnabled,
+                autoTrackingResumeDate = config.general.autoTrackingResumeDate,
                 hasBackgroundLocationPermission = hasBg,
                 isAutoTrackingReady = isReady,
                 scheduleFilteringEnabled = config.schedule.filteringEnabled,
@@ -481,6 +485,9 @@ class SettingsViewModel @Inject constructor(
     fun setAutoTrackingEnabled(enabled: Boolean) {
         viewModelScope.launch {
             preferencesManager.setAutoTrackingEnabled(enabled)
+            if (enabled) {
+                com.businesstracker.mileage.worker.AutoTrackingResumeWorker.cancel(context)
+            }
             try {
                 if (enabled) {
                     activityTransitionManager.registerTransitions(force = true)
@@ -489,6 +496,17 @@ class SettingsViewModel @Inject constructor(
                 }
                 bluetoothArmedDriveMonitor.reconcile()
             } catch (_: Exception) {}
+        }
+    }
+
+    fun scheduleAutoTrackingResume(isoDate: String?) {
+        viewModelScope.launch {
+            preferencesManager.setAutoTrackingResumeDate(isoDate)
+            if (isoDate.isNullOrBlank()) {
+                com.businesstracker.mileage.worker.AutoTrackingResumeWorker.cancel(context)
+            } else {
+                com.businesstracker.mileage.worker.AutoTrackingResumeWorker.scheduleForDate(context, isoDate)
+            }
         }
     }
 

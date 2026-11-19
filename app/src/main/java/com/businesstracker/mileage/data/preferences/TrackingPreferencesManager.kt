@@ -46,6 +46,7 @@ class TrackingPreferencesManager @Inject constructor(
 ) {
     companion object {
         private val KEY_AUTO_TRACKING_ENABLED = booleanPreferencesKey("auto_tracking_enabled")
+        private val KEY_AUTO_TRACKING_RESUME_DATE = stringPreferencesKey("auto_tracking_resume_date")
         private val KEY_DEFAULT_BUSINESS_ENTITY = stringPreferencesKey("default_business_entity")
         private val KEY_VEHICLE_ANCHOR_LAT = doublePreferencesKey("vehicle_anchor_lat")
         private val KEY_VEHICLE_ANCHOR_LNG = doublePreferencesKey("vehicle_anchor_lng")
@@ -126,6 +127,10 @@ class TrackingPreferencesManager @Inject constructor(
         prefs[KEY_AUTO_TRACKING_ENABLED] ?: true
     }
 
+    val autoTrackingResumeDate: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_AUTO_TRACKING_RESUME_DATE]
+    }
+
     val appThemeMode: Flow<AppThemeMode> = context.dataStore.data.map { prefs ->
         AppThemeMode.fromStoredValue(prefs[KEY_APP_THEME_MODE])
     }
@@ -139,7 +144,36 @@ class TrackingPreferencesManager @Inject constructor(
     suspend fun setAutoTrackingEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
             prefs[KEY_AUTO_TRACKING_ENABLED] = enabled
+            if (enabled) {
+                prefs.remove(KEY_AUTO_TRACKING_RESUME_DATE)
+            }
         }
+    }
+
+    suspend fun setAutoTrackingResumeDate(isoDate: String?) {
+        context.dataStore.edit { prefs ->
+            if (isoDate.isNullOrBlank()) {
+                prefs.remove(KEY_AUTO_TRACKING_RESUME_DATE)
+            } else {
+                prefs[KEY_AUTO_TRACKING_RESUME_DATE] = isoDate.trim()
+            }
+        }
+    }
+
+    suspend fun checkAndApplyAutoTrackingResumeIfDue(
+        todayIso: String = java.time.LocalDate.now().toString()
+    ): Boolean {
+        var reactivated = false
+        context.dataStore.edit { prefs ->
+            val enabled = prefs[KEY_AUTO_TRACKING_ENABLED] ?: true
+            val resumeDate = prefs[KEY_AUTO_TRACKING_RESUME_DATE]
+            if (!enabled && !resumeDate.isNullOrBlank() && todayIso >= resumeDate) {
+                prefs[KEY_AUTO_TRACKING_ENABLED] = true
+                prefs.remove(KEY_AUTO_TRACKING_RESUME_DATE)
+                reactivated = true
+            }
+        }
+        return reactivated
     }
 
     val isBluetoothAutoStopEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->

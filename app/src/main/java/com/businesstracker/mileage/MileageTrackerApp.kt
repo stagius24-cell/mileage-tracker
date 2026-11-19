@@ -47,6 +47,7 @@ class MileageTrackerApp : Application(), Configuration.Provider {
 
         // Initialize transition recognition and Bluetooth armed monitoring if enabled by user
         appScope.launch {
+            preferencesManager.checkAndApplyAutoTrackingResumeIfDue()
             val autoTrackEnabled = preferencesManager.isAutoTrackingEnabled.first()
             if (autoTrackEnabled) {
                 activityTransitionManager.registerTransitions()

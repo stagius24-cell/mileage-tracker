@@ -6,6 +6,10 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.rememberDatePickerState
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -197,6 +201,7 @@ fun SettingsScreen(
     var showVersionHistoryDialog by rememberSaveable { mutableStateOf(false) }
     var showDiagnosticReportSheet by rememberSaveable { mutableStateOf(false) }
     var diagnosticReportText by remember { mutableStateOf("") }
+    var showAutoTrackResumeDatePicker by rememberSaveable { mutableStateOf(false) }
     var showDisconnectConfirmation by rememberSaveable { mutableStateOf(false) }
     var showEditVehicle by rememberSaveable { mutableStateOf(false) }
     var showVehicleManager by rememberSaveable { mutableStateOf(false) }
@@ -391,7 +396,18 @@ fun SettingsScreen(
                         VehicleSettingsIcon(Icons.Outlined.LocationOn)
                         Spacer(Modifier.width(12.dp))
                         Column(
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .then(
+                                    if (!state.autoTrackingEnabled) {
+                                        Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable { showAutoTrackResumeDatePicker = true }
+                                            .padding(vertical = 2.dp)
+                                    } else {
+                                        Modifier
+                                    }
+                                ),
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
@@ -400,10 +416,25 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.SemiBold
                             )
                             Spacer(Modifier.height(2.dp))
+                            val driveTrackingSubtitle = when {
+                                state.autoTrackingEnabled -> "Automatic detection"
+                                !state.autoTrackingResumeDate.isNullOrBlank() -> {
+                                    val formattedDate = runCatching {
+                                        java.time.LocalDate.parse(state.autoTrackingResumeDate)
+                                            .format(java.time.format.DateTimeFormatter.ofPattern("MMM d, yyyy"))
+                                    }.getOrDefault(state.autoTrackingResumeDate)
+                                    "Resumes on $formattedDate"
+                                }
+                                else -> "Off · Tap to schedule reactivation"
+                            }
                             Text(
-                                text = "Automatic detection",
+                                text = driveTrackingSubtitle,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = if (!state.autoTrackingEnabled && !state.autoTrackingResumeDate.isNullOrBlank()) {
+                                    SucculentPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
                             )
                         }
                         Spacer(Modifier.width(8.dp))
@@ -1550,6 +1581,72 @@ fun SettingsScreen(
             onConfirmApply = viewModel::confirmApplySavedLocationsRestore,
             onDismiss = viewModel::dismissRestorePreview
         )
+    }
+
+    if (showAutoTrackResumeDatePicker) {
+        val todayUtcMillis = remember {
+            java.time.LocalDate.now()
+                .atStartOfDay(java.time.ZoneOffset.UTC)
+                .toInstant()
+                .toEpochMilli()
+        }
+        val initialSelectedMillis = remember(state.autoTrackingResumeDate) {
+            state.autoTrackingResumeDate?.let { iso ->
+                runCatching {
+                    java.time.LocalDate.parse(iso)
+                        .atStartOfDay(java.time.ZoneOffset.UTC)
+                        .toInstant()
+                        .toEpochMilli()
+                }.getOrNull()
+            } ?: todayUtcMillis
+        }
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = initialSelectedMillis,
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    return utcTimeMillis >= todayUtcMillis
+                }
+            }
+        )
+        DatePickerDialog(
+            onDismissRequest = { showAutoTrackResumeDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val selectedMillis = datePickerState.selectedDateMillis
+                        if (selectedMillis != null) {
+                            val selectedIso = java.time.Instant.ofEpochMilli(selectedMillis)
+                                .atZone(java.time.ZoneOffset.UTC)
+                                .toLocalDate()
+                                .toString()
+                            viewModel.scheduleAutoTrackingResume(selectedIso)
+                        }
+                        showAutoTrackResumeDatePicker = false
+                    }
+                ) {
+                    Text("Schedule")
+                }
+            },
+            dismissButton = {
+                Row {
+                    if (!state.autoTrackingResumeDate.isNullOrBlank()) {
+                        TextButton(
+                            onClick = {
+                                viewModel.scheduleAutoTrackingResume(null)
+                                showAutoTrackResumeDatePicker = false
+                            }
+                        ) {
+                            Text("Clear")
+                        }
+                    }
+                    TextButton(onClick = { showAutoTrackResumeDatePicker = false }) {
+                        Text("Cancel")
+                    }
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
     }
 
     if (showDiagnosticReportSheet) {
