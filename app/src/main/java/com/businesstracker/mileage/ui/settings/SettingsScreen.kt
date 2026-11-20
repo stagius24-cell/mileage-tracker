@@ -424,7 +424,7 @@ fun SettingsScreen(
                                     }.getOrDefault(state.autoTrackingResumeDate)
                                     "Resumes on $formattedDate"
                                 }
-                                else -> "Off · Tap to schedule reactivation"
+                                else -> "Tap to resume schedule"
                             }
                             Text(
                                 text = driveTrackingSubtitle,
