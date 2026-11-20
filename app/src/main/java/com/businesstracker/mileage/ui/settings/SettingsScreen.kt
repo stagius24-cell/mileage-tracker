@@ -1821,6 +1821,9 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.209 (Build 209)" to "Fix background auto-start ForegroundServiceStartNotAllowedException (LaunchFailedReconciled) with automatic background GPS fallback & FGS promotion, fix 138ms GPS freshness clock-skew false rejection, preserve origin anchor on slow departures, and add detailed candidate launch diagnostics.",
+                "Version 1.0.208 (Build 208)" to "Match scheduled auto-tracking reactivation calendar table to floating bottom sheet design.",
+                "Version 1.0.207 (Build 207)" to "Add scheduled auto-tracking reactivation date picker and status under Drive tracking.",
                 "Version 1.0.206 (Build 206)" to "Full GPS auto-start & multi-vehicle Bluetooth audit: separate drive detection from vehicle matching, prevent competing vehicle events from disarming tracking, prioritize active A2DP/HEADSET audio profiles, recover vehicle match after disconnect or 200m confirmation, add tap-to-pick active vehicle on Dashboard, and add redacted diagnostic report export in Settings.",
                 "Version 1.0.205 (Build 205)" to "Reflect true trip end time using the timestamp of the last recorded movement/waypoint, eliminating the debounce delay from recorded trip duration.",
                 "Version 1.0.204 (Build 204)" to "Optimize Trip History filter pills: remove trailing chevrons and enable smooth horizontal scrolling to prevent text truncation.",

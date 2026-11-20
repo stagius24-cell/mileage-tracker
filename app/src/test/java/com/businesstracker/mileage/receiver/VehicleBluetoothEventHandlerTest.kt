@@ -47,6 +47,9 @@ class VehicleBluetoothEventHandlerTest {
         preferences.setBluetoothDisconnectPending(false)
         preferences.setInVehicleState(true)
         preferences.setVehicleBluetoothDevice(CAR_ADDRESS, "My Car")
+        preferences.setCarBluetoothConnected(false)
+        preferences.setConnectedCarAddresses(emptySet())
+        preferences.clearManualVehicleAssignment()
         repository = FakeActiveTripRepository(autoTrip())
         scheduler = RecordingScheduler(context)
         val monitor = BluetoothArmedDriveMonitor(

@@ -268,4 +268,59 @@ object TrackingDiagnostics {
             "trip=${tripId ?: "none"} displayed=\"$displayedName\" btConnected=$connected ambiguousCount=$ambiguousCount"
         )
     }
+
+    fun logCandidateLaunchDetail(
+        tripId: String,
+        source: String,
+        outcome: String,
+        exceptionClass: String? = null,
+        exceptionMessage: String? = null,
+        appInForeground: Boolean? = null,
+        ignoringBatteryOptimizations: Boolean? = null,
+        fgLoc: Boolean? = null,
+        bgLoc: Boolean? = null,
+        actPerm: Boolean? = null,
+        candidateStateBefore: String,
+        candidateStateAfter: String,
+        acknowledged: Boolean,
+        elapsedSinceRequestMs: Long,
+        deadlineRemainingMs: Long
+    ) {
+        val sanitizedErr = exceptionMessage?.take(120)?.replace('\n', ' ') ?: "none"
+        record(
+            category = "CandidateLaunch",
+            code = outcome,
+            rawDetail = "trip=$tripId src=$source ack=$acknowledged " +
+                "elapsed=${elapsedSinceRequestMs}ms deadlineRem=${deadlineRemainingMs}ms " +
+                "before=$candidateStateBefore after=$candidateStateAfter " +
+                "exc=${exceptionClass ?: "none"} msg=\"$sanitizedErr\" " +
+                "fg=${appInForeground ?: "unk"} dozeExempt=${ignoringBatteryOptimizations ?: "unk"} " +
+                "perms=[fg=${fgLoc ?: "unk"},bg=${bgLoc ?: "unk"},act=${actPerm ?: "unk"}]"
+        )
+    }
+
+    fun logMovementGate(
+        gate: String,
+        passed: Boolean,
+        rawConf: Int,
+        effectiveConf: Int,
+        speedMps: Float?,
+        displacementMeters: Double?,
+        accuracyMeters: Float,
+        sampleAgeMs: Long,
+        sampleGapMs: Long,
+        inPostConnectWindow: Boolean,
+        hasPrev: Boolean,
+        detail: String
+    ) {
+        val speedStr = speedMps?.let { String.format(Locale.US, "%.2fm/s", it) } ?: "null"
+        val dispStr = displacementMeters?.let { String.format(Locale.US, "%.1fm", it) } ?: "null"
+        val accStr = String.format(Locale.US, "%.2fm", accuracyMeters)
+        record(
+            category = "MovementGate",
+            code = "${gate}_${if (passed) "PASS" else "FAIL"}",
+            rawDetail = "rawConf=$rawConf effConf=$effectiveConf speed=$speedStr disp=$dispStr acc=$accStr " +
+                "age=${sampleAgeMs}ms gap=${sampleGapMs}ms postConn=$inPostConnectWindow hasPrev=$hasPrev detail=$detail"
+        )
+    }
 }

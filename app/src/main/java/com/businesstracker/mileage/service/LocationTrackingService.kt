@@ -104,8 +104,13 @@ class LocationTrackingService : Service() {
         // Atomic guard ensuring single-session initialization and preventing race conditions
         private val isStartingOrRunning = AtomicBoolean(false)
         private val isDrainingGps = AtomicBoolean(false)
+        private val isFallbackTrackingActive = AtomicBoolean(false)
 
         fun isDraining(): Boolean = isDrainingGps.get()
+
+        fun isServiceInstanceRunning(): Boolean = isStartingOrRunning.get()
+
+        fun isFallbackActive(): Boolean = isFallbackTrackingActive.get()
 
         fun isTrackingRunning(): Boolean = isStartingOrRunning.get() || _serviceState.value.isTracking || isDrainingGps.get()
 
@@ -121,7 +126,54 @@ class LocationTrackingService : Service() {
             instance?.gpsLocationQueue?.stopConsumer()
             isStartingOrRunning.set(false)
             isDrainingGps.set(false)
+            isFallbackTrackingActive.set(false)
             _serviceState.value = TrackingServiceState()
+        }
+
+        fun activateFallbackCandidateState(
+            tripId: String,
+            startTime: Long,
+            isCandidate: Boolean = true,
+            distanceMeters: Double = 0.0,
+            speedMph: Double = 0.0,
+            waypointCount: Int = 0,
+            lastWaypoint: Waypoint? = null,
+            vehicleId: String? = null,
+            vehicleName: String? = null,
+            vehicleBluetoothConnected: Boolean = false,
+            ambiguousVehicleCount: Int = 0
+        ) {
+            isFallbackTrackingActive.set(true)
+            val existing = _serviceState.value.takeIf { it.tripId == tripId }
+            val resolvedVehicleId = vehicleId ?: existing?.vehicleId
+            val resolvedVehicleName = if (resolvedVehicleId != null && resolvedVehicleId == vehicleId && !vehicleName.isNullOrBlank()) {
+                vehicleName
+            } else {
+                existing?.vehicleName ?: vehicleName
+            }
+            _serviceState.value = TrackingServiceState(
+                isTracking = true,
+                isPaused = false,
+                isCandidate = isCandidate,
+                tripId = tripId,
+                distanceMeters = distanceMeters,
+                distanceMiles = distanceMeters / METERS_PER_MILE,
+                durationMillis = maxOf(0L, System.currentTimeMillis() - startTime),
+                currentSpeedMph = speedMph,
+                lastWaypoint = lastWaypoint,
+                waypointCount = waypointCount,
+                vehicleId = resolvedVehicleId,
+                vehicleName = resolvedVehicleName,
+                vehicleBluetoothConnected = vehicleBluetoothConnected,
+                ambiguousVehicleCount = if (resolvedVehicleId != null) 0 else ambiguousVehicleCount
+            )
+        }
+
+        fun clearFallbackCandidateState(tripId: String? = null) {
+            isFallbackTrackingActive.set(false)
+            if (!isStartingOrRunning.get() && (tripId == null || _serviceState.value.tripId == tripId)) {
+                _serviceState.value = TrackingServiceState(isTracking = false)
+            }
         }
 
         fun updateVehicleDisplay(
@@ -349,11 +401,18 @@ class LocationTrackingService : Service() {
             ACTION_STOP -> {
                 val expectedTripId = intent.getStringExtra(EXTRA_TRIP_ID)
                 val trigger = intent.getStringExtra(EXTRA_DEBOUNCE_TRIGGER)
+                val matchesFallback = currentTripId.isEmpty() && isFallbackTrackingActive.get() &&
+                    (expectedTripId == null || expectedTripId == _serviceState.value.tripId)
                 if (trigger == null) {
-                    if (expectedTripId == null || expectedTripId == currentTripId) stopTracking()
+                    if (expectedTripId == null || expectedTripId == currentTripId || matchesFallback) stopTracking()
                 } else if (expectedTripId != null) {
                     serviceScope.launch(ioDispatcher) {
-                        if (currentTripId == expectedTripId && trackingMethod == TrackingMethod.AUTO_DETECTED &&
+                        val persisted = if (currentTripId.isEmpty() && isFallbackTrackingActive.get()) {
+                            activeTripRepository.getActiveTrip()
+                        } else null
+                        val matchesTrip = currentTripId == expectedTripId || persisted?.id == expectedTripId
+                        val method = persisted?.trackingMethod?.let(TrackingMethod::fromString) ?: trackingMethod
+                        if (matchesTrip && method == TrackingMethod.AUTO_DETECTED &&
                             !preferencesManager.isInVehicle() &&
                             (trigger != TripDebounceWorker.TRIGGER_BLUETOOTH ||
                                 (preferencesManager.isBluetoothAutoStopActive() &&
@@ -464,10 +523,16 @@ class LocationTrackingService : Service() {
                 }
 
                 isStopping.set(false)
+                isFallbackTrackingActive.set(false)
+                runCatching {
+                    val ctx = applicationContext
+                    if (ctx != null) com.businesstracker.mileage.receiver.AutoDriveReceiver.cancelBackgroundGpsFallback(ctx)
+                }
                 activeInstance = this@LocationTrackingService
                 stationaryAutoStopMonitor.reset()
                 stationaryAutoStopRequested.set(false)
                 currentTripId = activeTrip.id
+                TrackingDiagnostics.logCandidateTransition(currentTripId, "SERVICE_STARTUP_ACKNOWLEDGED", "mode=RECOVERY method=${activeTrip.trackingMethod}")
                 currentVehicleId = activeTrip.vehicleId
                 currentVehicleName = null
                 currentVehicleBluetoothConnected = false
@@ -660,9 +725,15 @@ class LocationTrackingService : Service() {
         try {
             activeInstance = this
             isStopping.set(false)
+            isFallbackTrackingActive.set(false)
+            runCatching {
+                val ctx = try { applicationContext } catch (_: Throwable) { null }
+                if (ctx != null) com.businesstracker.mileage.receiver.AutoDriveReceiver.cancelBackgroundGpsFallback(ctx)
+            }
             stationaryAutoStopMonitor.reset()
             stationaryAutoStopRequested.set(false)
             currentTripId = tripId
+            TrackingDiagnostics.logCandidateTransition(currentTripId, "SERVICE_STARTUP_ACKNOWLEDGED", "mode=ACTION_START method=${method.value}")
             currentVehicleId = null
             currentVehicleName = null
             currentVehicleBluetoothConnected = false
@@ -1151,10 +1222,27 @@ class LocationTrackingService : Service() {
         if (!isStopping.compareAndSet(false, true)) {
             return
         }
-        val tripIdAtCall = currentTripId
+        isFallbackTrackingActive.set(false)
+        runCatching {
+            val ctx = try { applicationContext } catch (_: Throwable) { null }
+            if (ctx != null) com.businesstracker.mileage.receiver.AutoDriveReceiver.cancelBackgroundGpsFallback(ctx)
+        }
+        var tripIdAtCall = currentTripId
         isDrainingGps.set(true)
         serviceScope.launch(ioDispatcher) {
             decisionMutex.withLock {
+                if (currentTripId.isEmpty() && tripIdAtCall.isEmpty() && ::activeTripRepository.isInitialized) {
+                    val active = activeTripRepository.getActiveTrip()
+                    if (active != null) {
+                        currentTripId = active.id
+                        tripIdAtCall = active.id
+                        trackingMethod = TrackingMethod.fromString(active.trackingMethod)
+                        totalDistanceMeters = active.totalDistanceMeters
+                        isDisplacementConfirmed = active.totalDistanceMeters >= 200.0
+                        isCandidate = !isDisplacementConfirmed && trackingMethod == TrackingMethod.AUTO_DETECTED
+                        tripStartTime = active.startTime
+                    }
+                }
                 if (tripIdAtCall.isNotEmpty() && currentTripId != tripIdAtCall && currentTripId.isNotEmpty()) {
                     isDrainingGps.set(false)
                     isStopping.set(false)

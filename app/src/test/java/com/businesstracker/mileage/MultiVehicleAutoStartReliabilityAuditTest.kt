@@ -240,6 +240,15 @@ class MultiVehicleAutoStartReliabilityAuditTest {
             gson = Gson(),
             ioDispatcher = testDispatcher
         )
+
+        receiver.apply {
+            vehicleBluetoothMatcher = matcher
+            this.notificationHelper = this@MultiVehicleAutoStartReliabilityAuditTest.notificationHelper
+            filterGpsPointUseCase = FilterGpsPointUseCase()
+            tripFinalizationCoordinator = finalizationCoordinator
+            elapsedClock = { fakeElapsedClockMillis }
+        }
+        Unit
     }
 
     @After
@@ -1119,6 +1128,172 @@ class MultiVehicleAutoStartReliabilityAuditTest {
         assertEquals(model3.id, finalized?.vehicleId)
         assertEquals(TripClassification.BUSINESS.value, finalized?.classification)
         assertEquals(ClassificationSource.SMART_AUTO.value, finalized?.classificationSource)
+    }
+
+    // 31. ForegroundServiceStartNotAllowedException falls back to background GPS & confirms at 200m with Tesla Model 3
+    @Test(timeout = 15_000)
+    fun scenario31_foregroundServiceStartNotAllowed_activatesBackgroundGpsFallbackAndConfirmsAt200m_withTeslaModel3() = runBlocking {
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, model3.bluetoothAddress!!)
+        preferencesManager.setConnectedCarAddresses(setOf(model3.bluetoothAddress!!), fakeElapsedClockMillis)
+
+        var fallbackRegistered = false
+        var serviceLaunchAttempts = 0
+        receiver.serviceLauncher = { _, _ ->
+            serviceLaunchAttempts++
+            throw android.app.ForegroundServiceStartNotAllowedException("Background FGS start restricted")
+        }
+        receiver.backgroundLocationRegistrar = { _, _ ->
+            fallbackRegistered = true
+            true
+        }
+
+        // Real-world driving corroboration at 16:34:06 with rawConf=91
+        fakeElapsedClockMillis += 180_000L
+        monitor.locationProvider = { makeLocation(37.3382, -121.8863, fakeElapsedClockMillis, speedMps = 12f, accuracyMeters = 3.79f) }
+        receiver.handleArmedActivityUpdate(context, listOf(DetectedActivity(DetectedActivity.IN_VEHICLE, 91)))
+
+        assertEquals(1, serviceLaunchAttempts)
+        assertTrue("Background GPS fallback must register when FGS start is blocked", fallbackRegistered)
+
+        val tripId = preferencesManager.activeTripId.first()
+        assertNotNull("Candidate trip must NOT be destroyed by LaunchFailedReconciled when fallback is active", tripId)
+        val persistedCandidate = activeTripRepository.getActiveTrip()
+        assertNotNull(persistedCandidate)
+        assertEquals(model3.id, persistedCandidate?.vehicleId)
+        assertNotNull("Candidate deadline must be initialized > 0", preferencesManager.getCandidateDeadline())
+        assertEquals(TripLifecycleState.CANDIDATE.value, database.tripLifecycleDao().getState(tripId!!))
+        assertTrue(LocationTrackingService.serviceState.value.isTracking)
+
+        // Feed >200m of driving locations via background PendingIntent path -> promotes to TRACKING
+        receiver.handleBackgroundGpsUpdate(
+            context,
+            listOf(
+                makeLocation(37.3382, -121.8863, fakeElapsedClockMillis + 3_000L, speedMps = 13f, accuracyMeters = 5f),
+                makeLocation(37.3408, -121.8863, fakeElapsedClockMillis + 15_000L, speedMps = 15f, accuracyMeters = 5f)
+            )
+        )
+
+        val confirmedTrip = activeTripRepository.getActiveTrip()
+        assertNotNull(confirmedTrip)
+        assertTrue("Distance must reach >= 200m via background GPS fallback", (confirmedTrip?.totalDistanceMeters ?: 0.0) >= 200.0)
+        assertEquals(TripLifecycleState.TRACKING.value, database.tripLifecycleDao().getState(tripId))
+        assertEquals(model3.id, confirmedTrip?.vehicleId)
+        assertFalse(LocationTrackingService.serviceState.value.isCandidate)
+
+        // Once FGS becomes eligible again, next background update promotes cleanly to LocationTrackingService
+        val launchedIntents = mutableListOf<Intent>()
+        receiver.serviceLauncher = { _, intent -> launchedIntents.add(intent) }
+        receiver.handleBackgroundGpsUpdate(
+            context,
+            listOf(makeLocation(37.3420, -121.8863, fakeElapsedClockMillis + 25_000L, speedMps = 15f, accuracyMeters = 5f))
+        )
+        assertEquals(1, launchedIntents.size)
+        assertEquals(tripId, launchedIntents.first().getStringExtra(LocationTrackingService.EXTRA_TRIP_ID))
+    }
+
+    // 32. Fresh GPS fix whose elapsedRealtimeNanos is 138ms ahead of pre-request clock must NOT trigger GPS_SAMPLE_STALE
+    @Test(timeout = 15_000)
+    fun scenario32_freshGpsFix138msNewerThanPreRequestTimestamp_isNotRejectedAsStale() = runBlocking {
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, model3.bluetoothAddress!!)
+        preferencesManager.setConnectedCarAddresses(setOf(model3.bluetoothAddress!!), fakeElapsedClockMillis)
+
+        fakeElapsedClockMillis = 206_886_176L
+        // Exact clock skew observed in real device logs: fixElapsed=206886314 now=206886176 (+138ms)
+        monitor.locationProvider = { makeLocation(37.3382, -121.8863, 206_886_314L, speedMps = 12f, accuracyMeters = 4f) }
+        receiver.handleArmedActivityUpdate(context, listOf(DetectedActivity(DetectedActivity.IN_VEHICLE, 91)))
+
+        assertNotNull("Fresh fix +138ms after pre-request timestamp must be accepted and start trip", preferencesManager.activeTripId.first())
+        val recentCodes = TrackingDiagnostics.getRecentEvents().map { "${it.category}:${it.code}" }
+        assertFalse("GPS_SAMPLE_STALE must not fire on +138ms newly fetched fix", recentCodes.contains("BluetoothArmedMonitor:GPS_SAMPLE_STALE"))
+    }
+
+    // 33. Multi-step slow departure preserves origin anchor (16:31:02 -> 16:31:43 -> 16:32:43)
+    @Test(timeout = 15_000)
+    fun scenario33_multiStepSlowDeparture_preservesOriginAnchorAndConfirmsMovement() = runBlocking {
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, model3.bluetoothAddress!!)
+        preferencesManager.setConnectedCarAddresses(setOf(model3.bluetoothAddress!!), fakeElapsedClockMillis)
+
+        // 16:31:02: rawConf=30, acc=3.79m at origin
+        val t0 = fakeElapsedClockMillis
+        monitor.locationProvider = { makeLocation(37.33820, -121.88630, t0, speedMps = 0f, accuracyMeters = 3.79f) }
+        receiver.handleArmedActivityUpdate(context, listOf(DetectedActivity(DetectedActivity.IN_VEHICLE, 30)))
+        assertNull(preferencesManager.activeTripId.first())
+
+        // 16:31:43: rawConf=9, acc=9.935m, +20m slowly rolling out of driveway (< 45m) -> preserves origin anchor
+        fakeElapsedClockMillis += 41_000L
+        monitor.locationProvider = { makeLocation(37.33838, -121.88630, fakeElapsedClockMillis, speedMps = 0.8f, accuracyMeters = 9.935f) }
+        receiver.handleArmedActivityUpdate(context, listOf(DetectedActivity(DetectedActivity.IN_VEHICLE, 9)))
+        assertNull(preferencesManager.activeTripId.first())
+
+        // 16:32:43: rawConf=88, acc=9.935m, +60m from origin (only 40m from t1, but 60m >= 45m from t0 origin anchor!)
+        fakeElapsedClockMillis += 60_000L
+        monitor.locationProvider = { makeLocation(37.33874, -121.88630, fakeElapsedClockMillis, speedMps = 1.2f, accuracyMeters = 9.935f) }
+        receiver.handleArmedActivityUpdate(context, listOf(DetectedActivity(DetectedActivity.IN_VEHICLE, 88)))
+
+        assertNotNull("Origin anchor preservation across slow intermediate step must corroborate >= 45m displacement", preferencesManager.activeTripId.first())
+    }
+
+    // 34. Genuine unrecoverable launch failure reconciles cleanly, logs detailed diagnostics, and resets cooldown for immediate retry
+    @Test(timeout = 15_000)
+    fun scenario34_genuineUnrecoverableLaunchFailure_reconcilesAndResetsCooldown_allowingImmediateRetry() = runBlocking {
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, model3.bluetoothAddress!!)
+        preferencesManager.setConnectedCarAddresses(setOf(model3.bluetoothAddress!!), fakeElapsedClockMillis)
+
+        receiver.serviceLauncher = { _, _ -> throw SecurityException("Simulated FGS launch restriction") }
+        receiver.backgroundLocationRegistrar = { _, _ -> false }
+
+        fakeElapsedClockMillis += 10_000L
+        monitor.locationProvider = { makeLocation(37.3382, -121.8863, fakeElapsedClockMillis, speedMps = 14f, accuracyMeters = 5f) }
+        receiver.handleArmedActivityUpdate(context, listOf(DetectedActivity(DetectedActivity.IN_VEHICLE, 92)))
+
+        assertNull("Unrecoverable launch failure must clear activeTripId", preferencesManager.activeTripId.first())
+        assertNull("Unrecoverable launch failure must clear active trip from Room", activeTripRepository.getActiveTrip())
+
+        val detailEvent = TrackingDiagnostics.getRecentEvents().lastOrNull { it.category == "CandidateLaunch" }
+        assertNotNull(detailEvent)
+        assertEquals("LAUNCH_FAILED_RECONCILED", detailEvent?.code)
+        assertTrue(detailEvent?.detail?.contains("exc=SecurityException") == true)
+        assertTrue(detailEvent?.detail?.contains("deadlineRem=240000ms") == true)
+
+        // Immediately recoverable on next sample without waiting 60s cooldown once service launch works
+        receiver.serviceLauncher = null
+        fakeElapsedClockMillis += BluetoothArmedDriveMonitor.MIN_LOCATION_SAMPLE_INTERVAL_MILLIS + 1000L
+        monitor.locationProvider = { makeLocation(37.3400, -121.8863, fakeElapsedClockMillis, speedMps = 14f, accuracyMeters = 5f) }
+        receiver.handleArmedActivityUpdate(context, listOf(DetectedActivity(DetectedActivity.IN_VEHICLE, 92)))
+
+        assertNotNull("Next sample after launch recovery must succeed without 60s lock", preferencesManager.activeTripId.first())
+    }
+
+    // 35. Service adopts pre-created candidate ActiveTrip and waypoints without duplicating or losing vehicle attribution
+    @Test(timeout = 15_000)
+    fun scenario35_delayedServiceStartupAcknowledgment_adoptsPreCreatedCandidateWithoutDuplicate() = runBlocking {
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, model3.bluetoothAddress!!)
+        preferencesManager.setConnectedCarAddresses(setOf(model3.bluetoothAddress!!), fakeElapsedClockMillis)
+
+        val deferredIntents = mutableListOf<Intent>()
+        receiver.serviceLauncher = { _, intent -> deferredIntents.add(intent) }
+
+        monitor.locationProvider = { makeLocation(37.3382, -121.8863, fakeElapsedClockMillis, speedMps = 12f, accuracyMeters = 4f) }
+        receiver.handleArmedActivityUpdate(context, listOf(DetectedActivity(DetectedActivity.IN_VEHICLE, 90)))
+
+        val candidateTripId = preferencesManager.activeTripId.first()
+        assertNotNull(candidateTripId)
+        assertEquals(1, deferredIntents.size)
+
+        // Simulate delayed service startup after fallback already recorded a waypoint
+        activeTripRepository.recordWaypoint(candidateTripId!!, Waypoint(37.3382, -121.8863, speed = 10f, accuracy = 5f, elapsedRealtimeNanos = 100_000_000L))
+        activeTripRepository.updateTripProgress(candidateTripId, 120.0, 37.3392, -121.8863, 200_000L)
+
+        val adoptedTrip = activeTripRepository.createActiveTrip(
+            tripId = candidateTripId,
+            latitude = 0.0,
+            longitude = 0.0,
+            trackingMethod = TrackingMethod.AUTO_DETECTED.value,
+            suggestedBusiness = "MySucculentCorner"
+        )
+        assertEquals(candidateTripId, adoptedTrip.id)
+        assertEquals(120.0, adoptedTrip.totalDistanceMeters, 0.001)
+        assertEquals(model3.id, adoptedTrip.vehicleId)
     }
 
     private class RecordingScheduler(context: Context) : TripDebounceScheduler(context) {

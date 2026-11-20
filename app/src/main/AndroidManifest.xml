@@ -23,6 +23,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Bluetooth for optional car bluetooth trigger -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
@@ -85,6 +86,8 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="com.businesstracker.mileage.ACTION_ACTIVITY_TRANSITION" />
+                <action android:name="com.businesstracker.mileage.ACTION_VEHICLE_ACTIVITY_UPDATE" />
+                <action android:name="com.businesstracker.mileage.ACTION_BACKGROUND_GPS_UPDATE" />
             </intent-filter>
         </receiver>
 

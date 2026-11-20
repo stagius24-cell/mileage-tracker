@@ -20,6 +20,7 @@ import com.businesstracker.mileage.domain.tracking.TrackingDiagnostics
 import com.businesstracker.mileage.domain.tracking.VehicleMotionEvidencePolicy
 import com.google.android.gms.location.ActivityRecognition
 import com.google.android.gms.location.ActivityRecognitionClient
+import com.google.android.gms.location.CurrentLocationRequest
 import com.google.android.gms.location.DetectedActivity
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.Priority
@@ -54,6 +55,7 @@ class BluetoothArmedDriveMonitor @Inject constructor(
         const val MIN_LOCATION_SAMPLE_INTERVAL_MILLIS = 30_000L
         const val ACTIVE_POST_CONNECT_WINDOW_MILLIS = 10L * 60_000L
         const val STARTUP_TRIGGER_COOLDOWN_MILLIS = 60_000L
+        const val MAX_FUTURE_CLOCK_SKEW_MILLIS = 15_000L
         private const val LOW_CONFIDENCE_IN_VEHICLE_FLOOR = 25
         private const val ON_FOOT_SUPPRESS_CONFIDENCE = 75
         private const val TAG = "BluetoothDriveMonitor"
@@ -341,11 +343,13 @@ class BluetoothArmedDriveMonitor @Inject constructor(
             if (provider != null) provider() else {
                 val cancellation = CancellationTokenSource()
                 try {
+                    val request = CurrentLocationRequest.Builder()
+                        .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                        .setMaxUpdateAgeMillis(5_000L)
+                        .setDurationMillis(10_000L)
+                        .build()
                     withTimeoutOrNull(12_000L) {
-                        fusedLocationClient.getCurrentLocation(
-                            Priority.PRIORITY_BALANCED_POWER_ACCURACY,
-                            cancellation.token
-                        ).await()
+                        fusedLocationClient.getCurrentLocation(request, cancellation.token).await()
                     }
                 } finally {
                     cancellation.cancel()
@@ -357,11 +361,38 @@ class BluetoothArmedDriveMonitor @Inject constructor(
             null
         } ?: return@withLock false
 
+        val postSampleNow = maxOf(now, elapsedClock())
         val fixElapsed = location.elapsedRealtimeNanos.takeIf { it > 0L }?.div(1_000_000L) ?: 0L
-        if (fixElapsed <= 0L || fixElapsed > now || now - fixElapsed > VehicleMotionEvidencePolicy.MAX_SAMPLE_GAP_MILLIS) {
-            previousSample = null
-            Log.i(TAG, "movement sample ignored: location fix is missing or stale")
-            TrackingDiagnostics.logArmedMonitor("GPS_SAMPLE_STALE", "fixElapsed=$fixElapsed now=$now")
+        val futureSkewMs = fixElapsed - postSampleNow
+        val sampleAgeMs = (postSampleNow - fixElapsed).coerceAtLeast(0L)
+        if (fixElapsed <= 0L || futureSkewMs > MAX_FUTURE_CLOCK_SKEW_MILLIS ||
+            sampleAgeMs > VehicleMotionEvidencePolicy.MAX_SAMPLE_GAP_MILLIS
+        ) {
+            val prevSnapshot = previousSample
+            if (prevSnapshot != null &&
+                postSampleNow - prevSnapshot.elapsedRealtimeMillis > VehicleMotionEvidencePolicy.MAX_SAMPLE_GAP_MILLIS
+            ) {
+                previousSample = null
+            }
+            Log.i(TAG, "movement sample ignored: location fix is missing or stale (age=${sampleAgeMs}ms skew=${futureSkewMs}ms)")
+            TrackingDiagnostics.logArmedMonitor(
+                "GPS_SAMPLE_STALE",
+                "fixElapsed=$fixElapsed now=$postSampleNow age=${sampleAgeMs}ms futureSkew=${futureSkewMs}ms"
+            )
+            TrackingDiagnostics.logMovementGate(
+                gate = "FRESHNESS",
+                passed = false,
+                rawConf = rawConfidence,
+                effectiveConf = rawConfidence,
+                speedMps = if (location.hasSpeed()) location.speed else null,
+                displacementMeters = null,
+                accuracyMeters = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE,
+                sampleAgeMs = sampleAgeMs,
+                sampleGapMs = 0L,
+                inPostConnectWindow = inPostConnectWindow,
+                hasPrev = prevSnapshot != null,
+                detail = "fixElapsed=$fixElapsed postNow=$postSampleNow skew=${futureSkewMs}ms"
+            )
             return@withLock false
         }
 
@@ -374,16 +405,46 @@ class BluetoothArmedDriveMonitor @Inject constructor(
             rawConfidence
         }
 
+        val speedMps = if (location.hasSpeed()) location.speed else null
         val current = VehicleMotionEvidencePolicy.Sample(
             latitude = location.latitude,
             longitude = location.longitude,
             accuracyMeters = accuracyMeters,
-            speedMetersPerSecond = if (location.hasSpeed()) location.speed else null,
+            speedMetersPerSecond = speedMps,
             elapsedRealtimeMillis = fixElapsed,
             inVehicleConfidence = effectiveConfidence
         )
         val previous = previousSample
-        previousSample = current
+
+        if (previous != null && current.elapsedRealtimeMillis <= previous.elapsedRealtimeMillis) {
+            val speedOnlyConfirmed = if (highConfidenceVehicle) {
+                VehicleMotionEvidencePolicy.confirmsMovement(null, current)
+            } else {
+                accuracyMeters <= VehicleMotionEvidencePolicy.MAX_ACCURACY_METERS &&
+                    VehicleMotionEvidencePolicy.confirmsMovement(null, current)
+            }
+            if (!speedOnlyConfirmed) {
+                TrackingDiagnostics.logMovementGate(
+                    gate = "DUPLICATE_FIX_TIMESTAMP",
+                    passed = false,
+                    rawConf = rawConfidence,
+                    effectiveConf = effectiveConfidence,
+                    speedMps = speedMps,
+                    displacementMeters = 0.0,
+                    accuracyMeters = accuracyMeters,
+                    sampleAgeMs = sampleAgeMs,
+                    sampleGapMs = current.elapsedRealtimeMillis - previous.elapsedRealtimeMillis,
+                    inPostConnectWindow = inPostConnectWindow,
+                    hasPrev = true,
+                    detail = "preserving origin anchor; fixElapsed=${current.elapsedRealtimeMillis} <= prev=${previous.elapsedRealtimeMillis}"
+                )
+                TrackingDiagnostics.logArmedMonitor(
+                    "AWAITING_MOVEMENT_CORROBORATION",
+                    "rawConf=$rawConfidence effConf=$effectiveConfidence acc=${accuracyMeters}m hasPrev=true duplicateTimestamp=true"
+                )
+                return@withLock false
+            }
+        }
 
         val confirmed = if (highConfidenceVehicle) {
             VehicleMotionEvidencePolicy.confirmsMovement(previous, current)
@@ -394,22 +455,69 @@ class BluetoothArmedDriveMonitor @Inject constructor(
                 VehicleMotionEvidencePolicy.confirmsMovement(previous, current)
         }
 
-        if (confirmed && (lastTriggeredElapsed == 0L || now - lastTriggeredElapsed >= STARTUP_TRIGGER_COOLDOWN_MILLIS)) {
-            lastTriggeredElapsed = now
+        val displacementMeters = previous?.let { prev ->
+            val out = FloatArray(1)
+            Location.distanceBetween(prev.latitude, prev.longitude, current.latitude, current.longitude, out)
+            out[0].toDouble()
+        }
+        val sampleGapMs = previous?.let { current.elapsedRealtimeMillis - it.elapsedRealtimeMillis } ?: 0L
+
+        if (confirmed && (lastTriggeredElapsed == 0L || postSampleNow - lastTriggeredElapsed >= STARTUP_TRIGGER_COOLDOWN_MILLIS)) {
+            lastTriggeredElapsed = postSampleNow
             previousSample = null
             Log.i(TAG, "vehicle movement corroborated; requesting candidate startup (rawConf=$rawConfidence)")
+            TrackingDiagnostics.logMovementGate(
+                gate = "CORROBORATION",
+                passed = true,
+                rawConf = rawConfidence,
+                effectiveConf = effectiveConfidence,
+                speedMps = speedMps,
+                displacementMeters = displacementMeters,
+                accuracyMeters = accuracyMeters,
+                sampleAgeMs = sampleAgeMs,
+                sampleGapMs = sampleGapMs,
+                inPostConnectWindow = inPostConnectWindow,
+                hasPrev = previous != null,
+                detail = "confirmed=true cooldownOk=true"
+            )
             TrackingDiagnostics.logAutoStartDecision(
                 source = "BT_ARMED",
                 accepted = true,
                 reasonCode = "MOVEMENT_CORROBORATED",
-                detail = "rawInVehicleConf=$rawConfidence postConnect=$inPostConnectWindow acc=${accuracyMeters}m"
+                detail = "rawInVehicleConf=$rawConfidence effConf=$effectiveConfidence postConnect=$inPostConnectWindow acc=${accuracyMeters}m speed=${speedMps ?: "null"} disp=${displacementMeters ?: "null"}"
             )
             true
         } else {
+            val cooldownBlocked = confirmed
+            val shouldKeepOriginAnchor = !cooldownBlocked &&
+                previous != null &&
+                previous.inVehicleConfidence >= VehicleMotionEvidencePolicy.MIN_IN_VEHICLE_CONFIDENCE &&
+                previous.accuracyMeters in 0f..VehicleMotionEvidencePolicy.MAX_ACCURACY_METERS &&
+                sampleGapMs in 0L..VehicleMotionEvidencePolicy.MAX_SAMPLE_GAP_MILLIS
+            previousSample = if (shouldKeepOriginAnchor) previous else current
+
+            TrackingDiagnostics.logMovementGate(
+                gate = if (cooldownBlocked) "COOLDOWN" else "CORROBORATION",
+                passed = false,
+                rawConf = rawConfidence,
+                effectiveConf = effectiveConfidence,
+                speedMps = speedMps,
+                displacementMeters = displacementMeters,
+                accuracyMeters = accuracyMeters,
+                sampleAgeMs = sampleAgeMs,
+                sampleGapMs = sampleGapMs,
+                inPostConnectWindow = inPostConnectWindow,
+                hasPrev = previous != null,
+                detail = if (cooldownBlocked) {
+                    "cooldownRemMs=${STARTUP_TRIGGER_COOLDOWN_MILLIS - (postSampleNow - lastTriggeredElapsed)}"
+                } else {
+                    "keptOrigin=$shouldKeepOriginAnchor"
+                }
+            )
             Log.i(TAG, "movement sample not sufficient; waiting for corroboration (rawConf=$rawConfidence)")
             TrackingDiagnostics.logArmedMonitor(
                 "AWAITING_MOVEMENT_CORROBORATION",
-                "rawConf=$rawConfidence acc=${accuracyMeters}m hasPrev=${previous != null}"
+                "rawConf=$rawConfidence effConf=$effectiveConfidence acc=${accuracyMeters}m speed=${speedMps ?: "null"} disp=${displacementMeters ?: "null"} hasPrev=${previous != null}"
             )
             false
         }
