@@ -279,27 +279,14 @@ fun SettingsScreen(
                             Text("Vehicle", style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold)
                             Spacer(Modifier.height(3.dp))
-                            Text(currentVehicle?.name ?: state.defaultVehicle, style = MaterialTheme.typography.bodyMedium,
+                            Text(
+                                text = "Manage vehicle",
+                                style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            if (currentVehicle != null) {
-                                Text(
-                                    text = if (!currentVehicle.bluetoothAddress.isNullOrBlank()) {
-                                        currentVehicle.bluetoothDeviceName?.let { "Bluetooth · $it" } ?: "Bluetooth linked"
-                                    } else {
-                                        "No Bluetooth linked · Tap to assign"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = if (!currentVehicle.bluetoothAddress.isNullOrBlank()) {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    } else {
-                                        MaterialTheme.colorScheme.error
-                                    },
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                         Spacer(Modifier.width(8.dp))
                         Surface(shape = RoundedCornerShape(14.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
