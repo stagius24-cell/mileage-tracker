@@ -527,42 +527,6 @@ fun SettingsScreen(
                         }
                     }
 
-                    CompactSettingsDivider()
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 52.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable {
-                                val vehicleSummaries = vehicleDirectoryState.vehicles.map { v ->
-                                    "${v.name}(bt=${!v.bluetoothAddress.isNullOrBlank()})"
-                                }
-                                diagnosticReportText = viewModel.exportDiagnosticReport(vehicleSummaries)
-                                showDiagnosticReportSheet = true
-                            },
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        VehicleSettingsIcon(Icons.Default.Info)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = "Diagnostic report",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Redacted Bluetooth & auto-start log",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = "Open diagnostic report",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                 }
             }
         }
@@ -790,6 +754,50 @@ fun SettingsScreen(
                         text = "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 52.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable {
+                            val vehicleSummaries = vehicleDirectoryState.vehicles.map { v ->
+                                "${v.name}(bt=${!v.bluetoothAddress.isNullOrBlank()})"
+                            }
+                            diagnosticReportText = viewModel.exportDiagnosticReport(vehicleSummaries)
+                            showDiagnosticReportSheet = true
+                        }
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    VehicleSettingsIcon(Icons.Default.Info)
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = "Bluetooth diagnostics",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "Redacted Bluetooth & auto-start log",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Default.ChevronRight,
+                        contentDescription = "Open Bluetooth diagnostics",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }

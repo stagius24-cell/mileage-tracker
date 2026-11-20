@@ -14,8 +14,8 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 211
-        versionName = "1.0.211"
+        versionCode = 212
+        versionName = "1.0.212"
         buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Full GPS auto-start & multi-vehicle Bluetooth audit: separated driving detection from vehicle matching, preserved tracking across competing vehicle events, added active audio profile priority, Dashboard vehicle selection, and redacted diagnostic report export.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
