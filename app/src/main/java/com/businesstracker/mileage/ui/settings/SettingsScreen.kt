@@ -765,7 +765,7 @@ fun SettingsScreen(
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
-                            text = "Redacted Bluetooth & auto-start log",
+                            text = "Bluetooth & auto-start log",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1816,6 +1816,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.214 (Build 214)" to "Rename the Bluetooth diagnostics description to Bluetooth & auto-start log.",
                 "Version 1.0.213 (Build 213)" to "Move the Settings version label below all Settings sections.",
                 "Version 1.0.212 (Build 212)" to "Move Bluetooth diagnostics to the bottom of Settings.",
                 "Version 1.0.211 (Build 211)" to "Change the Vehicle card subtitle to Manage vehicle.",
