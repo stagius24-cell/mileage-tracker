@@ -736,30 +736,6 @@ fun SettingsScreen(
         }
 
         item {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .clickable { showVersionHistoryDialog = true }
-                        .heightIn(min = 48.dp)
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-
-        item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
@@ -798,6 +774,30 @@ fun SettingsScreen(
                         imageVector = Icons.Default.ChevronRight,
                         contentDescription = "Open Bluetooth diagnostics",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { showVersionHistoryDialog = true }
+                        .heightIn(min = 48.dp)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -1816,6 +1816,10 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
+                "Version 1.0.213 (Build 213)" to "Move the Settings version label below all Settings sections.",
+                "Version 1.0.212 (Build 212)" to "Move Bluetooth diagnostics to the bottom of Settings.",
+                "Version 1.0.211 (Build 211)" to "Change the Vehicle card subtitle to Manage vehicle.",
+                "Version 1.0.210 (Build 210)" to "Update the Drive tracking off-state description to Tap to resume schedule.",
                 "Version 1.0.209 (Build 209)" to "Fix background auto-start ForegroundServiceStartNotAllowedException (LaunchFailedReconciled) with automatic background GPS fallback & FGS promotion, fix 138ms GPS freshness clock-skew false rejection, preserve origin anchor on slow departures, and add detailed candidate launch diagnostics.",
                 "Version 1.0.208 (Build 208)" to "Match scheduled auto-tracking reactivation calendar table to floating bottom sheet design.",
                 "Version 1.0.207 (Build 207)" to "Add scheduled auto-tracking reactivation date picker and status under Drive tracking.",
