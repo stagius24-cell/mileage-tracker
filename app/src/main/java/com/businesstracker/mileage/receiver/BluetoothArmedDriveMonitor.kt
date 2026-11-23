@@ -96,7 +96,7 @@ class BluetoothArmedDriveMonitor @Inject constructor(
         )
     }
 
-    suspend fun reconcile() = reconcileMutex.withLock {
+    suspend fun reconcile(allowProfileDiscovery: Boolean = true) = reconcileMutex.withLock {
         val enabled = preferencesManager.isAutoTrackingEnabled.first()
         val selectedAddress = preferencesManager.getVehicleBluetoothAddress()
         var connectedAddresses = preferencesManager.getConnectedCarAddresses()
@@ -106,7 +106,7 @@ class BluetoothArmedDriveMonitor @Inject constructor(
             connected ||
             (vehicleBluetoothMatcher?.hasConfiguredVehicles() == true)
 
-        if (enabled && hasConfiguredVehicle) {
+        if (enabled && hasConfiguredVehicle && allowProfileDiscovery) {
             val testChecker = connectionStateChecker
             if (!connected && testChecker != null && selectedAddress.isNotBlank()) {
                 if (testChecker(selectedAddress)) {

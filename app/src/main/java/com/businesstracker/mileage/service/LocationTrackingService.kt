@@ -124,10 +124,74 @@ class LocationTrackingService : Service() {
             instance?.vehicleIdentificationJob?.cancel()
             instance?.tickerJob?.cancel()
             instance?.gpsLocationQueue?.stopConsumer()
+            instance?.stopDeadlineElapsed = 0L
+            instance?.stopDeadlineTrigger = null
+            instance?.stopInitiatedElapsed = 0L
             isStartingOrRunning.set(false)
             isDrainingGps.set(false)
             isFallbackTrackingActive.set(false)
             _serviceState.value = TrackingServiceState()
+        }
+
+        fun scheduleStopDeadline(
+            tripId: String,
+            trigger: String,
+            delayMillis: Long = 240_000L
+        ) {
+            val instance = activeInstance?.takeIf {
+                it.currentTripId == tripId || it.currentTripId.isEmpty()
+            } ?: return
+            val now = instance.elapsedClock()
+            instance.motionResumptionValidator.reset()
+            instance.stopInitiatedElapsed = now
+            if (instance.stopDeadlineElapsed <= 0L || trigger == TripDebounceWorker.TRIGGER_BLUETOOTH) {
+                instance.stopDeadlineElapsed = if (instance.stopDeadlineElapsed > 0L) {
+                    instance.stopDeadlineElapsed
+                } else {
+                    now + delayMillis
+                }
+                instance.stopDeadlineTrigger = trigger
+            }
+        }
+
+        fun cancelStopDeadline(tripId: String? = null) {
+            val instance = activeInstance ?: return
+            if (tripId == null || instance.currentTripId == tripId || instance.currentTripId.isEmpty()) {
+                instance.stopDeadlineElapsed = 0L
+                instance.stopDeadlineTrigger = null
+                instance.stopInitiatedElapsed = 0L
+                instance.motionResumptionValidator.reset()
+            }
+        }
+
+        fun requestStopFromDebounce(tripId: String, trigger: String): Boolean {
+            val instance = activeInstance ?: return false
+            if (!isStartingOrRunning.get()) return false
+            instance.serviceScope.launch(instance.safeIoDispatcher) {
+                val persisted = if (instance.currentTripId.isEmpty() && instance.hasActiveTripRepository()) {
+                    instance.activeTripRepository.getActiveTrip()
+                } else null
+                val matchesTrip = instance.currentTripId == tripId || persisted?.id == tripId
+                val method = persisted?.trackingMethod?.let(TrackingMethod::fromString) ?: instance.trackingMethod
+                val inVehicle = instance.hasPreferencesManager() && instance.preferencesManager.isInVehicle()
+                val btValid = trigger != TripDebounceWorker.TRIGGER_BLUETOOTH ||
+                    !instance.hasPreferencesManager() ||
+                    (instance.preferencesManager.isBluetoothAutoStopActive() &&
+                        instance.preferencesManager.isBluetoothDisconnectPending())
+                if (matchesTrip && method == TrackingMethod.AUTO_DETECTED && !inVehicle && btValid) {
+                    instance.stopTracking()
+                }
+            }
+            return true
+        }
+
+        fun requestStationaryCheckInProcess(): Boolean {
+            val instance = activeInstance ?: return false
+            if (!isStartingOrRunning.get() || instance.isStopping.get() || instance.isPaused) return false
+            instance.serviceScope.launch(instance.safeIoDispatcher) {
+                instance.recheckStationaryLocation()
+            }
+            return true
         }
 
         fun activateFallbackCandidateState(
@@ -297,9 +361,42 @@ class LocationTrackingService : Service() {
     private val stationaryAutoStopMonitor = StationaryAutoStopMonitor()
     private val stationaryAutoStopRequested = AtomicBoolean(false)
     private var lastStationaryRecheckElapsed = 0L
+    @Volatile private var stopDeadlineElapsed: Long = 0L
+    @Volatile private var stopDeadlineTrigger: String? = null
+    @Volatile private var stopInitiatedElapsed: Long = 0L
     private val evidenceWriteMutex = Mutex()
     private val evidenceRevision = AtomicLong(0L)
     @Volatile private var lastPersistedStationaryEvidence: StationaryEvidence? = null
+
+    @VisibleForTesting
+    internal var elapsedClock: () -> Long = SystemClock::elapsedRealtime
+
+    private fun hasPreferencesManager(): Boolean = ::preferencesManager.isInitialized
+
+    private fun hasActiveTripRepository(): Boolean = ::activeTripRepository.isInitialized
+
+    private fun resetStopDeadlineState() {
+        stopDeadlineElapsed = 0L
+        stopDeadlineTrigger = null
+        stopInitiatedElapsed = 0L
+    }
+
+    @VisibleForTesting
+    internal fun setStopDeadlineForTesting(
+        deadlineElapsed: Long,
+        trigger: String,
+        initiatedElapsed: Long = 0L
+    ) {
+        stopDeadlineElapsed = deadlineElapsed
+        stopDeadlineTrigger = trigger
+        stopInitiatedElapsed = initiatedElapsed
+    }
+
+    @VisibleForTesting
+    internal fun getStopDeadlineElapsedForTesting(): Long = stopDeadlineElapsed
+
+    @VisibleForTesting
+    internal fun getStopDeadlineTriggerForTesting(): String? = stopDeadlineTrigger
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -604,7 +701,19 @@ class LocationTrackingService : Service() {
                     candidateDeadlineBoot = 0
                 }
                 motionResumptionValidator.reset()
-                lastLocationReceivedElapsed = SystemClock.elapsedRealtime()
+                resetStopDeadlineState()
+                if (trackingMethod == TrackingMethod.AUTO_DETECTED &&
+                    hasPreferencesManager() &&
+                    preferencesManager.isBluetoothAutoStopActive() &&
+                    preferencesManager.isBluetoothDisconnectPending() &&
+                    !preferencesManager.isInVehicle()
+                ) {
+                    val nowStop = elapsedClock()
+                    stopDeadlineElapsed = nowStop + 240_000L
+                    stopDeadlineTrigger = TripDebounceWorker.TRIGGER_BLUETOOTH
+                    stopInitiatedElapsed = nowStop
+                }
+                lastLocationReceivedElapsed = elapsedClock()
 
                 // Update notification with recovered metrics
                 notificationHelper.updateTrackingNotification(
@@ -742,6 +851,7 @@ class LocationTrackingService : Service() {
             isPaused = false
             isDisplacementConfirmed = false
             motionResumptionValidator.reset()
+            resetStopDeadlineState()
             isCandidate = (method == TrackingMethod.AUTO_DETECTED)
             val nowElapsed = SystemClock.elapsedRealtime()
             val currentBoot = safeBootCountProvider.getBootCount()
@@ -907,8 +1017,20 @@ class LocationTrackingService : Service() {
                     }
                     currentSpeedMph = 0.0
 
-                    if (isRecoveredSession) restoreStationaryEvidence()
-                    else {
+                    if (isRecoveredSession) {
+                        restoreStationaryEvidence()
+                        if (trackingMethod == TrackingMethod.AUTO_DETECTED &&
+                            hasPreferencesManager() &&
+                            preferencesManager.isBluetoothAutoStopActive() &&
+                            preferencesManager.isBluetoothDisconnectPending() &&
+                            !preferencesManager.isInVehicle()
+                        ) {
+                            val nowStop = elapsedClock()
+                            stopDeadlineElapsed = nowStop + 240_000L
+                            stopDeadlineTrigger = TripDebounceWorker.TRIGGER_BLUETOOTH
+                            stopInitiatedElapsed = nowStop
+                        }
+                    } else {
                         preferencesManager.saveStationaryEvidence(null)
                         lastPersistedStationaryEvidence = null
                     }
@@ -967,6 +1089,7 @@ class LocationTrackingService : Service() {
         isCandidate = false
         candidateDeadlineElapsed = 0L
         candidateDeadlineBoot = 0
+        resetStopDeadlineState()
         currentSpeedMph = 0.0
         if (!_serviceState.value.isRecoveryRequired) {
             _serviceState.value = TrackingServiceState(isTracking = false)
@@ -1083,24 +1206,38 @@ class LocationTrackingService : Service() {
                 updateNotificationAndState(currentSpeedMph)
 
                 // Motion resumption evaluation with fresh corroboration (>= 10 mph, 2 distinct fixes within 30s)
-                val nowElapsed = SystemClock.elapsedRealtime()
+                val nowElapsed = elapsedClock()
                 val fixElapsed = if (wp.elapsedRealtimeNanos > 0L) wp.elapsedRealtimeNanos / 1_000_000L else 0L
-                val motionResult = motionResumptionValidator.evaluateFix(
-                    speedMph = currentSpeedMph,
-                    accuracyMeters = wp.accuracy,
-                    fixTimestampMillis = fixElapsed,
-                    nowMillis = nowElapsed
-                )
-                when (motionResult) {
-                    is MotionValidationResult.MotionCorroborated -> {
-                        TrackingDiagnostics.logMotionResumption(currentTripId, "CORROBORATED", "First: ${motionResult.firstFixTimestamp}, Second: ${motionResult.secondFixTimestamp}")
-                        onVehicleMotionResumed()
+                val isStopPending = stopDeadlineElapsed > 0L
+                if (stopInitiatedElapsed <= 0L || fixElapsed <= 0L || fixElapsed >= stopInitiatedElapsed) {
+                    val effectiveSpeedMph = if (isStopPending && wp.speed > 0f && (wp.speed * 2.23694) < 5.0) {
+                        wp.speed * 2.23694
+                    } else {
+                        currentSpeedMph
                     }
-                    is MotionValidationResult.AwaitingCorroboration -> {
-                        TrackingDiagnostics.logMotionResumption(currentTripId, "AWAITING_CORROBORATION", "First fix: ${motionResult.firstFixTimestamp}")
-                    }
-                    is MotionValidationResult.Rejected -> {
-                        TrackingDiagnostics.logMotionResumption(currentTripId, "REJECTED", motionResult.reason)
+                    val motionResult = motionResumptionValidator.evaluateFix(
+                        speedMph = effectiveSpeedMph,
+                        accuracyMeters = wp.accuracy,
+                        fixTimestampMillis = fixElapsed,
+                        nowMillis = nowElapsed
+                    )
+                    when (motionResult) {
+                        is MotionValidationResult.MotionCorroborated -> {
+                            if (isStopPending) {
+                                TrackingDiagnostics.logMotionResumption(currentTripId, "CORROBORATED", "First: ${motionResult.firstFixTimestamp}, Second: ${motionResult.secondFixTimestamp}")
+                            }
+                            onVehicleMotionResumed()
+                        }
+                        is MotionValidationResult.AwaitingCorroboration -> {
+                            if (isStopPending) {
+                                TrackingDiagnostics.logMotionResumption(currentTripId, "AWAITING_CORROBORATION", "First fix: ${motionResult.firstFixTimestamp}")
+                            }
+                        }
+                        is MotionValidationResult.Rejected -> {
+                            if (isStopPending) {
+                                TrackingDiagnostics.logMotionResumption(currentTripId, "REJECTED", motionResult.reason)
+                            }
+                        }
                     }
                 }
             }
@@ -1159,21 +1296,43 @@ class LocationTrackingService : Service() {
             serviceScope.launch(safeIoDispatcher) {
                 decisionMutex.withLock {
                     if (currentTripId != tripIdAtCall || isStopping.get()) return@withLock
-                    try {
-                        val ctx = try { applicationContext } catch (_: Throwable) { null }
+                    val ctx = try { applicationContext } catch (_: Throwable) { null }
+                    val isBtDisconnectPending = hasPreferencesManager() &&
+                        preferencesManager.isBluetoothAutoStopActive() &&
+                        preferencesManager.isBluetoothDisconnectPending()
+                    val nowElapsed = elapsedClock()
+                    if (isBtDisconnectPending) {
+                        stopDeadlineElapsed = nowElapsed + 240_000L
+                        stopDeadlineTrigger = TripDebounceWorker.TRIGGER_BLUETOOTH
+                        stopInitiatedElapsed = nowElapsed
                         if (ctx != null) {
-                            TripDebounceWorker.cancelDebounce(ctx, tripIdAtCall)
+                            try {
+                                TripDebounceWorker.scheduleBluetoothDebounce(ctx, tripIdAtCall, replace = true)
+                            } catch (_: Throwable) {}
                         }
-                    } catch (_: Throwable) {}
-                    if (::preferencesManager.isInitialized) {
-                        try {
-                            preferencesManager.setInVehicleState(true)
-                            preferencesManager.recordVehicleEnter(
-                                tripIdAtCall,
-                                SystemClock.elapsedRealtime(),
-                                safeBootCountProvider.getBootCount()
-                            )
-                        } catch (_: Exception) {}
+                        TrackingDiagnostics.logStopDeadline(
+                            tripId = tripIdAtCall,
+                            action = "BT_DISCONNECT_DEADLINE_EXTENDED_BY_MOTION",
+                            deadlineMs = 240_000L,
+                            reason = "Motion detected while BT disconnected; extending 4m deadline"
+                        )
+                    } else {
+                        resetStopDeadlineState()
+                        if (ctx != null) {
+                            try {
+                                TripDebounceWorker.cancelDebounce(ctx, tripIdAtCall)
+                            } catch (_: Throwable) {}
+                        }
+                        if (hasPreferencesManager()) {
+                            try {
+                                preferencesManager.setInVehicleState(true)
+                                preferencesManager.recordVehicleEnter(
+                                    tripIdAtCall,
+                                    nowElapsed,
+                                    safeBootCountProvider.getBootCount()
+                                )
+                            } catch (_: Exception) {}
+                        }
                     }
                 }
             }
@@ -1229,7 +1388,7 @@ class LocationTrackingService : Service() {
         }
         var tripIdAtCall = currentTripId
         isDrainingGps.set(true)
-        serviceScope.launch(ioDispatcher) {
+        serviceScope.launch(safeIoDispatcher) {
             decisionMutex.withLock {
                 if (currentTripId.isEmpty() && tripIdAtCall.isEmpty() && ::activeTripRepository.isInitialized) {
                     val active = activeTripRepository.getActiveTrip()
@@ -1301,8 +1460,14 @@ class LocationTrackingService : Service() {
                 val totalMeters = persistedActiveTrip?.totalDistanceMeters ?: totalDistanceMeters
                 if (!isDisplacementConfirmed && totalMeters < 200.0) {
                     if (currentTripId.isNotEmpty()) {
+                        TrackingDiagnostics.logStopDeadline(
+                            tripId = currentTripId,
+                            action = "SERVICE_STOP_DISCARDED",
+                            deadlineMs = 0L,
+                            reason = "distanceMeters=$totalMeters"
+                        )
                         tripFinalizationCoordinator.discardFalseTrip(currentTripId)
-                        if (currentTripId == tripIdAtCall) {
+                        if (currentTripId == tripIdAtCall && hasPreferencesManager()) {
                             preferencesManager.clearActiveTripId(currentTripId)
                             preferencesManager.clearCandidateDeadline()
                             preferencesManager.setInVehicleState(false)
@@ -1318,6 +1483,7 @@ class LocationTrackingService : Service() {
 
                     vehicleIdentificationJob?.cancel()
                     motionResumptionValidator.reset()
+                    resetStopDeadlineState()
                     _serviceState.value = TrackingServiceState(isTracking = false)
                     currentTripId = ""
                     currentVehicleId = null
@@ -1348,6 +1514,12 @@ class LocationTrackingService : Service() {
 
                 // 5. Finalize trip using single-owner idempotent coordinator
                 if (currentTripId.isNotEmpty()) {
+                    TrackingDiagnostics.logStopDeadline(
+                        tripId = currentTripId,
+                        action = "SERVICE_STOP_FINALIZED",
+                        deadlineMs = 0L,
+                        reason = "distanceMeters=$totalMeters"
+                    )
                     val finalizedTrip = tripFinalizationCoordinator.finalizeTrip(currentTripId, trackingMethod)
                     if (!tripFinalizationCoordinator.isSmartRecognitionAttached()) {
                         finalizedTrip?.let { trip ->
@@ -1359,9 +1531,11 @@ class LocationTrackingService : Service() {
                             }
                         }
                     }
-                    if (currentTripId == tripIdAtCall) {
+                    if (currentTripId == tripIdAtCall && hasPreferencesManager()) {
                         preferencesManager.clearActiveTripId(currentTripId)
                         preferencesManager.clearCandidateDeadline()
+                        preferencesManager.setInVehicleState(false)
+                        preferencesManager.setBluetoothDisconnectPending(false)
                     }
                 }
 
@@ -1374,9 +1548,12 @@ class LocationTrackingService : Service() {
 
                 vehicleIdentificationJob?.cancel()
                 motionResumptionValidator.reset()
+                resetStopDeadlineState()
                 _serviceState.value = TrackingServiceState(isTracking = false)
                 evidenceRevision.incrementAndGet()
-                preferencesManager.saveStationaryEvidence(null)
+                if (hasPreferencesManager()) {
+                    preferencesManager.saveStationaryEvidence(null)
+                }
                 lastPersistedStationaryEvidence = null
                 currentTripId = ""
                 currentVehicleId = null
@@ -1413,14 +1590,16 @@ class LocationTrackingService : Service() {
                 delay(1000L)
                 if (!isPaused) {
                     updateNotificationAndState(currentSpeedMph)
-                    val now = SystemClock.elapsedRealtime()
+                    val now = elapsedClock()
 
                     // Candidate timeout: 4-minute maximum lifetime for unconfirmed automatic sessions
                     if (isCandidate && candidateDeadlineElapsed > 0L && now >= candidateDeadlineElapsed) {
-                        lastStartupJob = serviceScope.launch(ioDispatcher) {
+                        lastStartupJob = serviceScope.launch(safeIoDispatcher) {
                             expireCandidateSession()
                         }
                     }
+
+                    checkStopDeadlineOnTick(now)
 
                     // Watchdog: check 60s GPS silence for confirmed trips (works even without an existing stationary snapshot)
                     if (trackingMethod == TrackingMethod.AUTO_DETECTED &&
@@ -1447,6 +1626,36 @@ class LocationTrackingService : Service() {
                         lastStationaryRecheckElapsed = now
                         lastStartupJob = serviceScope.launch(ioDispatcher) { recheckStationaryLocation() }
                     }
+                }
+            }
+        }
+    }
+
+    @VisibleForTesting
+    internal fun checkStopDeadlineOnTick(now: Long = elapsedClock()) {
+        val deadline = stopDeadlineElapsed
+        if (trackingMethod == TrackingMethod.AUTO_DETECTED &&
+            deadline > 0L &&
+            now >= deadline &&
+            !isStopping.get()
+        ) {
+            val trigger = stopDeadlineTrigger ?: TripDebounceWorker.TRIGGER_ACTIVITY
+            stopDeadlineElapsed = 0L
+            stopDeadlineTrigger = null
+            lastStartupJob = serviceScope.launch(safeIoDispatcher) {
+                val inVehicle = if (hasPreferencesManager()) preferencesManager.isInVehicle() else false
+                val btOk = trigger != TripDebounceWorker.TRIGGER_BLUETOOTH ||
+                    (!hasPreferencesManager() ||
+                        (preferencesManager.isBluetoothAutoStopActive() &&
+                            preferencesManager.isBluetoothDisconnectPending()))
+                if (!inVehicle && btOk) {
+                    TrackingDiagnostics.logStopDeadline(
+                        tripId = currentTripId,
+                        action = "STOP_DEADLINE_EXPIRED_IN_SERVICE",
+                        deadlineMs = 0L,
+                        reason = "trigger=$trigger"
+                    )
+                    stopTracking()
                 }
             }
         }
@@ -1533,6 +1742,7 @@ class LocationTrackingService : Service() {
 
                 vehicleIdentificationJob?.cancel()
                 motionResumptionValidator.reset()
+                resetStopDeadlineState()
                 _serviceState.value = TrackingServiceState(isTracking = false)
                 currentTripId = ""
                 currentVehicleId = null

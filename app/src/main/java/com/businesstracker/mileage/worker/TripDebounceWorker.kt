@@ -18,6 +18,7 @@ import com.businesstracker.mileage.domain.model.TrackingMethod
 import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.repository.ActiveTripRepository
 import com.businesstracker.mileage.domain.repository.TripRepository
+import com.businesstracker.mileage.domain.tracking.TrackingDiagnostics
 import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FinalizeTripUseCase
 import com.businesstracker.mileage.service.LocationTrackingService
@@ -56,11 +57,18 @@ class TripDebounceWorker @AssistedInject constructor(
             scheduleDebounce(context, TRIGGER_ACTIVITY, tripId)
         }
 
-        fun scheduleBluetoothDebounce(context: Context, tripId: String) {
-            scheduleDebounce(context, TRIGGER_BLUETOOTH, tripId)
+        @JvmOverloads
+        fun scheduleBluetoothDebounce(context: Context, tripId: String, replace: Boolean = false) {
+            val policy = if (replace) ExistingWorkPolicy.REPLACE else STOP_WORK_POLICY
+            scheduleDebounce(context, TRIGGER_BLUETOOTH, tripId, policy)
         }
 
-        private fun scheduleDebounce(context: Context, trigger: String, tripId: String) {
+        private fun scheduleDebounce(
+            context: Context,
+            trigger: String,
+            tripId: String,
+            policy: ExistingWorkPolicy = STOP_WORK_POLICY
+        ) {
             val debounceRequest = OneTimeWorkRequestBuilder<TripDebounceWorker>()
                 .setInitialDelay(DEBOUNCE_DELAY_MINUTES, TimeUnit.MINUTES)
                 .setInputData(Data.Builder().putString(INPUT_TRIGGER, trigger).putString(INPUT_TRIP_ID, tripId).build())
@@ -70,7 +78,7 @@ class TripDebounceWorker @AssistedInject constructor(
 
             WorkManager.getInstance(context).enqueueUniqueWork(
                 workNameForTrip(tripId),
-                ExistingWorkPolicy.KEEP, // Preserves established 4-minute timer against duplicate exit events scoped to this trip
+                policy, // Preserves established 4-minute timer against duplicate exit events scoped to this trip
                 debounceRequest
             )
         }
@@ -94,16 +102,23 @@ class TripDebounceWorker @AssistedInject constructor(
         return try {
             val scheduledTripId = inputData.getString(INPUT_TRIP_ID) ?: return Result.success()
             val trigger = inputData.getString(INPUT_TRIGGER) ?: TRIGGER_ACTIVITY
+            val isInVehicleInitial = preferencesManager.isInVehicle()
+            val btPendingInitial = preferencesManager.isBluetoothDisconnectPending()
+            TrackingDiagnostics.logStopDeadline(
+                tripId = scheduledTripId,
+                action = "DEBOUNCE_WORKER_EXECUTING",
+                deadlineMs = 0L,
+                reason = "trigger=$trigger inVehicle=$isInVehicleInitial btPending=$btPendingInitial"
+            )
             if (trigger == TRIGGER_BLUETOOTH &&
                 (!preferencesManager.isBluetoothAutoStopActive() ||
-                    !preferencesManager.isBluetoothDisconnectPending())
+                    !btPendingInitial)
             ) {
                 return Result.success()
             }
 
             // 1. Verify in-vehicle state is still false (vehicle motion has not resumed)
-            val isInVehicle = preferencesManager.isInVehicle()
-            if (isInVehicle) {
+            if (isInVehicleInitial) {
                 // Motion resumed during debounce; active drive continues uninterrupted
                 return Result.success()
             }
@@ -117,21 +132,25 @@ class TripDebounceWorker @AssistedInject constructor(
                 activeTrip.trackingMethod != TrackingMethod.AUTO_DETECTED.value
             ) return Result.success()
 
-            // 3. Coordinate finalization with LocationTrackingService
+            // 3. Coordinate finalization with LocationTrackingService (only if service instance or drain active)
             val method = TrackingMethod.fromString(activeTrip.trackingMethod)
-            val isServiceActive = LocationTrackingService.isTrackingRunning() || LocationTrackingService.isDraining()
+            val isServiceInstanceActive = LocationTrackingService.isServiceInstanceRunning() ||
+                LocationTrackingService.isDraining()
 
-            if (isServiceActive) {
-                // Delegate stop to the running service so it stops receiving GPS, drains the queue, and finalizes cleanly
-                val stopIntent = Intent(context, LocationTrackingService::class.java).apply {
-                    action = LocationTrackingService.ACTION_STOP
-                    putExtra(LocationTrackingService.EXTRA_TRIP_ID, scheduledTripId)
-                    putExtra(LocationTrackingService.EXTRA_DEBOUNCE_TRIGGER, trigger)
-                }
-                try {
-                    context.startService(stopIntent)
-                } catch (e: Exception) {
-                    Log.w("TripDebounceWorker", "Could not send stop intent to service: ${e.message}")
+            if (isServiceInstanceActive) {
+                // Prefer direct in-process stop signal so background WorkManager never fails on Android 12+ startService()
+                val handledInProcess = LocationTrackingService.requestStopFromDebounce(scheduledTripId, trigger)
+                if (!handledInProcess) {
+                    val stopIntent = Intent(context, LocationTrackingService::class.java).apply {
+                        action = LocationTrackingService.ACTION_STOP
+                        putExtra(LocationTrackingService.EXTRA_TRIP_ID, scheduledTripId)
+                        putExtra(LocationTrackingService.EXTRA_DEBOUNCE_TRIGGER, trigger)
+                    }
+                    try {
+                        context.startService(stopIntent)
+                    } catch (e: Exception) {
+                        Log.w("TripDebounceWorker", "Could not send stop intent to service: ${e.message}")
+                    }
                 }
 
                 // Wait for service to finish draining all GPS fixes and finalize the trip
@@ -143,28 +162,41 @@ class TripDebounceWorker @AssistedInject constructor(
                         isTerminated = true
                         break
                     }
-                    if (!LocationTrackingService.isTrackingRunning() && !LocationTrackingService.isDraining()) {
+                    if (!LocationTrackingService.isServiceInstanceRunning() && !LocationTrackingService.isDraining()) {
                         break
                     }
                     attempts++
                 }
 
-                if (!isTerminated) {
+                if (isTerminated) {
+                    // Finalization confirmed by service
+                    preferencesManager.clearActiveTripId(activeTrip.id)
+                    preferencesManager.clearVehicleAnchor()
+                    preferencesManager.setInVehicleState(false)
+                    preferencesManager.setBluetoothDisconnectPending(false)
+                    TrackingDiagnostics.logStopDeadline(
+                        tripId = activeTrip.id,
+                        action = "DEBOUNCE_WORKER_FINALIZED",
+                        deadlineMs = 0L,
+                        reason = "trigger=$trigger via=service"
+                    )
+                    return Result.success()
+                }
+
+                if (LocationTrackingService.isServiceInstanceRunning() || LocationTrackingService.isDraining()) {
                     // Service is still actively running or draining GPS points.
                     // The worker MUST NOT finalize prematurely while GPS points are draining.
                     // Return Result.retry() and preserve the active trip and its preferences.
                     Log.i("TripDebounceWorker", "Service still running/draining; retrying worker without clearing preferences")
                     return Result.retry()
                 }
-
-                // Finalization confirmed by service
-                preferencesManager.clearActiveTripId(activeTrip.id)
-                preferencesManager.clearVehicleAnchor()
-                preferencesManager.setBluetoothDisconnectPending(false)
-                return Result.success()
+                // Service stopped/exited without finalizing (or fell back): continue to Step 4 recovery finalization
             }
 
-            // 4. Safe recovery path ONLY when service is completely inactive (killed by OS or device rebooted)
+            // 4. Safe recovery / background GPS fallback stop path when no service instance is running
+            com.businesstracker.mileage.receiver.AutoDriveReceiver.cancelBackgroundGpsFallback(context)
+            LocationTrackingService.clearFallbackCandidateState(scheduledTripId)
+
             // Drain all pending GPS fixes from the Room inbox before attempting finalization!
             try {
                 if (activeTripRepository.getActiveTrip()?.id != scheduledTripId || preferencesManager.isInVehicle()) {
@@ -192,6 +224,13 @@ class TripDebounceWorker @AssistedInject constructor(
                 return Result.retry()
             }
 
+            TrackingDiagnostics.logStopDeadline(
+                tripId = activeTrip.id,
+                action = "DEBOUNCE_WORKER_FINALIZED",
+                deadlineMs = 0L,
+                reason = "trigger=$trigger via=${if (finalizedTrip != null) "recovery_finalized" else "recovery_discarded"}"
+            )
+
             if (finalizedTrip != null && !finalizeTripUseCase.isSmartRecognitionAttached()) {
                 if (finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
                     notificationHelper.showTripDetectedNotification(
@@ -206,6 +245,7 @@ class TripDebounceWorker @AssistedInject constructor(
             // Only clear preferences after confirmed finalization
             preferencesManager.clearActiveTripId(activeTrip.id)
             preferencesManager.clearVehicleAnchor()
+            preferencesManager.setInVehicleState(false)
             preferencesManager.setBluetoothDisconnectPending(false)
 
             Result.success()

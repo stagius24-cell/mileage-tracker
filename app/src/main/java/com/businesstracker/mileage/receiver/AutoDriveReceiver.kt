@@ -65,6 +65,14 @@ class AutoDriveReceiver : BroadcastReceiver() {
         const val MAX_TRANSITION_AGE_NANOS = 120_000_000_000L // 2 minutes
         const val CANDIDATE_WINDOW_MILLIS = 240_000L
 
+        @Volatile
+        private var lastLoggedActiveSessionTripId: String? = null
+
+        @VisibleForTesting
+        internal fun resetDiagnosticDedupeForTesting() {
+            lastLoggedActiveSessionTripId = null
+        }
+
         fun buildBackgroundGpsPendingIntent(context: Context): PendingIntent {
             val intent = Intent(context, AutoDriveReceiver::class.java).apply {
                 action = ACTION_BACKGROUND_GPS_UPDATE
@@ -240,17 +248,24 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
         // Candidate and active sessions already have bounded location verification. Do not
         // request additional location samples or create another trip while one exists.
-        if (LocationTrackingService.serviceState.value.isTracking ||
-            activeTripRepository.getActiveTrip() != null
-        ) {
-            TrackingDiagnostics.logAutoStartDecision(
-                source = "BT_ARMED",
-                accepted = false,
-                reasonCode = "SESSION_ALREADY_ACTIVE",
-                detail = "serviceTracking=${LocationTrackingService.serviceState.value.isTracking}"
-            )
+        val serviceTracking = LocationTrackingService.serviceState.value.isTracking
+        val serviceTripId = LocationTrackingService.serviceState.value.tripId?.takeIf { it.isNotBlank() }
+        val activeTrip = if (serviceTracking) null else activeTripRepository.getActiveTrip()
+        if (serviceTracking || activeTrip != null) {
+            val activeSessionId = serviceTripId ?: activeTrip?.id
+            val dedupeKey = activeSessionId ?: "active"
+            if (lastLoggedActiveSessionTripId != dedupeKey) {
+                lastLoggedActiveSessionTripId = dedupeKey
+                TrackingDiagnostics.logAutoStartDecision(
+                    source = "BT_ARMED",
+                    accepted = false,
+                    reasonCode = "SESSION_ALREADY_ACTIVE",
+                    detail = "serviceTracking=$serviceTracking trip=${activeSessionId ?: "unknown"}"
+                )
+            }
             return
         }
+        lastLoggedActiveSessionTripId = null
 
         if (bluetoothArmedDriveMonitor.observeActivityUpdate(probableActivities)) {
             TrackingDiagnostics.logArmedMonitor("MOVEMENT_CONFIRMED", "starting existing automatic candidate flow")
@@ -329,12 +344,14 @@ class AutoDriveReceiver : BroadcastReceiver() {
             is AutoDriveAction.CancelDebounce -> {
                 // Request motion validation from service rather than unconditionally cancelling debounce without fresh GPS movement.
                 // Do NOT set inVehicleState(true) until motion is corroborated.
-                val validateIntent = Intent(context, LocationTrackingService::class.java).apply {
-                    this.action = LocationTrackingService.ACTION_VALIDATE_MOTION
+                if (!LocationTrackingService.requestStationaryCheckInProcess()) {
+                    val validateIntent = Intent(context, LocationTrackingService::class.java).apply {
+                        this.action = LocationTrackingService.ACTION_VALIDATE_MOTION
+                    }
+                    try {
+                        context.startService(validateIntent)
+                    } catch (_: Exception) {}
                 }
-                try {
-                    context.startService(validateIntent)
-                } catch (_: Exception) {}
             }
             is AutoDriveAction.RecoverTrip -> {
                 preferencesManager.setInVehicleState(true)
@@ -478,7 +495,10 @@ class AutoDriveReceiver : BroadcastReceiver() {
         android.util.Log.d(TAG, "evaluateVehicleExit result: $action (isTracking=$isTracking, hasActiveTrip=$hasActiveTrip)")
 
         if (action == AutoDriveAction.ScheduleDebounce) {
-            activeTripId?.let { TripDebounceWorker.scheduleDebounce(context, it) }
+            activeTripId?.let {
+                LocationTrackingService.scheduleStopDeadline(it, TripDebounceWorker.TRIGGER_ACTIVITY, 240_000L)
+                TripDebounceWorker.scheduleDebounce(context, it)
+            }
         }
     }
 
@@ -489,7 +509,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
         decisionEngine.evaluateStillEnter(isInVehicle, isTracking)
 
         // Request stationary check from the tracking service without prematurely ending the trip at traffic lights
-        if (isTracking) {
+        if (isTracking && !LocationTrackingService.requestStationaryCheckInProcess()) {
             val checkIntent = Intent(context, LocationTrackingService::class.java).apply {
                 action = LocationTrackingService.ACTION_CHECK_STATIONARY
             }

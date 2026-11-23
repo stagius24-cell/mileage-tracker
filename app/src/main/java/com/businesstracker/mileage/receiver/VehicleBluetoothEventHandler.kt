@@ -47,7 +47,7 @@ class VehicleBluetoothEventHandler @Inject constructor(
                 } else {
                     preferencesManager.removeConnectedCarAddress(normalizedEventAddress)
                 }
-                bluetoothArmedDriveMonitor.reconcile()
+                bluetoothArmedDriveMonitor.reconcile(allowProfileDiscovery = connected)
                 TrackingDiagnostics.logBluetoothEvent(
                     action = if (connected) "ACL_CONNECTED" else "ACL_DISCONNECTED",
                     redactedDevice = TrackingDiagnostics.redactAddress(normalizedEventAddress),
@@ -205,8 +205,11 @@ class VehicleBluetoothEventHandler @Inject constructor(
                 val assignedToDifferentVehicle = currentActiveTrip.vehicleId != null &&
                     matchedVehicle != null &&
                     currentActiveTrip.vehicleId != matchedVehicle.id
+                val assignedToDisconnectingVehicle = currentActiveTrip.vehicleId != null &&
+                    matchedVehicle != null &&
+                    currentActiveTrip.vehicleId == matchedVehicle.id
 
-                if (assignedToDifferentVehicle || remainingConnected.isNotEmpty()) {
+                if (assignedToDifferentVehicle || (!assignedToDisconnectingVehicle && remainingConnected.isNotEmpty())) {
                     TrackingDiagnostics.logArmedMonitor(
                         "AUTO_STOP_SKIPPED_OTHER_CAR_ACTIVE",
                         "trip=${currentActiveTrip.id} disconnected=${matchedVehicle?.id ?: "unknown"} assigned=${currentActiveTrip.vehicleId} remaining=${remainingConnected.size}"
@@ -216,18 +219,35 @@ class VehicleBluetoothEventHandler @Inject constructor(
 
                 preferencesManager.setBluetoothDisconnectPending(true)
                 preferencesManager.setInVehicleState(false)
+                LocationTrackingService.scheduleStopDeadline(
+                    tripId = currentActiveTrip.id,
+                    trigger = com.businesstracker.mileage.worker.TripDebounceWorker.TRIGGER_BLUETOOTH,
+                    delayMillis = 240_000L
+                )
                 debounceScheduler.scheduleForBluetoothDisconnect(currentActiveTrip.id)
                 TrackingDiagnostics.logStopDeadline(
                     tripId = currentActiveTrip.id,
                     action = "BT_DISCONNECT_DEBOUNCE_SCHEDULED",
                     deadlineMs = 240_000L,
-                    reason = "No remaining connected vehicle Bluetooth addresses"
+                    reason = "Vehicle Bluetooth disconnected (assigned=$assignedToDisconnectingVehicle remaining=${remainingConnected.size})"
                 )
             } else {
-                preferencesManager.setBluetoothDisconnectPending(false)
-                preferencesManager.setInVehicleState(true)
-                debounceScheduler.cancel(currentActiveTrip.id)
-                debounceScheduler.cancel()
+                if (currentActiveTrip.vehicleId == null ||
+                    matchedVehicle == null ||
+                    currentActiveTrip.vehicleId == matchedVehicle.id
+                ) {
+                    preferencesManager.setBluetoothDisconnectPending(false)
+                    preferencesManager.setInVehicleState(true)
+                    LocationTrackingService.cancelStopDeadline(currentActiveTrip.id)
+                    debounceScheduler.cancel(currentActiveTrip.id)
+                    debounceScheduler.cancel()
+                    TrackingDiagnostics.logStopDeadline(
+                        tripId = currentActiveTrip.id,
+                        action = "BT_RECONNECT_DEBOUNCE_CANCELLED",
+                        deadlineMs = 0L,
+                        reason = "Vehicle Bluetooth reconnected"
+                    )
+                }
             }
         }
     }

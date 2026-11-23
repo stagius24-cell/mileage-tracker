@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -424,5 +425,49 @@ class TripDebounceWorkerTest {
         val finalizedTrip = coordinator.finalizeTrip(tripId)
         assertNotNull(finalizedTrip)
         assertEquals(lastMovementTime, finalizedTrip?.endTime)
+    }
+
+    @Test
+    fun bluetoothTriggeredWork_whileBackgroundGpsFallbackActive_finalizesTripInsteadOfRetrying() = runBlocking {
+        val tripId = "bluetooth-fallback-stop"
+        activeTripRepository.createActiveTrip(
+            tripId = tripId,
+            latitude = 37.3382,
+            longitude = -121.8863,
+            trackingMethod = "AUTO_DETECTED",
+            suggestedBusiness = "MySucculentCorner"
+        )
+        activeTripRepository.updateTripProgress(tripId, 850.0, 37.3450, -121.8863, 200_000L)
+        database.tripLifecycleDao().insertOrUpdate(
+            TripLifecycleEntity(tripId = tripId, state = TripLifecycleState.TRACKING.value)
+        )
+        preferencesManager.setActiveTripId(tripId)
+        preferencesManager.setInVehicleState(false)
+        preferencesManager.setBluetoothAutoStopEnabled(true)
+        preferencesManager.setBluetoothDisconnectPending(true)
+
+        // Simulate background GPS fallback mode active (serviceState.isTracking == true, no LocationTrackingService instance)
+        LocationTrackingService.activateFallbackCandidateState(
+            tripId = tripId,
+            startTime = 1_000L,
+            isCandidate = false,
+            distanceMeters = 850.0
+        )
+        assertTrue(LocationTrackingService.isFallbackActive())
+        assertFalse(LocationTrackingService.isServiceInstanceRunning())
+
+        val worker = createWorker(
+            Data.Builder()
+                .putString(TripDebounceWorker.INPUT_TRIGGER, TripDebounceWorker.TRIGGER_BLUETOOTH)
+                .build(),
+            tripId
+        )
+
+        val result = worker.doWork()
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertNotNull("Background fallback trip must be finalized", tripRepository.getTripById(tripId))
+        assertNull("Active trip must be cleared after finalization", activeTripRepository.getActiveTrip())
+        assertFalse("Fallback tracking flag must be cleared", LocationTrackingService.isFallbackActive())
+        assertFalse("Bluetooth disconnect pending flag must be cleared", preferencesManager.isBluetoothDisconnectPending())
     }
 }

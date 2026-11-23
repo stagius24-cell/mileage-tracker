@@ -1296,6 +1296,274 @@ class MultiVehicleAutoStartReliabilityAuditTest {
         assertEquals(model3.id, adoptedTrip.vehicleId)
     }
 
+    // 36. In-service Bluetooth auto-stop deadline finalizes trip even without WorkManager
+    @Test(timeout = 15_000)
+    fun scenario36_bluetoothDisconnect_schedulesInServiceStopDeadlineAndFinalizes() = runBlocking {
+        val tripId = "bt-inservice-stop-36"
+        val lastMovementMs = 150_000L
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = 10_000L,
+                startLatitude = 37.3382,
+                startLongitude = -121.8863,
+                lastLatitude = 37.3450,
+                lastLongitude = -121.8863,
+                lastTimestamp = lastMovementMs,
+                totalDistanceMeters = 900.0,
+                trackingMethod = TrackingMethod.AUTO_DETECTED.value,
+                vehicleId = modelY.id
+            )
+        )
+        database.activeTripDao().insertWaypoint(
+            ActiveWaypointEntity(tripId = tripId, latitude = 37.3450, longitude = -121.8863, altitude = 0.0, accuracy = 5f, speed = 15f, timestamp = lastMovementMs)
+        )
+        database.tripLifecycleDao().insertOrUpdate(TripLifecycleEntity(tripId, TripLifecycleState.TRACKING.value))
+        preferencesManager.setActiveTripId(tripId)
+        preferencesManager.setInVehicleState(true)
+
+        val service = LocationTrackingService()
+        service.elapsedClock = { fakeElapsedClockMillis }
+        service.setTestDependencies(
+            activeTripRepo = activeTripRepository,
+            helper = notificationHelper,
+            tripId = tripId,
+            lifecycleDao = database.tripLifecycleDao(),
+            inboxDao = database.gpsInboxDao(),
+            drainUseCase = drainUseCase,
+            seqDao = database.tripSequenceDao(),
+            db = database,
+            prefs = preferencesManager,
+            coordinator = finalizationCoordinator,
+            dispatcher = testDispatcher,
+            scope = testScope,
+            context = context,
+            vehicleRepo = vehicleRepository,
+            matcher = matcher,
+            armedMonitor = monitor
+        )
+        service.setTrackingStateForTesting(tripId, distanceMeters = 900.0, displacementConfirmed = true)
+
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, modelY.bluetoothAddress!!)
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_DISCONNECTED, modelY.bluetoothAddress!!)
+
+        assertEquals(fakeElapsedClockMillis + 240_000L, service.getStopDeadlineElapsedForTesting())
+        assertEquals(TripDebounceWorker.TRIGGER_BLUETOOTH, service.getStopDeadlineTriggerForTesting())
+
+        // Advance past 4 minutes and tick without relying on WorkManager
+        fakeElapsedClockMillis += 240_000L
+        service.checkStopDeadlineOnTick(fakeElapsedClockMillis)
+
+        var finalized: TripEntity? = null
+        for (i in 1..40) {
+            finalized = tripRepository.getTripById(tripId)
+            if (finalized != null && !preferencesManager.isBluetoothDisconnectPending()) {
+                break
+            }
+            kotlinx.coroutines.delay(50L)
+        }
+        assertNotNull("In-service Bluetooth stop deadline must finalize trip without WorkManager", finalized)
+        assertEquals(modelY.id, finalized?.vehicleId)
+        assertFalse(preferencesManager.isBluetoothDisconnectPending())
+        assertFalse(preferencesManager.isInVehicle())
+    }
+
+    // 37. Pre-disconnect fixes & indoor walking jitter cannot cancel BT auto-stop; true motion extends deadline
+    @Test(timeout = 15_000)
+    fun scenario37_postDisconnectJitterCannotCancelBtStop_andMotionExtendsDeadline() = runBlocking {
+        val tripId = "bt-motion-guard-37"
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = 10_000L,
+                startLatitude = 37.3382,
+                startLongitude = -121.8863,
+                lastLatitude = 37.3450,
+                lastLongitude = -121.8863,
+                lastTimestamp = 95_000L,
+                totalDistanceMeters = 900.0,
+                trackingMethod = TrackingMethod.AUTO_DETECTED.value,
+                vehicleId = modelY.id
+            )
+        )
+        database.tripLifecycleDao().insertOrUpdate(TripLifecycleEntity(tripId, TripLifecycleState.TRACKING.value))
+        preferencesManager.setActiveTripId(tripId)
+        preferencesManager.setInVehicleState(true)
+
+        val service = LocationTrackingService()
+        service.elapsedClock = { fakeElapsedClockMillis }
+        service.setTestDependencies(
+            activeTripRepo = activeTripRepository,
+            helper = notificationHelper,
+            tripId = tripId,
+            lifecycleDao = database.tripLifecycleDao(),
+            inboxDao = database.gpsInboxDao(),
+            drainUseCase = drainUseCase,
+            seqDao = database.tripSequenceDao(),
+            db = database,
+            prefs = preferencesManager,
+            coordinator = finalizationCoordinator,
+            dispatcher = testDispatcher,
+            scope = testScope,
+            context = context,
+            vehicleRepo = vehicleRepository,
+            matcher = matcher,
+            armedMonitor = monitor
+        )
+        service.setTrackingStateForTesting(tripId, distanceMeters = 900.0, displacementConfirmed = true)
+
+        // Pre-disconnect driving fix primes validator before disconnect
+        service.handleFixProcessed(
+            GpsInboxProcessor.ProcessResult.Accepted(
+                fixId = 1L,
+                tripId = tripId,
+                deltaDistanceMeters = 100.0,
+                totalDistanceMeters = 800.0,
+                lastLatitude = 37.3440,
+                lastLongitude = -121.8863,
+                speedMph = 25.0,
+                isDisplacementConfirmed = true,
+                waypoint = Waypoint(37.3440, -121.8863, speed = 11f, accuracy = 5f, elapsedRealtimeNanos = (fakeElapsedClockMillis - 3_000L) * 1_000_000L)
+            )
+        )
+
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, modelY.bluetoothAddress!!)
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_DISCONNECTED, modelY.bluetoothAddress!!)
+        val initialDeadline = service.getStopDeadlineElapsedForTesting()
+        assertEquals(fakeElapsedClockMillis + 240_000L, initialDeadline)
+
+        // Post-disconnect indoor walking/multipath coordinate jump: coordinate speed 15mph, Doppler speed 1.0 m/s (~2.2 mph)
+        fakeElapsedClockMillis += 3_000L
+        service.handleFixProcessed(
+            GpsInboxProcessor.ProcessResult.Accepted(
+                fixId = 2L,
+                tripId = tripId,
+                deltaDistanceMeters = 20.0,
+                totalDistanceMeters = 820.0,
+                lastLatitude = 37.3442,
+                lastLongitude = -121.8863,
+                speedMph = 15.0,
+                isDisplacementConfirmed = true,
+                waypoint = Waypoint(37.3442, -121.8863, speed = 1.0f, accuracy = 8f, elapsedRealtimeNanos = fakeElapsedClockMillis * 1_000_000L)
+            )
+        )
+        fakeElapsedClockMillis += 3_000L
+        service.handleFixProcessed(
+            GpsInboxProcessor.ProcessResult.Accepted(
+                fixId = 3L,
+                tripId = tripId,
+                deltaDistanceMeters = 20.0,
+                totalDistanceMeters = 840.0,
+                lastLatitude = 37.3444,
+                lastLongitude = -121.8863,
+                speedMph = 15.0,
+                isDisplacementConfirmed = true,
+                waypoint = Waypoint(37.3444, -121.8863, speed = 1.0f, accuracy = 8f, elapsedRealtimeNanos = fakeElapsedClockMillis * 1_000_000L)
+            )
+        )
+        assertFalse("Walking multipath jump must NOT restore inVehicle state", preferencesManager.isInVehicle())
+        assertTrue("Bluetooth disconnect pending must stay true", preferencesManager.isBluetoothDisconnectPending())
+        assertEquals("Original 4-minute stop deadline must remain unchanged", initialDeadline, service.getStopDeadlineElapsedForTesting())
+
+        // Now genuine driving motion (>= 10 mph Doppler & coordinate) occurs twice while BT disconnected -> extends deadline rather than cancelling
+        fakeElapsedClockMillis += 60_000L
+        service.handleFixProcessed(
+            GpsInboxProcessor.ProcessResult.Accepted(
+                fixId = 4L,
+                tripId = tripId,
+                deltaDistanceMeters = 50.0,
+                totalDistanceMeters = 890.0,
+                lastLatitude = 37.3450,
+                lastLongitude = -121.8863,
+                speedMph = 15.0,
+                isDisplacementConfirmed = true,
+                waypoint = Waypoint(37.3450, -121.8863, speed = 7.0f, accuracy = 6f, elapsedRealtimeNanos = fakeElapsedClockMillis * 1_000_000L)
+            )
+        )
+        fakeElapsedClockMillis += 3_000L
+        service.handleFixProcessed(
+            GpsInboxProcessor.ProcessResult.Accepted(
+                fixId = 5L,
+                tripId = tripId,
+                deltaDistanceMeters = 50.0,
+                totalDistanceMeters = 940.0,
+                lastLatitude = 37.3455,
+                lastLongitude = -121.8863,
+                speedMph = 15.0,
+                isDisplacementConfirmed = true,
+                waypoint = Waypoint(37.3455, -121.8863, speed = 7.0f, accuracy = 6f, elapsedRealtimeNanos = fakeElapsedClockMillis * 1_000_000L)
+            )
+        )
+        var extendedDeadline = service.getStopDeadlineElapsedForTesting()
+        for (i in 1..40) {
+            extendedDeadline = service.getStopDeadlineElapsedForTesting()
+            if (extendedDeadline == fakeElapsedClockMillis + 240_000L) {
+                break
+            }
+            kotlinx.coroutines.delay(50L)
+        }
+        assertFalse("inVehicle must remain false while BT is still disconnected", preferencesManager.isInVehicle())
+        assertTrue("BT disconnect pending remains true when deadline is extended", preferencesManager.isBluetoothDisconnectPending())
+        assertEquals("Stop deadline should extend 4 minutes from resumed motion", fakeElapsedClockMillis + 240_000L, extendedDeadline)
+    }
+
+    // 38. Assigned vehicle disconnect still schedules auto-stop even with second saved Tesla in garage or lagging GATT
+    @Test(timeout = 15_000)
+    fun scenario38_assignedVehicleDisconnectSchedulesAutoStopDespiteSecondTeslaInGarage() = runBlocking {
+        val tripId = "bt-assigned-garage-38"
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = 10_000L,
+                startLatitude = 37.3382,
+                startLongitude = -121.8863,
+                lastLatitude = 37.3450,
+                lastLongitude = -121.8863,
+                lastTimestamp = 95_000L,
+                totalDistanceMeters = 900.0,
+                trackingMethod = TrackingMethod.AUTO_DETECTED.value,
+                vehicleId = modelY.id
+            )
+        )
+        preferencesManager.setActiveTripId(tripId)
+
+        // Both Model Y (being driven) and Model 3 (parked in garage) are initially connected;
+        // fallbackDevicesProvider also simulates lagging GATT Phone Key still returning modelY after disconnect!
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, model3.bluetoothAddress!!)
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, modelY.bluetoothAddress!!)
+        matcher.fallbackDevicesProvider = { setOf(model3.bluetoothAddress!!, modelY.bluetoothAddress!!) }
+
+        // Model Y disconnects when arriving at destination
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_DISCONNECTED, modelY.bluetoothAddress!!)
+
+        assertTrue("Disconnect of assigned trip vehicle MUST schedule auto-stop", scheduler.scheduled)
+        assertTrue(preferencesManager.isBluetoothDisconnectPending())
+        assertFalse(preferencesManager.isInVehicle())
+        assertFalse(
+            "Disconnected Model Y address must not be re-added by lagging GATT/profile reconcile",
+            preferencesManager.getConnectedCarAddresses().contains(VehicleBluetoothMatchPolicy.normalizeAddress(modelY.bluetoothAddress!!))
+        )
+    }
+
+    // 39. Repeated BT_ARMED activity updates during active session only log SESSION_ALREADY_ACTIVE once
+    @Test(timeout = 15_000)
+    fun scenario39_activeSessionActivityUpdatesDeduplicateDiagnosticLogs() = runBlocking {
+        AutoDriveReceiver.resetDiagnosticDedupeForTesting()
+        TrackingDiagnostics.clearForTesting()
+
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, model3.bluetoothAddress!!)
+        activeTripRepository.createActiveTrip("active-dedupe-39", 37.0, -122.0, TrackingMethod.AUTO_DETECTED.value, "MySucculentCorner")
+
+        repeat(5) {
+            receiver.handleArmedActivityUpdate(context, listOf(DetectedActivity(DetectedActivity.IN_VEHICLE, 90)))
+        }
+
+        val loggedCount = TrackingDiagnostics.getRecentEvents().count {
+            it.category == "AutoStartDecision" && it.code == "BT_ARMED_REJECTED_SESSION_ALREADY_ACTIVE"
+        }
+        assertEquals("SESSION_ALREADY_ACTIVE should log at most once per active trip", 1, loggedCount)
+    }
+
     private class RecordingScheduler(context: Context) : TripDebounceScheduler(context) {
         var scheduled = false
         var cancelled = false

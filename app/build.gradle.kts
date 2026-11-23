@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 214
-        versionName = "1.0.214"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Rename Bluetooth diagnostics to Bluetooth & auto-start log.\"")
+        versionCode = 215
+        versionName = "1.0.215"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix Bluetooth auto-stop reliability in background and multi-vehicle scenarios.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
