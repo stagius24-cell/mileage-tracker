@@ -88,6 +88,7 @@
                 <action android:name="com.businesstracker.mileage.ACTION_ACTIVITY_TRANSITION" />
                 <action android:name="com.businesstracker.mileage.ACTION_VEHICLE_ACTIVITY_UPDATE" />
                 <action android:name="com.businesstracker.mileage.ACTION_BACKGROUND_GPS_UPDATE" />
+                <action android:name="com.businesstracker.mileage.ACTION_BT_CONNECT_PROBE" />
             </intent-filter>
         </receiver>
 

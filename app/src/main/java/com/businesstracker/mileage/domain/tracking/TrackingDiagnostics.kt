@@ -21,6 +21,7 @@ object TrackingDiagnostics {
     private const val MAX_MEMORY_EVENTS = 400
     private const val MAX_LOG_FILE_BYTES = 262_144L // 256 KB
     private const val LOG_FILE_NAME = "tracking_diagnostics.log"
+    private const val MAX_EXPORT_CHARS = 11_000
 
     data class DiagnosticEvent(
         val timestampMillis: Long,
@@ -106,19 +107,14 @@ object TrackingDiagnostics {
     fun clearForTesting() {
         synchronized(lock) {
             events.clear()
+            runCatching { logFile?.delete() }
+            logFile = null
         }
     }
 
     fun exportRedactedReport(context: Context?, extraHeaderLines: List<String> = emptyList()): String {
         if (context != null && logFile == null) {
             initialize(context)
-        }
-        val header = buildString {
-            appendLine("=== Business Mileage Tracker Diagnostic Report ===")
-            appendLine("App Version: ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})")
-            appendLine("Generated: ${Date()}")
-            extraHeaderLines.forEach { appendLine(redactSensitive(it)) }
-            appendLine("==================================================")
         }
         val lines = synchronized(lock) {
             val fileLines = logFile?.takeIf { it.exists() }?.runCatching { readLines().takeLast(MAX_MEMORY_EVENTS) }?.getOrNull()
@@ -128,10 +124,34 @@ object TrackingDiagnostics {
                 events.map { it.formatLine() }
             }
         }
-        return if (lines.isEmpty()) {
+        val kept = mutableListOf<String>()
+        if (lines.isNotEmpty()) {
+            var charCount = 0
+            for (i in lines.indices.reversed()) {
+                val line = lines[i]
+                val nextChars = charCount + line.length + 1
+                if (kept.size >= 20 && nextChars > MAX_EXPORT_CHARS) {
+                    break
+                }
+                kept.add(line)
+                charCount = nextChars
+            }
+            kept.reverse()
+        }
+        val header = buildString {
+            appendLine("=== Business Mileage Tracker Diagnostic Report ===")
+            appendLine("App Version: ${BuildConfig.VERSION_NAME} (Build ${BuildConfig.VERSION_CODE})")
+            appendLine("Generated: ${Date()}")
+            extraHeaderLines.forEach { appendLine(redactSensitive(it)) }
+            if (kept.size < lines.size) {
+                appendLine("Showing latest ${kept.size} of ${lines.size} events")
+            }
+            appendLine("==================================================")
+        }
+        return if (kept.isEmpty()) {
             header + "(No diagnostic events recorded yet)"
         } else {
-            header + lines.joinToString("\n")
+            header + kept.joinToString("\n")
         }
     }
 

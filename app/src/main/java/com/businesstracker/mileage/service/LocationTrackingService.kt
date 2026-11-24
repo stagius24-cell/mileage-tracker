@@ -127,6 +127,7 @@ class LocationTrackingService : Service() {
             instance?.stopDeadlineElapsed = 0L
             instance?.stopDeadlineTrigger = null
             instance?.stopInitiatedElapsed = 0L
+            instance?.lastBtDeadlineExtendElapsed = 0L
             isStartingOrRunning.set(false)
             isDrainingGps.set(false)
             isFallbackTrackingActive.set(false)
@@ -151,6 +152,7 @@ class LocationTrackingService : Service() {
                     now + delayMillis
                 }
                 instance.stopDeadlineTrigger = trigger
+                instance.lastBtDeadlineExtendElapsed = 0L
             }
         }
 
@@ -364,6 +366,7 @@ class LocationTrackingService : Service() {
     @Volatile private var stopDeadlineElapsed: Long = 0L
     @Volatile private var stopDeadlineTrigger: String? = null
     @Volatile private var stopInitiatedElapsed: Long = 0L
+    @Volatile private var lastBtDeadlineExtendElapsed: Long = 0L
     private val evidenceWriteMutex = Mutex()
     private val evidenceRevision = AtomicLong(0L)
     @Volatile private var lastPersistedStationaryEvidence: StationaryEvidence? = null
@@ -379,6 +382,7 @@ class LocationTrackingService : Service() {
         stopDeadlineElapsed = 0L
         stopDeadlineTrigger = null
         stopInitiatedElapsed = 0L
+        lastBtDeadlineExtendElapsed = 0L
     }
 
     @VisibleForTesting
@@ -1031,6 +1035,9 @@ class LocationTrackingService : Service() {
                             stopInitiatedElapsed = nowStop
                         }
                     } else {
+                        if (hasPreferencesManager()) {
+                            preferencesManager.setBluetoothDisconnectPending(false)
+                        }
                         preferencesManager.saveStationaryEvidence(null)
                         lastPersistedStationaryEvidence = null
                     }
@@ -1223,7 +1230,12 @@ class LocationTrackingService : Service() {
                     )
                     when (motionResult) {
                         is MotionValidationResult.MotionCorroborated -> {
-                            if (isStopPending) {
+                            val shouldLogCorroborated = isStopPending && (
+                                stopDeadlineTrigger != TripDebounceWorker.TRIGGER_BLUETOOTH ||
+                                    lastBtDeadlineExtendElapsed == 0L ||
+                                    (nowElapsed - lastBtDeadlineExtendElapsed) >= 30_000L
+                                )
+                            if (shouldLogCorroborated) {
                                 TrackingDiagnostics.logMotionResumption(currentTripId, "CORROBORATED", "First: ${motionResult.firstFixTimestamp}, Second: ${motionResult.secondFixTimestamp}")
                             }
                             onVehicleMotionResumed()
@@ -1297,7 +1309,9 @@ class LocationTrackingService : Service() {
                 decisionMutex.withLock {
                     if (currentTripId != tripIdAtCall || isStopping.get()) return@withLock
                     val ctx = try { applicationContext } catch (_: Throwable) { null }
-                    val isBtDisconnectPending = hasPreferencesManager() &&
+                    val isBtDisconnectPending = stopDeadlineElapsed > 0L &&
+                        stopDeadlineTrigger == TripDebounceWorker.TRIGGER_BLUETOOTH &&
+                        hasPreferencesManager() &&
                         preferencesManager.isBluetoothAutoStopActive() &&
                         preferencesManager.isBluetoothDisconnectPending()
                     val nowElapsed = elapsedClock()
@@ -1305,17 +1319,22 @@ class LocationTrackingService : Service() {
                         stopDeadlineElapsed = nowElapsed + 240_000L
                         stopDeadlineTrigger = TripDebounceWorker.TRIGGER_BLUETOOTH
                         stopInitiatedElapsed = nowElapsed
-                        if (ctx != null) {
-                            try {
-                                TripDebounceWorker.scheduleBluetoothDebounce(ctx, tripIdAtCall, replace = true)
-                            } catch (_: Throwable) {}
+                        val shouldLogAndReschedule = lastBtDeadlineExtendElapsed == 0L ||
+                            (nowElapsed - lastBtDeadlineExtendElapsed) >= 30_000L
+                        if (shouldLogAndReschedule) {
+                            lastBtDeadlineExtendElapsed = nowElapsed
+                            if (ctx != null) {
+                                try {
+                                    TripDebounceWorker.scheduleBluetoothDebounce(ctx, tripIdAtCall, replace = true)
+                                } catch (_: Throwable) {}
+                            }
+                            TrackingDiagnostics.logStopDeadline(
+                                tripId = tripIdAtCall,
+                                action = "BT_DISCONNECT_DEADLINE_EXTENDED_BY_MOTION",
+                                deadlineMs = 240_000L,
+                                reason = "Motion detected while BT disconnected; extending 4m deadline"
+                            )
                         }
-                        TrackingDiagnostics.logStopDeadline(
-                            tripId = tripIdAtCall,
-                            action = "BT_DISCONNECT_DEADLINE_EXTENDED_BY_MOTION",
-                            deadlineMs = 240_000L,
-                            reason = "Motion detected while BT disconnected; extending 4m deadline"
-                        )
                     } else {
                         resetStopDeadlineState()
                         if (ctx != null) {

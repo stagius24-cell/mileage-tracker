@@ -59,6 +59,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
         const val TAG = "AutoDriveReceiver"
         const val ACTION_ACTIVITY_TRANSITION = "com.businesstracker.mileage.ACTION_ACTIVITY_TRANSITION"
         const val ACTION_BACKGROUND_GPS_UPDATE = "com.businesstracker.mileage.ACTION_BACKGROUND_GPS_UPDATE"
+        const val ACTION_BT_CONNECT_PROBE = "com.businesstracker.mileage.ACTION_BT_CONNECT_PROBE"
         const val TRANSITION_REQUEST_CODE = 3001
         const val BACKGROUND_GPS_REQUEST_CODE = 3003
         const val START_TRIGGER_DISPLACEMENT_METERS = 200.0f
@@ -118,6 +119,18 @@ class AutoDriveReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent?) {
         if (intent == null) return
+
+        if (intent.action == ACTION_BT_CONNECT_PROBE) {
+            val pendingResult = goAsync()
+            receiverScope.launch(ioDispatcher) {
+                try {
+                    handleBluetoothConnectProbe(context)
+                } finally {
+                    pendingResult?.finish()
+                }
+            }
+            return
+        }
 
         if (intent.action == ACTION_BACKGROUND_GPS_UPDATE) {
             val locations = LocationResult.extractResult(intent)?.locations.orEmpty()
@@ -273,6 +286,21 @@ class AutoDriveReceiver : BroadcastReceiver() {
         }
     }
 
+    internal suspend fun handleBluetoothConnectProbe(context: Context) {
+        val isAutoTrackingEnabled = preferencesManager.isAutoTrackingEnabled.first()
+        val isCarConnected = preferencesManager.isCarBluetoothConnected() ||
+            preferencesManager.getConnectedCarAddresses().isNotEmpty()
+        if (!isAutoTrackingEnabled || !isCarConnected) return
+        if (LocationTrackingService.serviceState.value.isTracking ||
+            activeTripRepository.getActiveTrip() != null
+        ) return
+
+        if (bluetoothArmedDriveMonitor.probeMovementOnConnect()) {
+            TrackingDiagnostics.logArmedMonitor("MOVEMENT_CONFIRMED", "starting candidate flow from Bluetooth connect probe")
+            handleVehicleEnter(context, source = "BT_CONNECT_PROBE")
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private suspend fun handleVehicleEnter(context: Context, source: String = "ACTIVITY_TRANSITION") {
         // 1. Strict permission verification (Foreground location and Activity Recognition)
@@ -409,6 +437,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
                     return
                 }
                 val effectiveTripId = createdTrip.id
+                preferencesManager.setBluetoothDisconnectPending(false)
                 preferencesManager.setInVehicleState(true)
                 preferencesManager.setActiveTripId(effectiveTripId)
                 preferencesManager.recordVehicleEnter(effectiveTripId, requestElapsed, currentBoot)

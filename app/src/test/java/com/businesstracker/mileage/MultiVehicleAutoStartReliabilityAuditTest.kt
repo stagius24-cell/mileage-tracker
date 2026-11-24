@@ -1564,6 +1564,214 @@ class MultiVehicleAutoStartReliabilityAuditTest {
         assertEquals("SESSION_ALREADY_ACTIVE should log at most once per active trip", 1, loggedCount)
     }
 
+    // 40. Sitting in car 15+ minutes (past old 10-min cliff) then driving with low IN_VEHICLE conf (STILL=90) still auto-starts
+    @Test(timeout = 15_000)
+    fun scenario40_sittingInCarFifteenMinutesThenDrivingWithLowConfidence_autoStartsCleanly() = runBlocking {
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, model3.bluetoothAddress!!)
+        preferencesManager.setConnectedCarAddresses(setOf(model3.bluetoothAddress!!), fakeElapsedClockMillis)
+
+        // Wait 15 minutes parked (exceeds legacy 10-minute ACTIVE_POST_CONNECT_WINDOW_MILLIS)
+        fakeElapsedClockMillis += 15L * 60_000L
+        monitor.locationProvider = { makeLocation(37.3382, -121.8863, fakeElapsedClockMillis, speedMps = 0f, accuracyMeters = 8f) }
+        receiver.handleArmedActivityUpdate(
+            context,
+            listOf(DetectedActivity(DetectedActivity.STILL, 90), DetectedActivity(DetectedActivity.IN_VEHICLE, 0))
+        )
+        assertNull("Sitting parked after 15 minutes must not false-start", preferencesManager.activeTripId.first())
+
+        // 65 seconds later (> extended 60s cadence while STILL=90), driver smoothly pulls onto road
+        fakeElapsedClockMillis += 65_000L
+        monitor.locationProvider = { makeLocation(37.3410, -121.8863, fakeElapsedClockMillis, speedMps = 10f, accuracyMeters = 8f) }
+        receiver.handleArmedActivityUpdate(
+            context,
+            listOf(DetectedActivity(DetectedActivity.STILL, 90), DetectedActivity(DetectedActivity.IN_VEHICLE, 0))
+        )
+
+        assertNotNull("Driving after 15-minute parked wait must still auto-start even when IN_VEHICLE conf=0", preferencesManager.activeTripId.first())
+    }
+
+    // 41. Toggling Bluetooth OFF -> ON while already driving reconciles connection and starts trip via connect probe
+    @Test(timeout = 15_000)
+    fun scenario41_bluetoothToggleOffThenOnWhileDriving_reconcilesAndAutoStartsViaConnectProbe() = runBlocking {
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, modelY.bluetoothAddress!!)
+        preferencesManager.setCarBluetoothConnected(false)
+        monitor.reconcile(allowProfileDiscovery = false)
+        assertFalse(monitor.isArmedForTesting())
+
+        var probeRequested = false
+        monitor.postConnectProbeDispatcher = { probeRequested = true }
+        matcher.activeProfileDevicesProvider = { setOf(modelY.bluetoothAddress!!) }
+        matcher.fallbackDevicesProvider = { emptySet() }
+
+        // User toggles Bluetooth back ON while driving
+        eventHandler.handleBluetoothAdapterTurnedOn()
+        assertTrue("Bluetooth ON must request an immediate movement probe when no trip is active", probeRequested)
+        assertTrue(preferencesManager.isCarBluetoothConnected())
+        assertTrue(monitor.isArmedForTesting())
+
+        // Parked probe stores origin anchor without false-starting
+        monitor.locationProvider = { makeLocation(37.3382, -121.8863, fakeElapsedClockMillis, speedMps = 0f, accuracyMeters = 8f) }
+        receiver.handleBluetoothConnectProbe(context)
+        assertNull("Parked connect probe must not false-start", preferencesManager.activeTripId.first())
+
+        // Moving connect probe starts trip immediately without waiting for Activity Recognition
+        fakeElapsedClockMillis += BluetoothArmedDriveMonitor.CONNECT_PROBE_MIN_GAP_MILLIS + 1_000L
+        monitor.locationProvider = { makeLocation(37.3400, -121.8863, fakeElapsedClockMillis, speedMps = 12f, accuracyMeters = 5f) }
+        receiver.handleBluetoothConnectProbe(context)
+
+        val active = activeTripRepository.getActiveTrip()
+        assertNotNull("Moving connect probe after BT toggle ON must start trip", active)
+        assertEquals(modelY.id, active?.vehicleId)
+    }
+
+    // 42. Stale bluetoothDisconnectPending flag is cleared on connect & new trip start, never spamming deadline extension
+    @Test(timeout = 15_000)
+    fun scenario42_staleBluetoothDisconnectPending_clearedOnConnectAndStart_neverSpamsDuringDrive() = runBlocking {
+        TrackingDiagnostics.clearForTesting()
+        preferencesManager.setBluetoothDisconnectPending(true)
+
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, modelY.bluetoothAddress!!)
+        assertFalse("ACL_CONNECTED with no active trip must clear stale bluetoothDisconnectPending", preferencesManager.isBluetoothDisconnectPending())
+
+        // Even if set again right before ACTION_START of a new session, new service start clears it
+        preferencesManager.setBluetoothDisconnectPending(true)
+        val tripId = "fresh-trip-clear-pending-42"
+        val service = LocationTrackingService()
+        service.elapsedClock = { fakeElapsedClockMillis }
+        service.locationUpdatesRegistrar = { true }
+        service.setTestDependencies(
+            activeTripRepo = activeTripRepository,
+            helper = notificationHelper,
+            tripId = tripId,
+            lifecycleDao = database.tripLifecycleDao(),
+            inboxDao = database.gpsInboxDao(),
+            drainUseCase = drainUseCase,
+            seqDao = database.tripSequenceDao(),
+            db = database,
+            prefs = preferencesManager,
+            coordinator = finalizationCoordinator,
+            dispatcher = testDispatcher,
+            scope = testScope,
+            context = context,
+            vehicleRepo = vehicleRepository,
+            matcher = matcher,
+            armedMonitor = monitor
+        )
+        val startIntent = Intent(LocationTrackingService.ACTION_START).apply {
+            putExtra(LocationTrackingService.EXTRA_TRIP_ID, tripId)
+            putExtra(LocationTrackingService.EXTRA_TRACKING_METHOD, TrackingMethod.AUTO_DETECTED.value)
+        }
+        service.onStartCommand(startIntent, 0, 1)
+        service.lastStartupJob?.join()
+
+        assertFalse("Fresh session startup must clear stale bluetoothDisconnectPending", preferencesManager.isBluetoothDisconnectPending())
+
+        repeat(4) { idx ->
+            fakeElapsedClockMillis += 3_000L
+            service.handleFixProcessed(
+                GpsInboxProcessor.ProcessResult.Accepted(
+                    fixId = idx + 1L,
+                    tripId = tripId,
+                    deltaDistanceMeters = 50.0,
+                    totalDistanceMeters = (idx + 1) * 50.0,
+                    lastLatitude = 37.3382 + idx * 0.0004,
+                    lastLongitude = -121.8863,
+                    speedMph = 25.0,
+                    isDisplacementConfirmed = idx >= 3,
+                    waypoint = Waypoint(37.3382 + idx * 0.0004, -121.8863, speed = 11f, accuracy = 5f, elapsedRealtimeNanos = fakeElapsedClockMillis * 1_000_000L)
+                )
+            )
+        }
+
+        assertEquals(0L, service.getStopDeadlineElapsedForTesting())
+        val extendedEvents = TrackingDiagnostics.getRecentEvents().count {
+            it.category == "StopDeadline" && it.code == "BT_DISCONNECT_DEADLINE_EXTENDED_BY_MOTION"
+        }
+        assertEquals("Connected driving must never emit BT_DISCONNECT_DEADLINE_EXTENDED_BY_MOTION", 0, extendedEvents)
+        LocationTrackingService.resetGuardForTesting()
+    }
+
+    // 43. exportRedactedReport preserves newest events within paste-safe character budget
+    @Test(timeout = 15_000)
+    fun scenario43_diagnosticReportExportPreservesNewestEventsWithinSizeBudget() {
+        TrackingDiagnostics.clearForTesting()
+        repeat(250) { idx ->
+            TrackingDiagnostics.logArmedMonitor("TEST_EVT_$idx", "payload-padding-for-size-check-$idx")
+        }
+
+        val report = TrackingDiagnostics.exportRedactedReport(null)
+        assertTrue("Report must contain the newest recorded event", report.contains("TEST_EVT_249"))
+        assertTrue("Report must indicate newest slice was selected", report.contains("Showing latest "))
+        assertTrue("Report size (${report.length}) must fit paste-safe budget (<= 13000)", report.length <= 13_000)
+    }
+
+    // 44. Toggling Bluetooth OFF -> ON during an active trip cancels pending Bluetooth disconnect stop deadline
+    @Test(timeout = 15_000)
+    fun scenario44_bluetoothToggleOffThenOnDuringActiveTrip_cancelsPendingDisconnectStopDeadline() = runBlocking {
+        TrackingDiagnostics.clearForTesting()
+        val tripId = "bt-toggle-active-44"
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = tripId,
+                startTime = 10_000L,
+                startLatitude = 37.3382,
+                startLongitude = -121.8863,
+                lastLatitude = 37.3450,
+                lastLongitude = -121.8863,
+                lastTimestamp = 95_000L,
+                totalDistanceMeters = 800.0,
+                trackingMethod = TrackingMethod.AUTO_DETECTED.value,
+                vehicleId = modelY.id
+            )
+        )
+        database.tripLifecycleDao().insertOrUpdate(TripLifecycleEntity(tripId, TripLifecycleState.TRACKING.value))
+        preferencesManager.setActiveTripId(tripId)
+
+        val service = LocationTrackingService()
+        service.elapsedClock = { fakeElapsedClockMillis }
+        service.setTestDependencies(
+            activeTripRepo = activeTripRepository,
+            helper = notificationHelper,
+            tripId = tripId,
+            lifecycleDao = database.tripLifecycleDao(),
+            inboxDao = database.gpsInboxDao(),
+            drainUseCase = drainUseCase,
+            seqDao = database.tripSequenceDao(),
+            db = database,
+            prefs = preferencesManager,
+            coordinator = finalizationCoordinator,
+            dispatcher = testDispatcher,
+            scope = testScope,
+            context = context,
+            vehicleRepo = vehicleRepository,
+            matcher = matcher,
+            armedMonitor = monitor
+        )
+        service.setTrackingStateForTesting(tripId, distanceMeters = 800.0, displacementConfirmed = true)
+
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_CONNECTED, modelY.bluetoothAddress!!)
+        eventHandler.handle(BluetoothDevice.ACTION_ACL_DISCONNECTED, modelY.bluetoothAddress!!)
+        assertTrue(preferencesManager.isBluetoothDisconnectPending())
+        assertTrue(service.getStopDeadlineElapsedForTesting() > 0L)
+
+        // Toggle BT OFF then back ON while drive resumes
+        preferencesManager.setCarBluetoothConnected(false)
+        matcher.activeProfileDevicesProvider = { setOf(modelY.bluetoothAddress!!) }
+        matcher.fallbackDevicesProvider = { emptySet() }
+
+        eventHandler.handleBluetoothAdapterTurnedOn()
+
+        assertFalse("Reconnect after BT toggle ON must clear bluetoothDisconnectPending", preferencesManager.isBluetoothDisconnectPending())
+        assertTrue("Reconnect after BT toggle ON must restore inVehicle=true", preferencesManager.isInVehicle())
+        assertEquals("Pending in-service stop deadline must be cancelled", 0L, service.getStopDeadlineElapsedForTesting())
+        assertTrue("Debounce worker must be cancelled", scheduler.cancelled)
+        assertTrue(
+            TrackingDiagnostics.getRecentEvents().any {
+                it.category == "StopDeadline" && it.code == "BT_RECONNECT_DEBOUNCE_CANCELLED"
+            }
+        )
+    }
+
     private class RecordingScheduler(context: Context) : TripDebounceScheduler(context) {
         var scheduled = false
         var cancelled = false

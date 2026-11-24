@@ -32,12 +32,23 @@ class VehicleBluetoothReceiver : BroadcastReceiver() {
         ) return
 
         if (action == BluetoothAdapter.ACTION_STATE_CHANGED) {
-            if (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR) == BluetoothAdapter.STATE_OFF) {
+            val adapterState = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+            if (adapterState == BluetoothAdapter.STATE_OFF) {
                 val pendingResult = goAsync()
                 CoroutineScope(SupervisorJob() + ioDispatcher).launch {
                     try {
                         preferencesManager.setCarBluetoothConnected(false)
-                        bluetoothArmedDriveMonitor.reconcile()
+                        bluetoothArmedDriveMonitor.reconcile(allowProfileDiscovery = false)
+                    } finally {
+                        pendingResult?.finish()
+                    }
+                }
+            } else if (adapterState == BluetoothAdapter.STATE_ON) {
+                val pendingResult = goAsync()
+                CoroutineScope(SupervisorJob() + ioDispatcher).launch {
+                    try {
+                        kotlinx.coroutines.delay(2_500L)
+                        eventHandler.handleBluetoothAdapterTurnedOn()
                     } finally {
                         pendingResult?.finish()
                     }

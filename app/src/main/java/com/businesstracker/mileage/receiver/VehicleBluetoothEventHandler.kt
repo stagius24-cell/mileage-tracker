@@ -43,6 +43,9 @@ class VehicleBluetoothEventHandler @Inject constructor(
 
             if (isAutoStopCar) {
                 val updatedConnectedAddresses = if (connected) {
+                    if (activeTrip == null) {
+                        preferencesManager.setBluetoothDisconnectPending(false)
+                    }
                     preferencesManager.addConnectedCarAddress(normalizedEventAddress)
                 } else {
                     preferencesManager.removeConnectedCarAddress(normalizedEventAddress)
@@ -55,6 +58,9 @@ class VehicleBluetoothEventHandler @Inject constructor(
                     candidateCount = updatedConnectedAddresses.size,
                     detail = "vehicle=${matchedVehicle?.name ?: "legacy-car"} remainingConnected=${updatedConnectedAddresses.size}"
                 )
+                if (connected && activeTrip == null && !LocationTrackingService.serviceState.value.isTracking) {
+                    bluetoothArmedDriveMonitor.requestPostConnectMovementProbe()
+                }
             }
 
             if (activeTrip != null) {
@@ -249,6 +255,87 @@ class VehicleBluetoothEventHandler @Inject constructor(
                     )
                 }
             }
+        }
+    }
+
+    suspend fun handleBluetoothAdapterTurnedOn() = eventMutex.withLock {
+        val connectedAddresses = vehicleBluetoothMatcher.queryCurrentlyConnectedCarAddresses()
+        if (connectedAddresses.isNotEmpty()) {
+            preferencesManager.setConnectedCarAddresses(connectedAddresses)
+            bluetoothArmedDriveMonitor.reconcile(allowProfileDiscovery = true)
+            TrackingDiagnostics.logBluetoothEvent(
+                action = "ADAPTER_ON_RECONCILED",
+                redactedDevice = TrackingDiagnostics.redactAddress(connectedAddresses.firstOrNull()),
+                matchedVehicleId = null,
+                candidateCount = connectedAddresses.size,
+                detail = "reconnectedAfterBluetoothToggle=true"
+            )
+            val activeTrip = activeTripRepository.getActiveTrip()
+            if (activeTrip == null) {
+                preferencesManager.setBluetoothDisconnectPending(false)
+                if (!LocationTrackingService.serviceState.value.isTracking) {
+                    bluetoothArmedDriveMonitor.requestPostConnectMovementProbe()
+                }
+            } else {
+                val isManualVehicle = preferencesManager.isManualVehicleAssignment(activeTrip.id)
+                val resolution = vehicleBluetoothMatcher.resolveConnectedVehicle()
+                if (activeTrip.vehicleId == null && !isManualVehicle) {
+                    when (resolution) {
+                        is VehicleResolutionResult.Matched -> {
+                            activeTripRepository.assignVehicleIfAbsent(activeTrip.id, resolution.vehicle.id)
+                            val persisted = activeTripRepository.getActiveTrip()?.takeIf { it.id == activeTrip.id }
+                            if (persisted?.vehicleId == resolution.vehicle.id) {
+                                LocationTrackingService.updateVehicleDisplay(
+                                    activeTrip.id,
+                                    resolution.vehicle.id,
+                                    resolution.vehicle.name,
+                                    connected = true,
+                                    ambiguousCount = 0
+                                )
+                            }
+                        }
+                        is VehicleResolutionResult.Ambiguous -> {
+                            LocationTrackingService.updateVehicleDisplay(
+                                activeTrip.id,
+                                vehicleId = null,
+                                name = null,
+                                connected = true,
+                                ambiguousCount = resolution.candidates.size
+                            )
+                        }
+                        is VehicleResolutionResult.None -> Unit
+                    }
+                } else if (resolution is VehicleResolutionResult.Matched && activeTrip.vehicleId == resolution.vehicle.id) {
+                    LocationTrackingService.updateVehicleDisplay(
+                        activeTrip.id,
+                        resolution.vehicle.id,
+                        resolution.vehicle.name,
+                        connected = true,
+                        ambiguousCount = 0
+                    )
+                }
+
+                if (activeTrip.trackingMethod == TrackingMethod.AUTO_DETECTED.value &&
+                    preferencesManager.isBluetoothAutoStopActive() &&
+                    (activeTrip.vehicleId == null ||
+                        (resolution as? VehicleResolutionResult.Matched)?.vehicle?.id == activeTrip.vehicleId ||
+                        resolution !is VehicleResolutionResult.Matched)
+                ) {
+                    preferencesManager.setBluetoothDisconnectPending(false)
+                    preferencesManager.setInVehicleState(true)
+                    LocationTrackingService.cancelStopDeadline(activeTrip.id)
+                    debounceScheduler.cancel(activeTrip.id)
+                    debounceScheduler.cancel()
+                    TrackingDiagnostics.logStopDeadline(
+                        tripId = activeTrip.id,
+                        action = "BT_RECONNECT_DEBOUNCE_CANCELLED",
+                        deadlineMs = 0L,
+                        reason = "Vehicle Bluetooth reconnected after adapter ON"
+                    )
+                }
+            }
+        } else {
+            bluetoothArmedDriveMonitor.reconcile(allowProfileDiscovery = true)
         }
     }
 }

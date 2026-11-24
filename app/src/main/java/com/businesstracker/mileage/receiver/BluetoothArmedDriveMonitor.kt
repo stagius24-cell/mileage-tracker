@@ -54,10 +54,15 @@ class BluetoothArmedDriveMonitor @Inject constructor(
         const val ACTIVITY_UPDATE_INTERVAL_MILLIS = 30_000L
         const val MIN_LOCATION_SAMPLE_INTERVAL_MILLIS = 30_000L
         const val ACTIVE_POST_CONNECT_WINDOW_MILLIS = 10L * 60_000L
+        const val EXTENDED_CONNECTED_SAMPLE_INTERVAL_MILLIS = 60_000L
+        const val CONNECT_PROBE_MIN_GAP_MILLIS = 15_000L
+        const val CONNECT_PROBE_MIN_SPEED_MPS = 3.0f // ~6.7 mph direct speed gate for immediate connect probe
+        const val CONNECT_PROBE_MAX_ACCURACY_METERS = 35f
         const val STARTUP_TRIGGER_COOLDOWN_MILLIS = 60_000L
         const val MAX_FUTURE_CLOCK_SKEW_MILLIS = 15_000L
         private const val LOW_CONFIDENCE_IN_VEHICLE_FLOOR = 25
         private const val ON_FOOT_SUPPRESS_CONFIDENCE = 75
+        private const val STILL_REDUCED_CADENCE_CONFIDENCE = 85
         private const val TAG = "BluetoothDriveMonitor"
     }
 
@@ -66,8 +71,12 @@ class BluetoothArmedDriveMonitor @Inject constructor(
     private val sampleMutex = Mutex()
     private var previousSample: VehicleMotionEvidencePolicy.Sample? = null
     private var lastLocationSampleElapsed = 0L
+    private var lastConnectProbeElapsed = 0L
     private var lastTriggeredElapsed = 0L
     private var updatesRegistered = false
+
+    @VisibleForTesting
+    internal var postConnectProbeDispatcher: (() -> Unit)? = null
 
     @VisibleForTesting
     internal var activityUpdateRegistrar: (suspend (Long, PendingIntent) -> Unit)? = null
@@ -259,8 +268,21 @@ class BluetoothArmedDriveMonitor @Inject constructor(
     suspend fun resetTriggerCooldown() {
         sampleMutex.withLock {
             lastTriggeredElapsed = 0L
+            lastConnectProbeElapsed = 0L
             previousSample = null
         }
+    }
+
+    fun requestPostConnectMovementProbe() {
+        val dispatcher = postConnectProbeDispatcher
+        if (dispatcher != null) {
+            dispatcher()
+            return
+        }
+        val intent = Intent(context, AutoDriveReceiver::class.java).apply {
+            action = AutoDriveReceiver.ACTION_BT_CONNECT_PROBE
+        }
+        runCatching { context.sendBroadcast(intent) }
     }
 
     @VisibleForTesting
@@ -279,6 +301,7 @@ class BluetoothArmedDriveMonitor @Inject constructor(
         sampleMutex.withLock {
             previousSample = null
             lastLocationSampleElapsed = 0L
+            lastConnectProbeElapsed = 0L
             lastTriggeredElapsed = 0L
         }
         if (wasRegistered) {
@@ -304,6 +327,9 @@ class BluetoothArmedDriveMonitor @Inject constructor(
                     it.type == DetectedActivity.RUNNING
             }
             .maxByOrNull { it.confidence }
+        val still = probableActivities
+            .filter { it.type == DetectedActivity.STILL }
+            .maxByOrNull { it.confidence }
 
         val now = elapsedClock()
         val isCarConnected = preferencesManager.isCarBluetoothConnected()
@@ -317,6 +343,7 @@ class BluetoothArmedDriveMonitor @Inject constructor(
         val highConfidenceVehicle = rawConfidence >= VehicleMotionEvidencePolicy.MIN_IN_VEHICLE_CONFIDENCE
         val moderateVehicle = rawConfidence >= LOW_CONFIDENCE_IN_VEHICLE_FLOOR
         val clearlyWalking = (onFoot?.confidence ?: 0) >= ON_FOOT_SUPPRESS_CONFIDENCE && !moderateVehicle
+        val clearlyStill = (still?.confidence ?: 0) >= STILL_REDUCED_CADENCE_CONFIDENCE
 
         if (!highConfidenceVehicle) {
             if (clearlyWalking) {
@@ -324,7 +351,7 @@ class BluetoothArmedDriveMonitor @Inject constructor(
                 TrackingDiagnostics.logArmedMonitor("ACTIVITY_IGNORED_ON_FOOT", "onFoot=${onFoot?.confidence}")
                 return@withLock false
             }
-            if (!inPostConnectWindow && !moderateVehicle) {
+            if (!isCarConnected && !moderateVehicle) {
                 if (previousSample != null && now - previousSample!!.elapsedRealtimeMillis > VehicleMotionEvidencePolicy.MAX_SAMPLE_GAP_MILLIS) {
                     previousSample = null
                 }
@@ -333,7 +360,12 @@ class BluetoothArmedDriveMonitor @Inject constructor(
             }
         }
 
-        if (lastLocationSampleElapsed > 0L && now - lastLocationSampleElapsed < MIN_LOCATION_SAMPLE_INTERVAL_MILLIS) {
+        val requiredSampleInterval = if (highConfidenceVehicle || inPostConnectWindow || moderateVehicle || !clearlyStill) {
+            MIN_LOCATION_SAMPLE_INTERVAL_MILLIS
+        } else {
+            EXTENDED_CONNECTED_SAMPLE_INTERVAL_MILLIS
+        }
+        if (lastLocationSampleElapsed > 0L && now - lastLocationSampleElapsed < requiredSampleInterval) {
             return@withLock false
         }
         lastLocationSampleElapsed = now
@@ -518,6 +550,159 @@ class BluetoothArmedDriveMonitor @Inject constructor(
             TrackingDiagnostics.logArmedMonitor(
                 "AWAITING_MOVEMENT_CORROBORATION",
                 "rawConf=$rawConfidence effConf=$effectiveConfidence acc=${accuracyMeters}m speed=${speedMps ?: "null"} disp=${displacementMeters ?: "null"} hasPrev=${previous != null}"
+            )
+            false
+        }
+    }
+
+    /**
+     * Immediate one-shot GPS probe triggered when a saved vehicle connects or Bluetooth adapter
+     * turns back ON while already driving. Confirms immediately only on reliable GPS speed
+     * (>= 3.0 m/s, acc <= 35m) or corroborated displacement (>= 45m) vs a preserved anchor, and
+     * otherwise stores a parked origin anchor for subsequent corroboration.
+     */
+    suspend fun probeMovementOnConnect(): Boolean = sampleMutex.withLock {
+        val now = elapsedClock()
+        if (!preferencesManager.isCarBluetoothConnected()) return@withLock false
+        if (lastConnectProbeElapsed > 0L && now - lastConnectProbeElapsed < CONNECT_PROBE_MIN_GAP_MILLIS) {
+            return@withLock false
+        }
+        lastConnectProbeElapsed = now
+        lastLocationSampleElapsed = now
+
+        val location = try {
+            val provider = locationProvider
+            if (provider != null) provider() else {
+                val cancellation = CancellationTokenSource()
+                try {
+                    val request = CurrentLocationRequest.Builder()
+                        .setPriority(Priority.PRIORITY_HIGH_ACCURACY)
+                        .setMaxUpdateAgeMillis(5_000L)
+                        .setDurationMillis(8_000L)
+                        .build()
+                    withTimeoutOrNull(10_000L) {
+                        fusedLocationClient.getCurrentLocation(request, cancellation.token).await()
+                    }
+                } finally {
+                    cancellation.cancel()
+                }
+            }
+        } catch (e: Exception) {
+            TrackingDiagnostics.logArmedMonitor("CONNECT_PROBE_UNAVAILABLE", e.javaClass.simpleName)
+            null
+        } ?: return@withLock false
+
+        val postSampleNow = maxOf(now, elapsedClock())
+        val fixElapsed = location.elapsedRealtimeNanos.takeIf { it > 0L }?.div(1_000_000L) ?: 0L
+        val futureSkewMs = fixElapsed - postSampleNow
+        val sampleAgeMs = (postSampleNow - fixElapsed).coerceAtLeast(0L)
+        if (fixElapsed <= 0L || futureSkewMs > MAX_FUTURE_CLOCK_SKEW_MILLIS ||
+            sampleAgeMs > VehicleMotionEvidencePolicy.MAX_SAMPLE_GAP_MILLIS
+        ) {
+            TrackingDiagnostics.logMovementGate(
+                gate = "CONNECT_PROBE_FRESHNESS",
+                passed = false,
+                rawConf = 0,
+                effectiveConf = 0,
+                speedMps = if (location.hasSpeed()) location.speed else null,
+                displacementMeters = null,
+                accuracyMeters = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE,
+                sampleAgeMs = sampleAgeMs,
+                sampleGapMs = 0L,
+                inPostConnectWindow = true,
+                hasPrev = previousSample != null,
+                detail = "fixElapsed=$fixElapsed postNow=$postSampleNow skew=${futureSkewMs}ms"
+            )
+            return@withLock false
+        }
+
+        val accuracyMeters = if (location.hasAccuracy()) location.accuracy else Float.MAX_VALUE
+        val effectiveConfidence = if (accuracyMeters <= VehicleMotionEvidencePolicy.MAX_ACCURACY_METERS) {
+            VehicleMotionEvidencePolicy.MIN_IN_VEHICLE_CONFIDENCE
+        } else {
+            0
+        }
+        val speedMps = if (location.hasSpeed()) location.speed else null
+        val current = VehicleMotionEvidencePolicy.Sample(
+            latitude = location.latitude,
+            longitude = location.longitude,
+            accuracyMeters = accuracyMeters,
+            speedMetersPerSecond = speedMps,
+            elapsedRealtimeMillis = fixElapsed,
+            inVehicleConfidence = effectiveConfidence
+        )
+        val previous = previousSample
+
+        val directSpeedConfirmed = accuracyMeters in 0f..CONNECT_PROBE_MAX_ACCURACY_METERS &&
+            speedMps != null && speedMps.isFinite() && speedMps >= CONNECT_PROBE_MIN_SPEED_MPS
+        val displacementConfirmed = accuracyMeters in 0f..VehicleMotionEvidencePolicy.MAX_ACCURACY_METERS &&
+            previous != null &&
+            current.elapsedRealtimeMillis > previous.elapsedRealtimeMillis &&
+            VehicleMotionEvidencePolicy.confirmsMovement(previous, current)
+        val confirmed = directSpeedConfirmed || displacementConfirmed
+
+        val displacementMeters = previous?.let { prev ->
+            val out = FloatArray(1)
+            Location.distanceBetween(prev.latitude, prev.longitude, current.latitude, current.longitude, out)
+            out[0].toDouble()
+        }
+        val sampleGapMs = previous?.let { current.elapsedRealtimeMillis - it.elapsedRealtimeMillis } ?: 0L
+
+        if (confirmed && (lastTriggeredElapsed == 0L || postSampleNow - lastTriggeredElapsed >= STARTUP_TRIGGER_COOLDOWN_MILLIS)) {
+            lastTriggeredElapsed = postSampleNow
+            previousSample = null
+            TrackingDiagnostics.logMovementGate(
+                gate = "CONNECT_PROBE",
+                passed = true,
+                rawConf = 0,
+                effectiveConf = effectiveConfidence,
+                speedMps = speedMps,
+                displacementMeters = displacementMeters,
+                accuracyMeters = accuracyMeters,
+                sampleAgeMs = sampleAgeMs,
+                sampleGapMs = sampleGapMs,
+                inPostConnectWindow = true,
+                hasPrev = previous != null,
+                detail = "directSpeed=$directSpeedConfirmed disp=$displacementConfirmed"
+            )
+            TrackingDiagnostics.logAutoStartDecision(
+                source = "BT_CONNECT_PROBE",
+                accepted = true,
+                reasonCode = "MOVEMENT_CORROBORATED",
+                detail = "acc=${accuracyMeters}m speed=${speedMps ?: "null"} disp=${displacementMeters ?: "null"}"
+            )
+            true
+        } else {
+            val cooldownBlocked = confirmed
+            val shouldKeepOriginAnchor = !cooldownBlocked &&
+                previous != null &&
+                previous.inVehicleConfidence >= VehicleMotionEvidencePolicy.MIN_IN_VEHICLE_CONFIDENCE &&
+                previous.accuracyMeters in 0f..VehicleMotionEvidencePolicy.MAX_ACCURACY_METERS &&
+                sampleGapMs in 0L..VehicleMotionEvidencePolicy.MAX_SAMPLE_GAP_MILLIS
+            if (!cooldownBlocked) {
+                previousSample = when {
+                    shouldKeepOriginAnchor -> previous
+                    accuracyMeters in 0f..VehicleMotionEvidencePolicy.MAX_ACCURACY_METERS -> current
+                    else -> null
+                }
+            }
+            TrackingDiagnostics.logMovementGate(
+                gate = if (cooldownBlocked) "CONNECT_PROBE_COOLDOWN" else "CONNECT_PROBE",
+                passed = false,
+                rawConf = 0,
+                effectiveConf = effectiveConfidence,
+                speedMps = speedMps,
+                displacementMeters = displacementMeters,
+                accuracyMeters = accuracyMeters,
+                sampleAgeMs = sampleAgeMs,
+                sampleGapMs = sampleGapMs,
+                inPostConnectWindow = true,
+                hasPrev = previous != null,
+                detail = if (cooldownBlocked) {
+                    "cooldownRemMs=${STARTUP_TRIGGER_COOLDOWN_MILLIS - (postSampleNow - lastTriggeredElapsed)}"
+                } else {
+                    "anchorStored=${previousSample != null} keptOrigin=$shouldKeepOriginAnchor"
+                }
             )
             false
         }
