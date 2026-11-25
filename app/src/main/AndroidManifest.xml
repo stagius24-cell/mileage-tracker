@@ -89,6 +89,7 @@
                 <action android:name="com.businesstracker.mileage.ACTION_VEHICLE_ACTIVITY_UPDATE" />
                 <action android:name="com.businesstracker.mileage.ACTION_BACKGROUND_GPS_UPDATE" />
                 <action android:name="com.businesstracker.mileage.ACTION_BT_CONNECT_PROBE" />
+                <action android:name="com.businesstracker.mileage.ACTION_PASSIVE_DRIVE_WAKEUP" />
             </intent-filter>
         </receiver>
 
@@ -119,6 +120,8 @@
                 <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
                 <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
                 <action android:name="android.bluetooth.adapter.action.STATE_CHANGED" />
+                <action android:name="android.bluetooth.a2dp.profile.action.CONNECTION_STATE_CHANGED" />
+                <action android:name="android.bluetooth.headset.profile.action.CONNECTION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
 

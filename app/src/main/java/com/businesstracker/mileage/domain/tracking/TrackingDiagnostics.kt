@@ -235,6 +235,10 @@ object TrackingDiagnostics {
         record("BluetoothArmedMonitor", action, reason)
     }
 
+    fun logPassiveMonitor(action: String, detail: String) {
+        record("PassiveDriveMonitor", action, detail)
+    }
+
     fun logBluetoothEvent(
         action: String,
         redactedDevice: String,

@@ -532,6 +532,7 @@ class SettingsViewModel @Inject constructor(
         val header = listOf(
             "AutoTrackingEnabled: ${current.autoTrackingEnabled}",
             "TransitionsRegistered: ${current.isTransitionsRegistered} (error=${current.transitionRegistrationError ?: "none"})",
+            "PassiveDriveMonitor: ${activityTransitionManager.registrationState.value.isPassiveDriveRegistered}",
             "BgLocationPermission: ${current.hasBackgroundLocationPermission}",
             "BluetoothAutoStop: ${current.bluetoothAutoStopEnabled}",
             "SavedVehicles: ${vehicleSummaries.joinToString("; ").ifBlank { "none" }}"

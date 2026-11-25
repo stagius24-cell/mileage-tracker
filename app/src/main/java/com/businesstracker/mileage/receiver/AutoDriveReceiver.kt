@@ -45,6 +45,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -60,8 +61,10 @@ class AutoDriveReceiver : BroadcastReceiver() {
         const val ACTION_ACTIVITY_TRANSITION = "com.businesstracker.mileage.ACTION_ACTIVITY_TRANSITION"
         const val ACTION_BACKGROUND_GPS_UPDATE = "com.businesstracker.mileage.ACTION_BACKGROUND_GPS_UPDATE"
         const val ACTION_BT_CONNECT_PROBE = "com.businesstracker.mileage.ACTION_BT_CONNECT_PROBE"
+        const val ACTION_PASSIVE_DRIVE_WAKEUP = "com.businesstracker.mileage.ACTION_PASSIVE_DRIVE_WAKEUP"
         const val TRANSITION_REQUEST_CODE = 3001
         const val BACKGROUND_GPS_REQUEST_CODE = 3003
+        const val PASSIVE_DRIVE_WAKEUP_REQUEST_CODE = 3004
         const val START_TRIGGER_DISPLACEMENT_METERS = 200.0f
         const val MAX_TRANSITION_AGE_NANOS = 120_000_000_000L // 2 minutes
         const val CANDIDATE_WINDOW_MILLIS = 240_000L
@@ -69,9 +72,13 @@ class AutoDriveReceiver : BroadcastReceiver() {
         @Volatile
         private var lastLoggedActiveSessionTripId: String? = null
 
+        @Volatile
+        private var lastLoggedRejectedTransitionKey: String? = null
+
         @VisibleForTesting
         internal fun resetDiagnosticDedupeForTesting() {
             lastLoggedActiveSessionTripId = null
+            lastLoggedRejectedTransitionKey = null
         }
 
         fun buildBackgroundGpsPendingIntent(context: Context): PendingIntent {
@@ -99,6 +106,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
     @Inject lateinit var tripLifecycleDao: TripLifecycleDao
     @Inject lateinit var decisionEngine: AutoDriveDecisionEngine
     @Inject lateinit var bluetoothArmedDriveMonitor: BluetoothArmedDriveMonitor
+    @Inject lateinit var passiveDriveMonitor: PassiveDriveMonitor
     @Inject lateinit var ioDispatcher: CoroutineDispatcher
     @Inject lateinit var bootCountProvider: BootCountProvider
     @Inject lateinit var vehicleBluetoothMatcher: VehicleBluetoothMatcher
@@ -115,14 +123,21 @@ class AutoDriveReceiver : BroadcastReceiver() {
     @VisibleForTesting
     internal var elapsedClock: () -> Long = SystemClock::elapsedRealtime
 
+    @VisibleForTesting
+    internal var lastJob: Job? = null
+
     private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     override fun onReceive(context: Context, intent: Intent?) {
+        processBroadcastIntent(context, intent)
+    }
+
+    internal fun processBroadcastIntent(context: Context, intent: Intent?) {
         if (intent == null) return
 
         if (intent.action == ACTION_BT_CONNECT_PROBE) {
             val pendingResult = goAsync()
-            receiverScope.launch(ioDispatcher) {
+            lastJob = receiverScope.launch(ioDispatcher) {
                 try {
                     handleBluetoothConnectProbe(context)
                 } finally {
@@ -132,11 +147,26 @@ class AutoDriveReceiver : BroadcastReceiver() {
             return
         }
 
+        if (intent.action == ACTION_PASSIVE_DRIVE_WAKEUP) {
+            val locations = LocationResult.extractResult(intent)?.locations.orEmpty()
+            if (locations.isNotEmpty()) {
+                val pendingResult = goAsync()
+                lastJob = receiverScope.launch(ioDispatcher) {
+                    try {
+                        handlePassiveDriveWakeup(context, locations)
+                    } finally {
+                        pendingResult?.finish()
+                    }
+                }
+            }
+            return
+        }
+
         if (intent.action == ACTION_BACKGROUND_GPS_UPDATE) {
             val locations = LocationResult.extractResult(intent)?.locations.orEmpty()
             if (locations.isNotEmpty()) {
                 val pendingResult = goAsync()
-                receiverScope.launch(ioDispatcher) {
+                lastJob = receiverScope.launch(ioDispatcher) {
                     try {
                         handleBackgroundGpsUpdate(context, locations)
                     } finally {
@@ -152,7 +182,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
         ) {
             val activityResult = ActivityRecognitionResult.extractResult(intent) ?: return
             val pendingResult = goAsync()
-            receiverScope.launch(ioDispatcher) {
+            lastJob = receiverScope.launch(ioDispatcher) {
                 try {
                     handleArmedActivityUpdate(context, activityResult.probableActivities)
                 } finally {
@@ -166,7 +196,7 @@ class AutoDriveReceiver : BroadcastReceiver() {
         val result = ActivityTransitionResult.extractResult(intent) ?: return
         val pendingResult = goAsync()
 
-        receiverScope.launch(ioDispatcher) {
+        lastJob = receiverScope.launch(ioDispatcher) {
             try {
                 val currentBoot = bootCountProvider.getBootCount()
                 val receiptTimeNanos = SystemClock.elapsedRealtimeNanos()
@@ -177,17 +207,22 @@ class AutoDriveReceiver : BroadcastReceiver() {
                     // Cross-delivery deduplication check
                     val last = preferencesManager.getLastTransitionTimestamp()
                     if (last != null && last.second == currentBoot && event.elapsedRealTimeNanos <= last.first) {
-                        TrackingDiagnostics.logTransition(
-                            eventTimeNanos = event.elapsedRealTimeNanos,
-                            receiptTimeNanos = receiptTimeNanos,
-                            activityType = event.activityType,
-                            transitionType = event.transitionType,
-                            bootCount = currentBoot,
-                            isAccepted = false,
-                            reason = "Duplicate or older event across deliveries"
-                        )
+                        val dedupeKey = "$currentBoot:${event.elapsedRealTimeNanos}:${event.activityType}:${event.transitionType}"
+                        if (lastLoggedRejectedTransitionKey != dedupeKey) {
+                            lastLoggedRejectedTransitionKey = dedupeKey
+                            TrackingDiagnostics.logTransition(
+                                eventTimeNanos = event.elapsedRealTimeNanos,
+                                receiptTimeNanos = receiptTimeNanos,
+                                activityType = event.activityType,
+                                transitionType = event.transitionType,
+                                bootCount = currentBoot,
+                                isAccepted = false,
+                                reason = "Duplicate or older event across deliveries"
+                            )
+                        }
                         continue
                     }
+                    lastLoggedRejectedTransitionKey = null
                     preferencesManager.recordLastTransitionTimestamp(event.elapsedRealTimeNanos, currentBoot)
 
                     // 2-minute age freshness check: treat older events as historical signals, not auto-start triggers
@@ -298,6 +333,30 @@ class AutoDriveReceiver : BroadcastReceiver() {
         if (bluetoothArmedDriveMonitor.probeMovementOnConnect()) {
             TrackingDiagnostics.logArmedMonitor("MOVEMENT_CONFIRMED", "starting candidate flow from Bluetooth connect probe")
             handleVehicleEnter(context, source = "BT_CONNECT_PROBE")
+        }
+    }
+
+    internal suspend fun handlePassiveDriveWakeup(context: Context, locations: List<Location>) {
+        if (!::passiveDriveMonitor.isInitialized) return
+        val isAutoTrackingEnabled = preferencesManager.isAutoTrackingEnabled.first()
+        if (!isAutoTrackingEnabled) return
+
+        val withinSchedule = preferencesManager.isWithinWorkSchedule()
+        val outsideBehavior = preferencesManager.getOutsideScheduleBehavior()
+        if (!withinSchedule && outsideBehavior == TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY) {
+            return
+        }
+
+        if (LocationTrackingService.serviceState.value.isTracking ||
+            activeTripRepository.getActiveTrip() != null
+        ) return
+
+        if (passiveDriveMonitor.evaluateWakeup(locations)) {
+            TrackingDiagnostics.logPassiveMonitor(
+                "TRIGGERING_CANDIDATE_DRIVE",
+                "starting candidate flow from passive location wakeup"
+            )
+            handleVehicleEnter(context, source = "PASSIVE_LOCATION_WAKEUP")
         }
     }
 
@@ -673,6 +732,9 @@ class AutoDriveReceiver : BroadcastReceiver() {
                     if (::bluetoothArmedDriveMonitor.isInitialized) {
                         bluetoothArmedDriveMonitor.resetTriggerCooldown()
                     }
+                    if (::passiveDriveMonitor.isInitialized) {
+                        passiveDriveMonitor.resetTriggerCooldown()
+                    }
                     TrackingDiagnostics.logCandidate(tripId, "LaunchFailedReconciled", elapsedSinceReq, deadlineRem, 0.0)
                     TrackingDiagnostics.logCandidateLaunchDetail(
                         tripId = tripId,
@@ -838,6 +900,9 @@ class AutoDriveReceiver : BroadcastReceiver() {
             if (::bluetoothArmedDriveMonitor.isInitialized) {
                 bluetoothArmedDriveMonitor.resetTriggerCooldown()
                 bluetoothArmedDriveMonitor.reconcile()
+            }
+            if (::passiveDriveMonitor.isInitialized) {
+                passiveDriveMonitor.resetTriggerCooldown()
             }
             return
         }

@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 216
-        versionName = "1.0.216"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Fix auto-start after 15+ min parked wait, Bluetooth toggle reconnect, and diagnostic report truncation.\"")
+        versionCode = 217
+        versionName = "1.0.217"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Add low-power passive GPS drive wakeup fallback when Bluetooth and Activity Recognition miss drive starts, add Bluetooth A2DP/HFP connect listeners, and deduplicate stale transition replay logs.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

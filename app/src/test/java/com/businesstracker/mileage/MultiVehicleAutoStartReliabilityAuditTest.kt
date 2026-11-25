@@ -2,7 +2,11 @@ package com.businesstracker.mileage
 
 import android.Manifest
 import android.app.Application
+import android.bluetooth.BluetoothA2dp
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothHeadset
+import android.bluetooth.BluetoothManager
+import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.content.Intent
 import android.location.Location
@@ -57,13 +61,19 @@ import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
 import com.businesstracker.mileage.receiver.AutoDriveReceiver
 import com.businesstracker.mileage.receiver.BluetoothArmedDriveMonitor
 import com.businesstracker.mileage.receiver.BootReceiver
+import com.businesstracker.mileage.receiver.PassiveDriveMonitor
 import com.businesstracker.mileage.receiver.VehicleBluetoothEventHandler
+import com.businesstracker.mileage.receiver.VehicleBluetoothReceiver
 import com.businesstracker.mileage.service.LocationTrackingService
 import com.businesstracker.mileage.service.NotificationHelper
 import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.ui.dashboard.DashboardViewModel
 import com.businesstracker.mileage.worker.TripDebounceScheduler
 import com.businesstracker.mileage.worker.TripDebounceWorker
+import com.google.android.gms.common.internal.safeparcel.SafeParcelableSerializer
+import com.google.android.gms.location.ActivityTransition
+import com.google.android.gms.location.ActivityTransitionEvent
+import com.google.android.gms.location.ActivityTransitionResult
 import com.google.android.gms.location.DetectedActivity
 import com.google.android.gms.location.LocationServices
 import com.google.gson.Gson
@@ -110,6 +120,7 @@ class MultiVehicleAutoStartReliabilityAuditTest {
     private lateinit var matcher: VehicleBluetoothMatcher
     private lateinit var scheduler: RecordingScheduler
     private lateinit var monitor: BluetoothArmedDriveMonitor
+    private lateinit var passiveMonitor: PassiveDriveMonitor
     private lateinit var eventHandler: VehicleBluetoothEventHandler
     private lateinit var receiver: AutoDriveReceiver
     private lateinit var finalizationCoordinator: TripFinalizationCoordinator
@@ -155,6 +166,7 @@ class MultiVehicleAutoStartReliabilityAuditTest {
         )
 
         LocationTrackingService.resetGuardForTesting()
+        AutoDriveReceiver.resetDiagnosticDedupeForTesting()
         TrackingDiagnostics.clearForTesting()
 
         val directExecutor = Executor { it.run() }
@@ -173,6 +185,7 @@ class MultiVehicleAutoStartReliabilityAuditTest {
         preferencesManager.setInVehicleState(false)
         preferencesManager.setActiveTripId(null)
         preferencesManager.clearManualVehicleAssignment()
+        preferencesManager.setScheduleFilteringEnabled(false)
         preferencesManager.setOutsideScheduleBehavior(TrackingPreferencesManager.BEHAVIOR_CLASSIFY_PERSONAL)
 
         vehicleRepository = VehicleRepositoryImpl(database.vehicleDao())
@@ -204,6 +217,11 @@ class MultiVehicleAutoStartReliabilityAuditTest {
             activityUpdateUnregistrar = {}
         }
 
+        passiveMonitor = PassiveDriveMonitor(context).apply {
+            elapsedClock = { fakeElapsedClockMillis }
+            resetForTesting()
+        }
+
         eventHandler = VehicleBluetoothEventHandler(
             preferencesManager,
             activeTripRepository,
@@ -218,6 +236,7 @@ class MultiVehicleAutoStartReliabilityAuditTest {
             tripLifecycleDao = database.tripLifecycleDao()
             decisionEngine = AutoDriveDecisionEngine()
             bluetoothArmedDriveMonitor = monitor
+            passiveDriveMonitor = passiveMonitor
             ioDispatcher = testDispatcher
             bootCountProvider = object : BootCountProvider { override fun getBootCount(): Int = 1 }
         }
@@ -264,9 +283,15 @@ class MultiVehicleAutoStartReliabilityAuditTest {
                 preferencesManager.setCarBluetoothConnected(false)
                 preferencesManager.setConnectedCarAddresses(emptySet())
                 preferencesManager.clearManualVehicleAssignment()
+                preferencesManager.setInVehicleState(false)
+                preferencesManager.setActiveTripId(null)
+                preferencesManager.setScheduleFilteringEnabled(false)
+                preferencesManager.setAutoTrackingEnabled(true)
+                preferencesManager.setBluetoothDisconnectPending(false)
             }
         }
         LocationTrackingService.resetGuardForTesting()
+        AutoDriveReceiver.resetDiagnosticDedupeForTesting()
         TrackingDiagnostics.clearForTesting()
         if (::database.isInitialized) {
             database.close()
@@ -284,6 +309,19 @@ class MultiVehicleAutoStartReliabilityAuditTest {
         latitude = lat
         longitude = lon
         speed = speedMps
+        accuracy = accuracyMeters
+        elapsedRealtimeNanos = elapsedMillis * 1_000_000L
+        time = elapsedMillis
+    }
+
+    private fun makeLocationNoSpeed(
+        lat: Double,
+        lon: Double,
+        elapsedMillis: Long,
+        accuracyMeters: Float = 75f
+    ) = Location("test").apply {
+        latitude = lat
+        longitude = lon
         accuracy = accuracyMeters
         elapsedRealtimeNanos = elapsedMillis * 1_000_000L
         time = elapsedMillis
@@ -1770,6 +1808,311 @@ class MultiVehicleAutoStartReliabilityAuditTest {
                 it.category == "StopDeadline" && it.code == "BT_RECONNECT_DEBOUNCE_CANCELLED"
             }
         )
+    }
+
+    // 45. Driving without Bluetooth and without IN_VEHICLE ENTER triggers passive location wakeup -> high-accuracy probe -> candidate trip
+    @Test(timeout = 15_000)
+    fun scenario45_drivingWithoutBluetoothOrActivityTransition_startsViaPassiveWakeupProbe() = runBlocking {
+        TrackingDiagnostics.clearForTesting()
+        var launchedCount = 0
+        receiver.serviceLauncher = { _, _ -> launchedCount++ }
+
+        // Ensure BT is disconnected and no armed monitor
+        assertFalse(preferencesManager.isCarBluetoothConnected())
+        assertFalse(monitor.isArmedForTesting())
+
+        // Cold start: balanced-power wakeup delivers location without speed after 150m displacement
+        var probeCount = 0
+        passiveMonitor.highAccuracyLocationProvider = {
+            probeCount++
+            makeLocation(37.3400, -121.8863, fakeElapsedClockMillis, speedMps = 11.5f, accuracyMeters = 6f)
+        }
+
+        receiver.handlePassiveDriveWakeup(
+            context,
+            listOf(makeLocationNoSpeed(37.3398, -121.8863, fakeElapsedClockMillis, accuracyMeters = 75f))
+        )
+
+        assertEquals("Coarse passive wakeup must trigger single-shot high-accuracy probe", 1, probeCount)
+        assertEquals("Confirmed driving must launch foreground tracking service", 1, launchedCount)
+        val activeTripId = preferencesManager.activeTripId.first()
+        assertNotNull("Passive wakeup drive confirmation must create active candidate trip", activeTripId)
+        val events = TrackingDiagnostics.getRecentEvents()
+        assertTrue(events.any { it.category == "PassiveDriveMonitor" && it.code == "DRIVING_CONFIRMED" })
+        assertTrue(events.any { it.category == "PassiveDriveMonitor" && it.code == "TRIGGERING_CANDIDATE_DRIVE" })
+        assertTrue(events.any { it.category == "AutoStartDecision" && it.code == "PASSIVE_LOCATION_WAKEUP_ACCEPTED_StartCandidateDrive" })
+    }
+
+    // 46. Driving confirmed immediately on high-accuracy passive fix with speed >= 4.5 m/s without needing a second probe
+    @Test(timeout = 15_000)
+    fun scenario46_highAccuracyPassiveFixWithDrivingSpeed_startsWithoutSecondProbe() = runBlocking {
+        TrackingDiagnostics.clearForTesting()
+        var launchedCount = 0
+        var probeCount = 0
+        receiver.serviceLauncher = { _, _ -> launchedCount++ }
+        passiveMonitor.highAccuracyLocationProvider = {
+            probeCount++
+            null
+        }
+
+        receiver.handlePassiveDriveWakeup(
+            context,
+            listOf(makeLocation(37.3382, -121.8863, fakeElapsedClockMillis, speedMps = 12.0f, accuracyMeters = 8f))
+        )
+
+        assertEquals("Fast path high-accuracy driving speed must not invoke second GPS probe", 0, probeCount)
+        assertEquals(1, launchedCount)
+        assertNotNull(preferencesManager.activeTripId.first())
+    }
+
+    // 47. Red-light displacement confirmation: prior parked anchor + 220m in 25s (8.8 m/s implied) at speed=0 -> starts trip
+    @Test(timeout = 15_000)
+    fun scenario47_redLightDisplacementAfterParkedAnchor_confirmsDrivingWithoutCurrentSpeed() = runBlocking {
+        TrackingDiagnostics.clearForTesting()
+        var launchedCount = 0
+        receiver.serviceLauncher = { _, _ -> launchedCount++ }
+
+        // Parked baseline anchor recorded at t=100s
+        passiveMonitor.highAccuracyLocationProvider = {
+            makeLocation(37.3382, -121.8863, fakeElapsedClockMillis, speedMps = 0f, accuracyMeters = 7f)
+        }
+        receiver.handlePassiveDriveWakeup(
+            context,
+            listOf(makeLocationNoSpeed(37.3382, -121.8863, fakeElapsedClockMillis, accuracyMeters = 60f))
+        )
+        assertNull("Stationary baseline must NOT create a trip", preferencesManager.activeTripId.first())
+
+        // 25s later: vehicle drove ~222m north and is stopped at a red light (speed=0 m/s, high accuracy)
+        fakeElapsedClockMillis += 25_000L
+        receiver.handlePassiveDriveWakeup(
+            context,
+            listOf(makeLocation(37.3402, -121.8863, fakeElapsedClockMillis, speedMps = 0f, accuracyMeters = 7f))
+        )
+
+        assertEquals(1, launchedCount)
+        assertNotNull("Implied speed ~8.9 m/s over >150m must confirm driving even at red light", preferencesManager.activeTripId.first())
+    }
+
+    // 48. False-start protection: walking, jogging, and cell-tower jump never create a trip
+    @Test(timeout = 15_000)
+    fun scenario48_walkingJoggingAndCellTowerJump_areRejectedWithoutFalseStart() = runBlocking {
+        TrackingDiagnostics.clearForTesting()
+        var launchedCount = 0
+        receiver.serviceLauncher = { _, _ -> launchedCount++ }
+
+        // A. Walking: parked anchor at t=100s, then ~166m in 115s (~1.44 m/s implied, 1.4 m/s speed)
+        passiveMonitor.highAccuracyLocationProvider = {
+            makeLocation(37.3382, -121.8863, fakeElapsedClockMillis, speedMps = 0f, accuracyMeters = 7f)
+        }
+        receiver.handlePassiveDriveWakeup(
+            context,
+            listOf(makeLocationNoSpeed(37.3382, -121.8863, fakeElapsedClockMillis, accuracyMeters = 60f))
+        )
+        fakeElapsedClockMillis += 115_000L
+        receiver.handlePassiveDriveWakeup(
+            context,
+            listOf(makeLocation(37.3397, -121.8863, fakeElapsedClockMillis, speedMps = 1.4f, accuracyMeters = 7f))
+        )
+        assertNull("Walking must NEVER start a trip", preferencesManager.activeTripId.first())
+
+        // B. Jogging: reset anchor at t=300s, then ~166m in 60s (~2.76 m/s implied, 2.7 m/s speed)
+        passiveMonitor.resetForTesting()
+        fakeElapsedClockMillis = 300_000L
+        passiveMonitor.highAccuracyLocationProvider = {
+            makeLocation(37.3382, -121.8863, fakeElapsedClockMillis, speedMps = 0f, accuracyMeters = 7f)
+        }
+        receiver.handlePassiveDriveWakeup(
+            context,
+            listOf(makeLocationNoSpeed(37.3382, -121.8863, fakeElapsedClockMillis, accuracyMeters = 60f))
+        )
+        fakeElapsedClockMillis += 60_000L
+        receiver.handlePassiveDriveWakeup(
+            context,
+            listOf(makeLocation(37.3397, -121.8863, fakeElapsedClockMillis, speedMps = 2.7f, accuracyMeters = 7f))
+        )
+        assertNull("Jogging (< 4.5 m/s) must NEVER start a trip", preferencesManager.activeTripId.first())
+
+        // C. Cell-tower jump: noisy coarse network fix jumps far, single-shot high-accuracy probe proves device is stationary at home
+        passiveMonitor.resetForTesting()
+        fakeElapsedClockMillis = 400_000L
+        passiveMonitor.highAccuracyLocationProvider = {
+            makeLocation(37.3382, -121.8863, fakeElapsedClockMillis, speedMps = 0f, accuracyMeters = 6f)
+        }
+        receiver.handlePassiveDriveWakeup(
+            context,
+            listOf(makeLocationNoSpeed(37.3450, -121.8863, fakeElapsedClockMillis, accuracyMeters = 180f))
+        )
+        assertNull("Cell-tower jump confirmed stationary by GPS probe must NEVER start a trip", preferencesManager.activeTripId.first())
+        assertEquals(0, launchedCount)
+    }
+
+    // 49. Passive wakeup respects battery-saver schedule setting, autoTracking=false, and active trip guard
+    @Test(timeout = 15_000)
+    fun scenario49_passiveWakeupRespectsBatterySaverAutoTrackingOffAndActiveTrip() = runBlocking {
+        var probeCount = 0
+        var launchedCount = 0
+        receiver.serviceLauncher = { _, _ -> launchedCount++ }
+        passiveMonitor.highAccuracyLocationProvider = {
+            probeCount++
+            makeLocation(37.3400, -121.8863, fakeElapsedClockMillis, speedMps = 12f, accuracyMeters = 6f)
+        }
+
+        // 1. Outside schedule with BEHAVIOR_CONSERVE_BATTERY
+        preferencesManager.setScheduleFilteringEnabled(true)
+        preferencesManager.setWorkDays("")
+        preferencesManager.setOutsideScheduleBehavior(TrackingPreferencesManager.BEHAVIOR_CONSERVE_BATTERY)
+        receiver.handlePassiveDriveWakeup(
+            context,
+            listOf(makeLocation(37.3400, -121.8863, fakeElapsedClockMillis, speedMps = 14f, accuracyMeters = 8f))
+        )
+        assertEquals(0, launchedCount)
+        assertEquals(0, probeCount)
+
+        // Reset schedule filtering, disable auto-tracking
+        preferencesManager.setScheduleFilteringEnabled(false)
+        preferencesManager.setAutoTrackingEnabled(false)
+        receiver.handlePassiveDriveWakeup(
+            context,
+            listOf(makeLocation(37.3400, -121.8863, fakeElapsedClockMillis, speedMps = 14f, accuracyMeters = 8f))
+        )
+        assertEquals(0, launchedCount)
+        assertEquals(0, probeCount)
+
+        // Enable auto-tracking, but active trip already exists
+        preferencesManager.setAutoTrackingEnabled(true)
+        val existingTripId = "existing-manual-trip-49"
+        database.activeTripDao().insertActiveTrip(
+            ActiveTripEntity(
+                id = existingTripId,
+                startTime = 5_000L,
+                startLatitude = 37.33,
+                startLongitude = -121.88,
+                lastLatitude = 37.34,
+                lastLongitude = -121.88,
+                lastTimestamp = 6_000L,
+                totalDistanceMeters = 300.0,
+                trackingMethod = TrackingMethod.MANUAL_GPS.value
+            )
+        )
+        receiver.handlePassiveDriveWakeup(
+            context,
+            listOf(makeLocationNoSpeed(37.3400, -121.8863, fakeElapsedClockMillis, accuracyMeters = 70f))
+        )
+        assertEquals(0, launchedCount)
+        assertEquals(0, probeCount)
+        assertEquals(existingTripId, activeTripRepository.getActiveTrip()?.id)
+    }
+
+    // 50. VehicleBluetoothReceiver forwards A2DP/Headset STATE_CONNECTED while ignoring profile STATE_DISCONNECTED
+    @Test(timeout = 15_000)
+    fun scenario50_vehicleBluetoothReceiver_handlesProfileConnectWithoutFalseDisconnect() = runBlocking {
+        TrackingDiagnostics.clearForTesting()
+        val btAdapter = (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+        val device = btAdapter.getRemoteDevice(model3.bluetoothAddress)
+
+        val btReceiver = VehicleBluetoothReceiver().apply {
+            eventHandler = this@MultiVehicleAutoStartReliabilityAuditTest.eventHandler
+            preferencesManager = this@MultiVehicleAutoStartReliabilityAuditTest.preferencesManager
+            bluetoothArmedDriveMonitor = monitor
+            ioDispatcher = testDispatcher
+        }
+
+        // A2DP profile connects -> marks vehicle connected and arms monitor
+        val a2dpConnect = Intent(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED).apply {
+            putExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_CONNECTED)
+            putExtra(BluetoothDevice.EXTRA_DEVICE, device)
+        }
+        btReceiver.processBroadcastIntent(context, a2dpConnect)
+        btReceiver.lastJob?.join()
+        assertTrue("A2DP STATE_CONNECTED must connect vehicle", preferencesManager.isCarBluetoothConnected())
+        assertTrue("A2DP STATE_CONNECTED must arm Bluetooth monitor", monitor.isArmedForTesting())
+
+        // Headset profile disconnects during a call/switch -> must NOT trigger disconnect or disarm
+        val hfpDisconnect = Intent(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED).apply {
+            putExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_DISCONNECTED)
+            putExtra(BluetoothDevice.EXTRA_DEVICE, device)
+        }
+        btReceiver.processBroadcastIntent(context, hfpDisconnect)
+        btReceiver.lastJob?.join()
+        assertTrue("Headset STATE_DISCONNECTED alone must keep vehicle connected", preferencesManager.isCarBluetoothConnected())
+        assertFalse("Headset STATE_DISCONNECTED must not schedule false stop", scheduler.scheduled)
+
+        // Headset profile connects while A2DP was missed on Model Y -> connects Model Y cleanly
+        preferencesManager.setCarBluetoothConnected(false)
+        preferencesManager.setConnectedCarAddresses(emptySet())
+        val deviceY = btAdapter.getRemoteDevice(modelY.bluetoothAddress)
+        val hfpConnect = Intent(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED).apply {
+            putExtra(BluetoothProfile.EXTRA_STATE, BluetoothProfile.STATE_CONNECTED)
+            putExtra(BluetoothDevice.EXTRA_DEVICE, deviceY)
+        }
+        btReceiver.processBroadcastIntent(context, hfpConnect)
+        btReceiver.lastJob?.join()
+        assertTrue(preferencesManager.isCarBluetoothConnected())
+        assertTrue(preferencesManager.getConnectedCarAddresses().contains(VehicleBluetoothMatchPolicy.normalizeAddress(modelY.bluetoothAddress!!)))
+    }
+
+    // 51. Stale STILL ENTER transition replay logs Transition REJECTED only once; ActivityTransitionManager manages passive monitor hooks
+    @Test(timeout = 15_000)
+    fun scenario51_duplicateStillTransitionReplayDedupesLog_andTransitionManagerHooksPassiveMonitor() = runBlocking {
+        TrackingDiagnostics.clearForTesting()
+        AutoDriveReceiver.resetDiagnosticDedupeForTesting()
+        preferencesManager.recordLastTransitionTimestamp(0L, 1)
+
+        val baseNanos = SystemClock.elapsedRealtimeNanos()
+        val stillEvent = ActivityTransitionEvent(
+            DetectedActivity.STILL,
+            ActivityTransition.ACTIVITY_TRANSITION_ENTER,
+            baseNanos
+        )
+        val result = ActivityTransitionResult(listOf(stillEvent))
+        val transitionIntent = Intent(AutoDriveReceiver.ACTION_ACTIVITY_TRANSITION).also {
+            SafeParcelableSerializer.serializeToIntentExtra(
+                result,
+                it,
+                "com.google.android.location.internal.EXTRA_ACTIVITY_TRANSITION_RESULT"
+            )
+        }
+
+        // 1st delivery: accepted as fresh STILL ENTER
+        receiver.processBroadcastIntent(context, transitionIntent)
+        receiver.lastJob?.join()
+        // Replays 2nd, 3rd, 4th time on process restart -> rejected once in diagnostic log
+        repeat(3) {
+            receiver.processBroadcastIntent(context, transitionIntent)
+            receiver.lastJob?.join()
+        }
+
+        val acceptedCount = TrackingDiagnostics.getRecentEvents().count {
+            it.category == "Transition" && it.code == "ACCEPTED"
+        }
+        val rejectedCount = TrackingDiagnostics.getRecentEvents().count {
+            it.category == "Transition" && it.code == "REJECTED"
+        }
+        assertEquals("Initial delivery must be accepted", 1, acceptedCount)
+        assertEquals("Repeated replay of identical STILL ENTER transition must log REJECTED only once", 1, rejectedCount)
+
+        // ActivityTransitionManager invokes passiveLocationRegistrar / passiveLocationUnregistrar hooks
+        var passiveRegCalls = 0
+        var passiveUnregCalls = 0
+        val manager = ActivityTransitionManager(context).apply {
+            transitionRegistrar = { true }
+            transitionUnregistrar = { true }
+            passiveLocationRegistrar = {
+                passiveRegCalls++
+                true
+            }
+            passiveLocationUnregistrar = {
+                passiveUnregCalls++
+                true
+            }
+        }
+        assertTrue(manager.registerTransitions(force = true))
+        assertEquals(1, passiveRegCalls)
+        assertTrue(manager.registrationState.value.isPassiveDriveRegistered)
+
+        assertTrue(manager.unregisterTransitions())
+        assertEquals(1, passiveUnregCalls)
+        assertFalse(manager.registrationState.value.isPassiveDriveRegistered)
     }
 
     private class RecordingScheduler(context: Context) : TripDebounceScheduler(context) {
