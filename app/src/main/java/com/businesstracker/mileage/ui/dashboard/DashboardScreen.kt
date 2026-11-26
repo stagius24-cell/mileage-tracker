@@ -5,6 +5,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -30,18 +31,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.BrightnessLow
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Sort
-import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.BrightnessLow
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.GpsNotFixed
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Undo
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.FilterChip
@@ -113,83 +117,112 @@ fun DashboardScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .background(if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.background else Color(0xFFF3F6FA)),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 2.dp, bottom = 16.dp),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            // MileIQ-Style Header Bar (Month Picker + Document Icon & 3-Stat Bar)
+            // Trackr-Style Header: "Dashboard" on left, compact Month/Year pill + Filter icon on right
             item {
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    // Top Row: Month Dropdown in Center, Document Icon on Right
-                    Box(
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Center: Month Selector
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.Center)
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { monthMenuExpanded = true }
-                                .padding(horizontal = 10.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = state.selectedMonthName.ifEmpty { "November" },
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontSize = 22.sp,
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = MaterialTheme.colorScheme.onBackground
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Icon(
-                                imageVector = Icons.Default.ArrowDropDown,
-                                contentDescription = "Select Month",
-                                tint = MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.size(24.dp)
-                            )
+                        Text(
+                            text = "Dashboard",
+                            style = MaterialTheme.typography.titleLarge.copy(
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
 
-                            DropdownMenu(
-                                expanded = monthMenuExpanded,
-                                onDismissRequest = { monthMenuExpanded = false }
-                            ) {
-                                state.availableMonths.forEach { monthIso ->
-                                    val date = try {
-                                        LocalDate.parse("$monthIso-01")
-                                    } catch (_: Exception) {
-                                        LocalDate.now()
-                                    }
-                                    val name = date.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
-                                    DropdownMenuItem(
-                                        text = { Text("$name ${date.year}") },
-                                        onClick = {
-                                            viewModel.selectMonth(monthIso)
-                                            monthMenuExpanded = false
-                                        }
-                                    )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            val compactMonthLabel = remember(state.selectedMonthPrefix, state.selectedMonthName, state.selectedYear) {
+                                try {
+                                    val d = LocalDate.parse("${state.selectedMonthPrefix}-01")
+                                    "${d.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())} ${d.year}"
+                                } catch (_: Exception) {
+                                    val shortMonth = state.selectedMonthName.take(3).ifBlank { "Nov" }
+                                    "$shortMonth ${state.selectedYear}"
                                 }
                             }
-                        }
+                            val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                            Box {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE9EEF5),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { monthMenuExpanded = true }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CalendarMonth,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Text(
+                                            text = compactMonthLabel,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onBackground
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Default.ExpandMore,
+                                            contentDescription = "Select Month",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
 
-                        // Right: Sort / Time Filter Toggle Button (replaces Reports icon)
-                        IconButton(
-                            onClick = { isTimeFilterExpanded = !isTimeFilterExpanded },
-                            modifier = Modifier.align(Alignment.CenterEnd)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Sort,
-                                contentDescription = "Filter by Time Period",
-                                tint = if (isTimeFilterExpanded) SucculentPrimary else MaterialTheme.colorScheme.onBackground,
-                                modifier = Modifier.size(24.dp)
-                            )
+                                DropdownMenu(
+                                    expanded = monthMenuExpanded,
+                                    onDismissRequest = { monthMenuExpanded = false }
+                                ) {
+                                    state.availableMonths.forEach { monthIso ->
+                                        val date = try {
+                                            LocalDate.parse("$monthIso-01")
+                                        } catch (_: Exception) {
+                                            LocalDate.now()
+                                        }
+                                        val name = date.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
+                                        DropdownMenuItem(
+                                            text = { Text("$name ${date.year}") },
+                                            onClick = {
+                                                viewModel.selectMonth(monthIso)
+                                                monthMenuExpanded = false
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+
+                            IconButton(
+                                onClick = { isTimeFilterExpanded = !isTimeFilterExpanded },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Tune,
+                                    contentDescription = "Filter by Time Period",
+                                    tint = if (isTimeFilterExpanded) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
                         }
                     }
 
-                    // Collapsible Area: Time Filter Chips & Secondary Summary Metrics
                     AnimatedVisibility(
                         visible = isTimeFilterExpanded,
                         enter = fadeIn() + expandVertically(),
@@ -199,8 +232,7 @@ fun DashboardScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            // Dashboard presets; custom ranges remain available to other flows.
+                            Spacer(modifier = Modifier.height(6.dp))
                             LazyRow(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -222,37 +254,84 @@ fun DashboardScreen(
                 }
             }
 
+            val isLiveOrRecovery = serviceState.isTracking || serviceState.isRecoveryRequired
+
+            if (isLiveOrRecovery) {
+                item {
+                    DriveTrackingTable(
+                        serviceState = serviceState,
+                        isAutoTrackingEnabled = state.isAutoTrackingEnabled,
+                        onStart = { viewModel.startManualTracking() },
+                        onPause = { viewModel.pauseTracking() },
+                        onResume = { viewModel.resumeTracking() },
+                        onEnd = { viewModel.endTracking() },
+                        onSelectVehicle = if (savedVehicles.isNotEmpty()) {
+                            { showActiveVehiclePicker = true }
+                        } else null
+                    )
+                }
+            }
+
             item {
                 val (startDate, endDate) = state.timeFilter.toDateRange(
                     customStartDate = state.customStartDate,
                     customEndDate = state.customEndDate
                 )
                 val periodLabel = if (state.timeFilter == TimeFilter.CUSTOM && state.selectedMonthName.isNotBlank()) {
-                    state.selectedMonthName
+                    "${state.selectedMonthName} ${state.selectedYear}"
+                } else if (state.timeFilter == TimeFilter.THIS_MONTH) {
+                    "${state.selectedMonthName} ${state.selectedYear}"
                 } else {
                     state.timeFilter.displayName
                 }
-                MileageBreakdownCard(
-                    summary = state.summary,
-                    periodLabel = periodLabel,
-                    onCategoryClick = if (onNavigateToHistory != null) {
-                        { category -> onNavigateToHistory(category, startDate, endDate) }
-                    } else null,
-                    onDeductionClick = onNavigateToReports
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Monthly mileage",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            text = periodLabel,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    MileageBreakdownCard(
+                        summary = state.summary,
+                        periodLabel = periodLabel,
+                        onCategoryClick = if (onNavigateToHistory != null) {
+                            { category -> onNavigateToHistory(category, startDate, endDate) }
+                        } else null,
+                        onDeductionClick = onNavigateToReports
+                    )
+                }
             }
 
-            // Section: Drive Tracking Table (Single Table incorporated from Track tab)
+            if (!isLiveOrRecovery) {
+                item {
+                    DriveTrackingTable(
+                        serviceState = serviceState,
+                        isAutoTrackingEnabled = state.isAutoTrackingEnabled,
+                        onStart = { viewModel.startManualTracking() },
+                        onPause = { viewModel.pauseTracking() },
+                        onResume = { viewModel.resumeTracking() },
+                        onEnd = { viewModel.endTracking() },
+                        onSelectVehicle = null
+                    )
+                }
+            }
+
             item {
-                DriveTrackingTable(
-                    serviceState = serviceState,
-                    onStart = { viewModel.startManualTracking() },
-                    onPause = { viewModel.pauseTracking() },
-                    onResume = { viewModel.resumeTracking() },
-                    onEnd = { viewModel.endTracking() },
-                    onSelectVehicle = if ((serviceState.isTracking || serviceState.isRecoveryRequired) && savedVehicles.isNotEmpty()) {
-                        { showActiveVehiclePicker = true }
-                    } else null
+                AnnualSummaryCard(
+                    year = state.selectedYear,
+                    annualSummary = state.annualSummary
                 )
             }
 
@@ -474,6 +553,7 @@ fun DashboardScreen(
 @Composable
 private fun DriveTrackingTable(
     serviceState: TrackingServiceState,
+    isAutoTrackingEnabled: Boolean,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -481,7 +561,12 @@ private fun DriveTrackingTable(
     onSelectVehicle: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val cardColor = if (isDark) MaterialTheme.colorScheme.surface else Color.White
+    val dividerColor = if (isDark) MaterialTheme.colorScheme.outlineVariant else Color(0xFFE2E8F0)
+    val mutedColor = if (isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF64748B)
     val isHighAccuracy = (serviceState.lastWaypoint?.accuracy ?: 99f) <= 20f
+    val isActiveOrRecovery = serviceState.isTracking || serviceState.isRecoveryRequired
 
     val formattedDuration = remember(serviceState.durationMillis) {
         val hours = TimeUnit.MILLISECONDS.toHours(serviceState.durationMillis)
@@ -497,63 +582,119 @@ private fun DriveTrackingTable(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.7f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // Table Header: Title + Tesla Badge + GPS Indicator (No Dim button)
+        if (!isActiveOrRecovery) {
+            // Compact Ready to Drive Card when idle
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
                     Surface(
-                        shape = CircleShape,
-                        color = if (serviceState.isTracking && !serviceState.isCandidate) SucculentPrimary.copy(alpha = 0.15f) else SlateNeutral.copy(alpha = 0.15f),
-                        modifier = Modifier.size(28.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        color = SucculentPrimary.copy(alpha = 0.12f),
+                        modifier = Modifier.size(40.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.DirectionsCar,
                             contentDescription = null,
-                            tint = if (serviceState.isTracking && !serviceState.isCandidate) SucculentPrimary else SlateNeutral,
-                            modifier = Modifier.padding(5.dp)
+                            tint = SucculentPrimary,
+                            modifier = Modifier.padding(9.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(
-                            text = if (serviceState.isTracking) {
-                                if (serviceState.isPaused) "Active Drive (Paused)"
-                                else if (serviceState.isCandidate) "Checking for driving"
-                                else "Active Drive Tracking"
-                            } else if (serviceState.isRecoveryRequired) {
-                                "Drive Interrupted"
-                            } else {
-                                "Drive Tracker"
-                            },
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
+                            text = "Ready to Drive",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        if (!serviceState.isTracking) {
-                            Text(
-                                text = if (serviceState.isRecoveryRequired) {
-                                    serviceState.statusMessage ?: "Recovery Required • Preserved"
-                                } else {
-                                    serviceState.vehicleName?.let { "$it • Ready" } ?: "Ready"
-                                },
-                                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        val autoLabel = if (isAutoTrackingEnabled) "Auto-tracking on" else "Auto-tracking off"
+                        val subtitle = serviceState.vehicleName?.let { "$it · $autoLabel" } ?: autoLabel
+                        Text(
+                            text = subtitle,
+                            fontSize = 12.sp,
+                            color = mutedColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                OutlinedButton(
+                    onClick = onStart,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, SucculentPrimary.copy(alpha = 0.5f)),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = SucculentPrimary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Start",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SucculentPrimary
+                    )
+                }
+            }
+        } else {
+            // Active Drive Tracking Card (Trackr minimalist style, no distracting animations)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = SucculentPrimary.copy(alpha = 0.12f),
+                            modifier = Modifier.size(38.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DirectionsCar,
+                                contentDescription = null,
+                                tint = SucculentPrimary,
+                                modifier = Modifier.padding(8.dp)
                             )
-                        } else {
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = when {
+                                    serviceState.isRecoveryRequired -> "Drive interrupted"
+                                    serviceState.isPaused -> "Drive paused"
+                                    serviceState.isCandidate -> "Checking for driving"
+                                    else -> "Drive in progress"
+                                },
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
                             val vehicleLabel = serviceState.vehicleName ?: if (serviceState.ambiguousVehicleCount > 1) {
-                                "Unknown vehicle · Select car"
+                                "Select vehicle"
                             } else {
                                 "Unknown vehicle"
                             }
@@ -563,195 +704,191 @@ private fun DriveTrackingTable(
                                     Modifier
                                         .clip(RoundedCornerShape(6.dp))
                                         .clickable(onClick = onSelectVehicle)
-                                        .padding(vertical = 2.dp)
                                 } else Modifier
                             ) {
                                 Text(
                                     text = vehicleLabel,
-                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                                    fontSize = 13.sp,
                                     color = if (serviceState.ambiguousVehicleCount > 1 && serviceState.vehicleName == null) {
                                         SucculentPrimary
                                     } else {
-                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                                        mutedColor
                                     },
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 if (serviceState.vehicleBluetoothConnected) {
-                                    Spacer(Modifier.width(4.dp))
-                                    Icon(Icons.Default.Bluetooth, contentDescription = "Vehicle Bluetooth connected",
-                                        tint = SucculentPrimary, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(5.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Bluetooth,
+                                        contentDescription = "Vehicle Bluetooth connected",
+                                        tint = SucculentPrimary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
                                 }
                                 if (onSelectVehicle != null) {
                                     Spacer(Modifier.width(2.dp))
                                     Icon(
                                         imageVector = Icons.Default.ExpandMore,
                                         contentDescription = "Select trip vehicle",
-                                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                                        tint = mutedColor,
                                         modifier = Modifier.size(14.dp)
                                     )
                                 }
                             }
-                            if (serviceState.isCandidate) {
-                                Text(
-                                    text = "Verifying vehicle movement • Candidate",
-                                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                                )
-                            }
                         }
                     }
-                }
 
-                // GPS Accuracy Badge (Right side of header, no Dim button)
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = if (isHighAccuracy) HighAccuracyGreen.copy(alpha = 0.15f) else WeakGpsAmber.copy(alpha = 0.15f)
-                ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
-                        Icon(
-                            imageVector = if (isHighAccuracy) Icons.Default.GpsFixed else Icons.Default.GpsNotFixed,
-                            contentDescription = null,
-                            tint = if (isHighAccuracy) HighAccuracyGreen else WeakGpsAmber,
-                            modifier = Modifier.size(12.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(if (isHighAccuracy) HighAccuracyGreen else WeakGpsAmber)
                         )
-                        Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = if (isHighAccuracy) "High GPS" else "GPS...",
-                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                            fontWeight = FontWeight.Bold,
+                            text = if (isHighAccuracy) "GPS strong" else "GPS weak",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
                             color = if (isHighAccuracy) HighAccuracyGreen else WeakGpsAmber
                         )
                     }
                 }
-            }
 
-            // Table Main Section: Compact Metrics Bar (DURATION | LIVE MILES | SPEED - No waypoints under speed)
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 6.dp, horizontal = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
+                // Centered Primary Live Mileage (32sp Semibold, tabular numerals)
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    TableMetricCell(
-                        label = "DURATION",
-                        value = formattedDuration,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .height(24.dp)
-                            .width(1.dp)
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-                    )
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.weight(1.3f)
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.Center
                     ) {
                         Text(
                             text = String.format(Locale.US, "%.2f", serviceState.distanceMiles),
                             style = MaterialTheme.typography.displayMedium.copy(
-                                fontSize = 26.sp,
-                                fontWeight = FontWeight.Black
+                                fontSize = 32.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFeatureSettings = "tnum"
                             ),
-                            color = MaterialTheme.colorScheme.onBackground
+                            color = MaterialTheme.colorScheme.onSurface
                         )
-                        Spacer(modifier = Modifier.height(1.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "LIVE MILES",
-                            style = MaterialTheme.typography.labelSmall.copy(
-                                letterSpacing = 1.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = SucculentPrimary
+                            text = "mi",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = mutedColor,
+                            modifier = Modifier.padding(bottom = 5.dp)
                         )
                     }
-                    Box(
-                        modifier = Modifier
-                            .height(24.dp)
-                            .width(1.dp)
-                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
-                    )
-                    TableMetricCell(
-                        label = "SPEED",
-                        value = "${String.format(Locale.US, "%.0f", serviceState.currentSpeedMph)} mph",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            // Table Actions: Start Drive (when idle) OR Pause/Resume + End Trip (when tracking)
-            if (!serviceState.isTracking) {
-                Button(
-                    onClick = onStart,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(40.dp),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = SucculentPrimary,
-                        contentColor = Color.White
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
-                    contentPadding = PaddingValues(vertical = 0.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                        tint = Color.White
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Start Manual Drive",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = Color.White
+                        text = "Live mileage",
+                        fontSize = 13.sp,
+                        color = mutedColor
                     )
                 }
-            } else {
+
+                // Secondary Metrics: Duration and Current speed
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    Button(
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Schedule,
+                                contentDescription = null,
+                                tint = mutedColor,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Duration",
+                                fontSize = 12.sp,
+                                color = mutedColor
+                            )
+                        }
+                        Text(
+                            text = formattedDuration,
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFeatureSettings = "tnum"
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Speed,
+                                contentDescription = null,
+                                tint = mutedColor,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Current speed",
+                                fontSize = 12.sp,
+                                color = mutedColor
+                            )
+                        }
+                        Text(
+                            text = "${String.format(Locale.US, "%.0f", serviceState.currentSpeedMph)} mph",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFeatureSettings = "tnum"
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
+
+                HorizontalDivider(color = dividerColor.copy(alpha = 0.8f))
+
+                // Neutral Outlined Pause/Resume + Soft Red End Trip
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
                         onClick = { if (serviceState.isPaused) onResume() else onPause() },
                         modifier = Modifier
                             .weight(1f)
-                            .height(40.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (serviceState.isPaused) SucculentPrimary else SlateNeutral,
-                            contentColor = Color.White
-                        ),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
-                        contentPadding = PaddingValues(vertical = 0.dp)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(1.dp, dividerColor),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        )
                     ) {
                         Icon(
                             imageVector = if (serviceState.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
                             contentDescription = null,
-                            modifier = Modifier.size(15.dp),
-                            tint = Color.White
+                            modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = if (serviceState.isPaused) "Resume" else "Pause",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = Color.White
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
 
@@ -759,29 +896,26 @@ private fun DriveTrackingTable(
                         onClick = onEnd,
                         modifier = Modifier
                             .weight(1f)
-                            .height(40.dp),
-                        shape = RoundedCornerShape(10.dp),
+                            .height(44.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = SpeedRed,
-                            contentColor = Color.White
+                            containerColor = if (isDark) SpeedRed.copy(alpha = 0.18f) else Color(0xFFFEF2F2),
+                            contentColor = SpeedRed
                         ),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
-                        contentPadding = PaddingValues(vertical = 0.dp)
+                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Stop,
                             contentDescription = null,
-                            modifier = Modifier.size(15.dp),
-                            tint = Color.White
+                            modifier = Modifier.size(16.dp),
+                            tint = SpeedRed
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "End Trip",
-                            style = MaterialTheme.typography.bodyMedium.copy(
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = Color.White
+                            text = "End trip",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = SpeedRed
                         )
                     }
                 }

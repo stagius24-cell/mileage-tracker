@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 217
-        versionName = "1.0.217"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Add low-power passive GPS drive wakeup fallback when Bluetooth and Activity Recognition miss drive starts, add Bluetooth A2DP/HFP connect listeners, and deduplicate stale transition replay logs.\"")
+        versionCode = 218
+        versionName = "1.0.218"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Redesign Dashboard and bottom navigation in Trackr minimalist style with annual YTD summary.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

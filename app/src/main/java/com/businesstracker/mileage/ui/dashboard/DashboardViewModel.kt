@@ -51,8 +51,12 @@ data class DashboardUiState(
     val customStartDate: String = "",
     val customEndDate: String = "",
     val selectedMonthName: String = "",
+    val selectedYear: Int = LocalDate.now().year,
+    val selectedMonthPrefix: String = "",
     val availableMonths: List<String> = emptyList(),
     val summary: DashboardSummary = DashboardSummary(),
+    val annualSummary: DashboardSummary = DashboardSummary(),
+    val isAutoTrackingEnabled: Boolean = true,
     val currentRate: Double = 0.760,
     val lastClassifiedTrip: TripEntity? = null,
     val lastClassificationLabel: String? = null,
@@ -219,6 +223,7 @@ class DashboardViewModel @Inject constructor(
     }
 
     private val customPurposesFlow: Flow<List<String>> = preferencesManager?.customPurposes ?: flowOf(emptyList())
+    private val autoTrackingEnabledFlow: Flow<Boolean> = preferencesManager?.isAutoTrackingEnabled ?: flowOf(true)
 
     private val undoStateFlow = combine(
         _lastClassifiedTrip,
@@ -244,8 +249,9 @@ class DashboardViewModel @Inject constructor(
 
     val uiState: StateFlow<DashboardUiState> = combine(
         tripFilterFlow,
-        actionFlow
-    ) { tripState, actionState ->
+        actionFlow,
+        autoTrackingEnabledFlow
+    ) { tripState, actionState, autoTrackingEnabled ->
 
         val effectiveFilter = if (tripState.timeFilter == TimeFilter.CUSTOM && actionState.customStart.isBlank() && actionState.customEnd.isBlank()) {
             TimeFilter.THIS_MONTH
@@ -267,6 +273,14 @@ class DashboardViewModel @Inject constructor(
             now
         }
         val monthDisplayName = monthDate.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
+        val selectedYear = monthDate.year
+        val annualSummary = summaryUseCase.execute(
+            trips = tripState.allTrips,
+            timeFilter = TimeFilter.CUSTOM,
+            customStartDate = "$selectedYear-01-01",
+            customEndDate = "$selectedYear-12-31",
+            referenceDate = now
+        )
 
         val availableMonths = tripState.allTrips.mapNotNull {
             if (it.date.length >= 7) it.date.substring(0, 7) else null
@@ -278,8 +292,12 @@ class DashboardViewModel @Inject constructor(
             customStartDate = actionState.customStart,
             customEndDate = actionState.customEnd,
             selectedMonthName = monthDisplayName,
+            selectedYear = selectedYear,
+            selectedMonthPrefix = tripState.monthPrefix,
             availableMonths = availableMonths,
             summary = summary,
+            annualSummary = annualSummary,
+            isAutoTrackingEnabled = autoTrackingEnabled,
             currentRate = currentRate,
             lastClassifiedTrip = actionState.lastClassified,
             lastClassificationLabel = actionState.lastClassificationLabel,
@@ -291,7 +309,9 @@ class DashboardViewModel @Inject constructor(
         scope = viewModelScope,
         started = SharingStarted.Eagerly,
         initialValue = DashboardUiState(
-            selectedMonthName = now.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
+            selectedMonthName = now.month.getDisplayName(TextStyle.FULL, Locale.getDefault()),
+            selectedYear = now.year,
+            selectedMonthPrefix = currentMonthIso
         )
     )
 
