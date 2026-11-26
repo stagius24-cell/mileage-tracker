@@ -96,6 +96,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -235,8 +236,10 @@ fun TripDetailScreen(
             }
             .verticalScroll(rememberScrollState())
     ) {
+        val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
+        val collapsedMapHeight = (screenHeightDp * 0.28f).coerceIn(170.dp, 220.dp)
         val mapHeight by animateDpAsState(
-            targetValue = if (isMapExpanded) 340.dp else 200.dp,
+            targetValue = if (isMapExpanded) 340.dp else collapsedMapHeight,
             animationSpec = tween(250),
             label = "trip_map_height"
         )
@@ -293,8 +296,8 @@ fun TripDetailScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -303,7 +306,7 @@ fun TripDetailScreen(
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -312,7 +315,7 @@ fun TripDetailScreen(
                         Text(
                             text = "Trip details",
                             fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontWeight = FontWeight.SemiBold,
                             color = primaryText
                         )
                         Surface(
@@ -323,14 +326,14 @@ fun TripDetailScreen(
                                 text = classificationLabel,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Medium,
                                 color = classificationColor
                             )
                         }
                     }
                     Text(
                         text = receiptDateFormatted,
-                        fontSize = 13.sp,
+                        fontSize = 12.sp,
                         color = mutedText
                     )
                 }
@@ -1010,7 +1013,7 @@ private fun TripDetailTabButton(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
-            modifier = Modifier.padding(vertical = 10.dp),
+            modifier = Modifier.padding(vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1023,7 +1026,7 @@ private fun TripDetailTabButton(
             Text(
                 text = label,
                 fontSize = 14.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                fontWeight = FontWeight.Medium,
                 color = contentColor
             )
         }
@@ -1052,37 +1055,15 @@ private fun RouteDetailsTab(
     onSaveEndLocation: (() -> Unit)? = null
 ) {
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val primaryText = if (isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF172536)
-    val mutedText = if (isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF64748B)
+    val dividerColor = if (isDark) MaterialTheme.colorScheme.outlineVariant else Color(0xFFE2E8F0)
     val emeraldAccent = if (isDark) Color(0xFF43D99A) else Color(0xFF168354)
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 14.dp, vertical = 2.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Trip timeline",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = primaryText
-            )
-            Text(
-                text = "2 locations",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = mutedText
-            )
-        }
-
         DestinationRow(
-            markerLabel = "START",
             primaryName = smartStartName,
             address = startAddress,
             time = startTime,
@@ -1091,8 +1072,8 @@ private fun RouteDetailsTab(
             locationActionLabel = startLocationActionLabel,
             onSaveLocation = onSaveStartLocation
         )
+        HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))
         DestinationRow(
-            markerLabel = "END",
             primaryName = smartEndName,
             address = endAddress,
             time = endTime,
@@ -1106,7 +1087,6 @@ private fun RouteDetailsTab(
 
 @Composable
 private fun DestinationRow(
-    markerLabel: String,
     primaryName: String? = null,
     address: String,
     time: String,
@@ -1128,125 +1108,81 @@ private fun DestinationRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp),
+            .padding(vertical = 12.dp),
         verticalAlignment = Alignment.Top
     ) {
         Box(
             modifier = Modifier
-                .width(24.dp)
-                .heightIn(min = 56.dp)
-                .drawBehind {
-                    val cx = size.width / 2f
-                    val timelineLineColor = Color(0xFFCBD5E1)
-                    val timelineStrokeWidth = 1.5.dp.toPx()
-                    if (isStart) {
-                        drawLine(
-                            color = timelineLineColor,
-                            start = Offset(cx, 18.dp.toPx()),
-                            end = Offset(cx, size.height),
-                            strokeWidth = timelineStrokeWidth
-                        )
-                    } else {
-                        drawLine(
-                            color = timelineLineColor,
-                            start = Offset(cx, 0f),
-                            end = Offset(cx, 10.dp.toPx()),
-                            strokeWidth = timelineStrokeWidth
-                        )
-                    }
-                },
-            contentAlignment = Alignment.TopCenter
+                .padding(top = 1.dp)
+                .size(22.dp),
+            contentAlignment = Alignment.Center
         ) {
             if (isStart) {
                 com.businesstracker.mileage.ui.components.StartBeaconIcon(
-                    size = 18.dp,
+                    size = 20.dp,
                     tint = color
                 )
             } else {
                 com.businesstracker.mileage.ui.components.EndPinIcon(
-                    size = 18.dp,
+                    size = 20.dp,
                     tint = color,
                     fillColor = MaterialTheme.colorScheme.surface
                 )
             }
         }
-        Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(12.dp))
         Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(bottom = if (isStart) 10.dp else 0.dp),
+            modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Text(
+                text = primaryName?.takeIf { it.isNotBlank() } ?: addressParts.first,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = primaryText
+            )
+            val secondaryLine = if (!primaryName.isNullOrBlank()) {
+                address
+            } else {
+                addressParts.second
+            }
+            if (secondaryLine.isNotBlank()) {
                 Text(
-                    text = markerLabel,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = color,
-                    letterSpacing = 0.5.sp
-                )
-                Text(
-                    text = time,
-                    style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
-                    fontWeight = FontWeight.SemiBold,
+                    text = secondaryLine,
+                    fontSize = 12.sp,
                     color = mutedText
                 )
             }
-
-            if (!primaryName.isNullOrBlank()) {
-                Text(
-                    text = primaryName,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = primaryText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(1.dp)
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(
+            horizontalAlignment = Alignment.End,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = time,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFeatureSettings = "tnum"
+                ),
+                color = mutedText
+            )
+            if (onSaveLocation != null) {
+                IconButton(
+                    onClick = onSaveLocation,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .semantics {
+                            contentDescription = "$locationActionLabel ${if (isStart) "start" else "destination"} location"
+                        }
                 ) {
-                    Text(
-                        text = addressParts.first,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = primaryText
+                    Icon(
+                        imageVector = if (locationActionLabel == "Save") Icons.Outlined.BookmarkBorder else Icons.Default.Edit,
+                        contentDescription = null,
+                        tint = mutedText,
+                        modifier = Modifier.size(16.dp)
                     )
-                    if (addressParts.second.isNotBlank()) {
-                        Text(
-                            text = addressParts.second,
-                            fontSize = 12.sp,
-                            color = mutedText
-                        )
-                    }
-                }
-                if (onSaveLocation != null) {
-                    IconButton(
-                        onClick = onSaveLocation,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .semantics {
-                                contentDescription = "$locationActionLabel ${if (isStart) "start" else "destination"} location"
-                            }
-                    ) {
-                        Icon(
-                            imageVector = if (locationActionLabel == "Save") Icons.Outlined.BookmarkBorder else Icons.Default.Edit,
-                            contentDescription = null,
-                            tint = mutedText,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
                 }
             }
         }

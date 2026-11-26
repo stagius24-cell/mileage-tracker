@@ -3,9 +3,12 @@ package com.businesstracker.mileage.ui.reports
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,18 +39,28 @@ import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.QueryStats
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material.icons.filled.ZoomOut
+import androidx.compose.material.icons.outlined.AssignmentTurnedIn
+import androidx.compose.material.icons.outlined.BusinessCenter
+import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.material3.Button
@@ -120,25 +133,18 @@ fun ReportsExportScreen(
     var showBusiness by rememberSaveable { mutableStateOf(true) }
     var showPersonal by rememberSaveable { mutableStateOf(true) }
     var selectedMonthIso by rememberSaveable { mutableStateOf<String?>(null) }
-    var detailsExpanded by rememberSaveable { mutableStateOf(false) }
+    var selectedReportTab by rememberSaveable { mutableStateOf(0) } // 0=Monthly, 1=By vehicle, 2=Saved reports
+    var showAllMonths by rememberSaveable { mutableStateOf(false) }
+    var showPeriodPicker by remember { mutableStateOf(false) }
     val reportsListState = androidx.compose.foundation.lazy.rememberLazyListState()
-
-    androidx.compose.runtime.LaunchedEffect(state.exportErrorMessage) {
-        state.exportErrorMessage?.let { errorMsg ->
-            val result = snackbarHostState.showSnackbar(
-                message = errorMsg,
-                actionLabel = "Retry",
-                duration = androidx.compose.material3.SnackbarDuration.Long
-            )
-            if (result == SnackbarResult.ActionPerformed) {
-                showCreateReportDialog = true
-            }
-            viewModel.clearExportError()
-        }
-    }
 
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val pageBackground = if (isDark) MaterialTheme.colorScheme.background else Color(0xFFF1F4F9)
+    val cardBg = if (isDark) MaterialTheme.colorScheme.surface else Color.White
+    val primaryText = if (isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF172536)
+    val mutedText = if (isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF64748B)
+    val emeraldAccent = if (isDark) Color(0xFF43D99A) else Color(0xFF168354)
+    val dividerColor = if (isDark) MaterialTheme.colorScheme.outlineVariant else Color(0xFFE2E8F0)
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
@@ -148,8 +154,9 @@ fun ReportsExportScreen(
                 .then(if (showCreateReportDialog || previewPdfFile != null) Modifier.blur(8.dp) else Modifier)
                 .background(pageBackground),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+        // 1. Header: "Reports" on left, compact year selector + single "Create report" button on right
         item {
             Row(
                 modifier = Modifier
@@ -162,75 +169,203 @@ fun ReportsExportScreen(
                     text = "Reports",
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    color = primaryText
                 )
 
-                Button(
-                    onClick = { showCreateReportDialog = true },
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                    modifier = Modifier.height(34.dp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.ReceiptLong,
-                        contentDescription = "Create report",
-                        modifier = Modifier.size(14.dp),
-                        tint = Color.White
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = "Create report",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        maxLines = 1
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = cardBg,
+                        border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.8f)),
+                        modifier = Modifier
+                            .height(34.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { showPeriodPicker = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                tint = mutedText,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = state.selectedPeriodLabel,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = primaryText,
+                                maxLines = 1
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ExpandMore,
+                                contentDescription = "Select reporting period",
+                                tint = mutedText,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = { showCreateReportDialog = true },
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ReceiptLong,
+                            contentDescription = "Create report",
+                            modifier = Modifier.size(14.dp),
+                            tint = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "Create report",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
         }
 
+        // 2. Mileage Report Summary Card (no duplicate button inside)
         item {
-            AnnualOverviewSection(
-                year = state.selectedYear,
-                availableYears = state.availableYears,
-                ytdLogged = state.totalDeduction,
+            AnnualMileageReportCard(
+                periodLabel = state.selectedPeriodLabel,
+                isFullYear = state.selectedMonths.isEmpty(),
+                totalDeduction = state.totalDeduction,
                 totalMiles = state.totalMiles,
-                drivesCount = state.totalTrips,
-                onSelectYear = viewModel::selectYear
+                totalTrips = state.totalTrips,
+                cardBg = cardBg,
+                primaryText = primaryText,
+                mutedText = mutedText,
+                emeraldAccent = emeraldAccent,
+                dividerColor = dividerColor
             )
         }
 
+        // 3. Monthly Comparison Line Chart
         item {
-            MonthlyMileageChartCard(
-                monthlySummaries = state.monthlySummaries,
-                showBusiness = showBusiness,
-                showPersonal = showPersonal,
-                selectedMonthIso = selectedMonthIso,
-                onToggleBusiness = { showBusiness = !showBusiness },
-                onTogglePersonal = { showPersonal = !showPersonal },
-                onSelectMonth = { monthIso ->
-                    selectedMonthIso = monthIso
-                    detailsExpanded = true
-                }
-            )
-        }
-
-        item {
-            MonthlyDetailsSection(
-                year = state.selectedYear,
+            MonthlyComparisonLineChartCard(
                 summaries = state.monthlySummaries,
-                expanded = detailsExpanded,
-                selectedMonthIso = selectedMonthIso,
-                onExpandedChange = { detailsExpanded = it },
-                onSelectMonth = { selectedMonthIso = it },
-                onExportMonth = { monthIso ->
-                    viewModel.exportToCsv(monthIso) { intent -> context.startActivity(intent) }
-                },
-                onViewMonthDrives = { monthIso ->
-                    onNavigateToTrips?.invoke(monthIso)
-                }
+                cardBg = cardBg,
+                primaryText = primaryText,
+                mutedText = mutedText,
+                emeraldAccent = emeraldAccent,
+                dividerColor = dividerColor
             )
+        }
+
+        // 3. Trip Review Section
+        item {
+            TripReviewCard(
+                unclassifiedCount = state.unclassifiedCount,
+                incompleteCount = state.incompleteCount,
+                missingPurposeCount = state.missingPurposeCount,
+                cardBg = cardBg,
+                primaryText = primaryText,
+                mutedText = mutedText,
+                emeraldAccent = emeraldAccent,
+                dividerColor = dividerColor,
+                onReviewClick = { onNavigateToTrips?.invoke(state.selectedYear) }
+            )
+        }
+
+        // 4. Minimal Underline Reporting Tabs: Monthly | By vehicle | Saved reports
+        item {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    ReportCenterTab(
+                        label = "Monthly",
+                        icon = Icons.Default.CalendarMonth,
+                        selected = selectedReportTab == 0,
+                        activeColor = emeraldAccent,
+                        inactiveColor = mutedText,
+                        onClick = { selectedReportTab = 0 },
+                        modifier = Modifier.weight(1f)
+                    )
+                    ReportCenterTab(
+                        label = "By vehicle",
+                        icon = Icons.Default.DirectionsCar,
+                        selected = selectedReportTab == 1,
+                        activeColor = emeraldAccent,
+                        inactiveColor = mutedText,
+                        onClick = { selectedReportTab = 1 },
+                        modifier = Modifier.weight(1f)
+                    )
+                    ReportCenterTab(
+                        label = "Saved reports",
+                        icon = Icons.Default.FolderOpen,
+                        selected = selectedReportTab == 2,
+                        activeColor = emeraldAccent,
+                        inactiveColor = mutedText,
+                        onClick = {
+                            viewModel.refreshSavedReports()
+                            selectedReportTab = 2
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                HorizontalDivider(color = dividerColor.copy(alpha = 0.8f), thickness = 1.dp)
+            }
+        }
+
+        // 5/6/7. Tab Content
+        item {
+            when (selectedReportTab) {
+                0 -> MonthlyRecordsTableCard(
+                    year = state.selectedYear,
+                    summaries = state.monthlySummaries,
+                    showAllMonths = showAllMonths,
+                    onToggleShowAll = { showAllMonths = !showAllMonths },
+                    onSelectMonth = { monthIso -> onNavigateToTrips?.invoke(monthIso) },
+                    cardBg = cardBg,
+                    primaryText = primaryText,
+                    mutedText = mutedText,
+                    emeraldAccent = emeraldAccent,
+                    dividerColor = dividerColor
+                )
+                1 -> VehicleReportsCard(
+                    vehicles = state.vehicleSummaries,
+                    onSelectVehicle = { onNavigateToTrips?.invoke(state.selectedYear) },
+                    cardBg = cardBg,
+                    primaryText = primaryText,
+                    mutedText = mutedText,
+                    emeraldAccent = emeraldAccent,
+                    dividerColor = dividerColor
+                )
+                else -> SavedReportsCard(
+                    reports = state.savedReports,
+                    onOpenReport = { item ->
+                        if (item.format == "PDF") {
+                            previewPdfFile = item.file
+                        } else {
+                            context.startActivity(viewModel.buildShareIntent(item.file))
+                        }
+                    },
+                    onShareReport = { item ->
+                        context.startActivity(viewModel.buildShareIntent(item.file))
+                    },
+                    cardBg = cardBg,
+                    primaryText = primaryText,
+                    mutedText = mutedText,
+                    emeraldAccent = emeraldAccent,
+                    dividerColor = dividerColor
+                )
+            }
         }
     }
 
@@ -666,6 +801,19 @@ fun ReportsExportScreen(
         }
     }
 
+        if (showPeriodPicker) {
+            ReportingPeriodBottomSheet(
+                initialYear = state.selectedYear,
+                initialMonths = state.selectedMonths,
+                availableYears = state.availableYears,
+                onDismiss = { showPeriodPicker = false },
+                onApply = { year, months ->
+                    viewModel.setSelectedPeriod(year, months)
+                    showPeriodPicker = false
+                }
+            )
+        }
+
         SnackbarHost(
             hostState = snackbarHostState,
             modifier = Modifier
@@ -711,230 +859,20 @@ private fun CompactFilterMenu(
 }
 
 @Composable
-private fun AnnualOverviewSection(
-    year: String,
-    availableYears: List<String>,
-    ytdLogged: Double,
+private fun AnnualMileageReportCard(
+    periodLabel: String,
+    isFullYear: Boolean,
+    totalDeduction: Double,
     totalMiles: Double,
-    drivesCount: Int,
-    onSelectYear: (String) -> Unit,
-    modifier: Modifier = Modifier
+    totalTrips: Int,
+    cardBg: Color,
+    primaryText: Color,
+    mutedText: Color,
+    emeraldAccent: Color,
+    dividerColor: Color
 ) {
-    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val primaryText = if (isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF172536)
-    val mutedText = if (isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF64748B)
-    val emeraldAccent = if (isDark) Color(0xFF43D99A) else Color(0xFF168354)
-    val dividerColor = if (isDark) MaterialTheme.colorScheme.outlineVariant else Color(0xFFE2E8F0)
-    val sageBg = if (isDark) SucculentPrimary.copy(alpha = 0.10f) else Color(0xFFEDF5F0)
-    val selectorBg = if (isDark) MaterialTheme.colorScheme.surface else Color.White
-    var yearMenuExpanded by remember { mutableStateOf(false) }
-
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Annual overview",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = primaryText
-            )
-            Box {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = selectorBg,
-                    border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.8f)),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .clickable { yearMenuExpanded = true }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CalendarMonth,
-                            contentDescription = null,
-                            tint = mutedText,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = year,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = primaryText
-                        )
-                        Icon(
-                            imageVector = Icons.Default.ExpandMore,
-                            contentDescription = "Select year",
-                            tint = mutedText,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                }
-                DropdownMenu(
-                    expanded = yearMenuExpanded,
-                    onDismissRequest = { yearMenuExpanded = false }
-                ) {
-                    availableYears.forEach { y ->
-                        DropdownMenuItem(
-                            text = { Text(y) },
-                            onClick = {
-                                onSelectYear(y)
-                                yearMenuExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
-        }
-
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                text = "Estimated annual tax deduction",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = mutedText
-            )
-            Text(
-                text = "$${String.format(Locale.US, "%,.2f", ytdLogged)}",
-                style = MaterialTheme.typography.headlineMedium.copy(
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    fontFeatureSettings = "tnum"
-                ),
-                color = emeraldAccent
-            )
-        }
-
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            color = sageBg
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ReportMetricCell(
-                    icon = Icons.Outlined.Route,
-                    iconTint = emeraldAccent,
-                    label = "Total miles",
-                    value = String.format(Locale.US, "%,.1f", totalMiles),
-                    valueColor = primaryText,
-                    labelColor = mutedText,
-                    modifier = Modifier.weight(1f)
-                )
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .height(32.dp)
-                        .background(dividerColor.copy(alpha = 0.9f))
-                )
-                ReportMetricCell(
-                    icon = Icons.Default.DirectionsCar,
-                    iconTint = emeraldAccent,
-                    label = "Trips",
-                    value = "$drivesCount",
-                    valueColor = primaryText,
-                    labelColor = mutedText,
-                    modifier = Modifier.weight(1f)
-                )
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .height(32.dp)
-                        .background(dividerColor.copy(alpha = 0.9f))
-                )
-                ReportMetricCell(
-                    icon = Icons.Default.CalendarMonth,
-                    iconTint = emeraldAccent,
-                    label = "Period",
-                    value = year,
-                    valueColor = primaryText,
-                    labelColor = mutedText,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReportMetricCell(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    iconTint: Color,
-    label: String,
-    value: String,
-    valueColor: Color,
-    labelColor: Color,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier.padding(horizontal = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp)
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(14.dp)
-            )
-            Text(
-                text = label,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = labelColor,
-                maxLines = 1
-            )
-        }
-        Text(
-            text = value,
-            style = MaterialTheme.typography.titleMedium.copy(
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                fontFeatureSettings = "tnum"
-            ),
-            color = valueColor,
-            maxLines = 1
-        )
-    }
-}
-
-@Composable
-private fun MonthlyMileageChartCard(
-    monthlySummaries: List<MonthSummary>,
-    showBusiness: Boolean,
-    showPersonal: Boolean,
-    selectedMonthIso: String?,
-    onToggleBusiness: () -> Unit,
-    onTogglePersonal: () -> Unit,
-    onSelectMonth: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val cardBg = if (isDark) MaterialTheme.colorScheme.surface else Color.White
-    val primaryText = if (isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF172536)
-    val mutedText = if (isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF64748B)
-    val dividerColor = if (isDark) MaterialTheme.colorScheme.outlineVariant else Color(0xFFE2E8F0)
-    val emeraldAccent = if (isDark) Color(0xFF43D99A) else Color(0xFF168354)
-    val personalAccent = if (isDark) Color(0xFF75B9FF) else PersonalBlue
-
     Card(
-        modifier = modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = cardBg),
         border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.7f)),
@@ -943,8 +881,170 @@ private fun MonthlyMileageChartCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = emeraldAccent.copy(alpha = 0.12f),
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Description,
+                        contentDescription = null,
+                        tint = emeraldAccent,
+                        modifier = Modifier.padding(7.dp)
+                    )
+                }
+                Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        text = if (isFullYear) "Annual Mileage Report" else "Mileage Report",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = primaryText
+                    )
+                    Text(
+                        text = if (isFullYear) "Jan 1 – Dec 31, $periodLabel" else periodLabel,
+                        fontSize = 12.sp,
+                        color = mutedText
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Est. tax deduction",
+                        fontSize = 11.sp,
+                        color = mutedText
+                    )
+                    Text(
+                        text = "$${String.format(Locale.US, "%,.2f", totalDeduction)}",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFeatureSettings = "tnum"
+                        ),
+                        color = emeraldAccent
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(32.dp)
+                        .background(dividerColor.copy(alpha = 0.8f))
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "Total mileage",
+                        fontSize = 11.sp,
+                        color = mutedText
+                    )
+                    Text(
+                        text = "${String.format(Locale.US, "%,.1f", totalMiles)} mi",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFeatureSettings = "tnum"
+                        ),
+                        color = primaryText
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .height(32.dp)
+                        .background(dividerColor.copy(alpha = 0.8f))
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(0.75f)
+                        .padding(start = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "Total trips",
+                        fontSize = 11.sp,
+                        color = mutedText
+                    )
+                    Text(
+                        text = "$totalTrips",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFeatureSettings = "tnum"
+                        ),
+                        color = primaryText
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthlyComparisonLineChartCard(
+    summaries: List<MonthSummary>,
+    cardBg: Color,
+    primaryText: Color,
+    mutedText: Color,
+    emeraldAccent: Color,
+    dividerColor: Color
+) {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val personalBlue = if (isDark) Color(0xFF75B9FF) else PersonalBlue
+    var showBusiness by rememberSaveable { mutableStateOf(true) }
+    var showPersonal by rememberSaveable { mutableStateOf(true) }
+    var selectedMetric by rememberSaveable { mutableStateOf(0) } // 0=Mileage, 1=Est. deduction, 2=Trip count
+    var metricMenuExpanded by remember { mutableStateOf(false) }
+    var tappedMonthIso by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val metricLabels = listOf("Mileage", "Est. deduction", "Trip count")
+    val chronological = remember(summaries) { summaries.sortedBy { it.monthIso } }
+    val chartMonths = remember(chronological) {
+        if (chronological.size > 6) chronological.takeLast(6) else chronological
+    }
+
+    fun seriesValue(m: MonthSummary, isBiz: Boolean): Double = when (selectedMetric) {
+        0 -> if (isBiz) safeMiles(m.businessMiles) else safeMiles(m.personalMiles)
+        1 -> if (isBiz) m.loggedDeduction.coerceAtLeast(0.0) else 0.0
+        else -> if (isBiz) m.businessDrives.toDouble() else (m.totalDrives - m.businessDrives).coerceAtLeast(0).toDouble()
+    }
+
+    val maxVal = remember(chartMonths, showBusiness, showPersonal, selectedMetric) {
+        val rawMax = chartMonths.maxOfOrNull { m ->
+            maxOf(
+                if (showBusiness) seriesValue(m, true) else 0.0,
+                if (showPersonal) seriesValue(m, false) else 0.0
+            )
+        } ?: 0.0
+        mileageAxisMaximum(rawMax)
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.7f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -952,91 +1052,825 @@ private fun MonthlyMileageChartCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Monthly mileage",
-                    fontSize = 16.sp,
+                    text = "Monthly comparison",
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = primaryText
                 )
-                Text(
-                    text = "mi",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = mutedText
-                )
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { metricMenuExpanded = true }
+                            .padding(horizontal = 6.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            text = metricLabels[selectedMetric],
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = mutedText
+                        )
+                        Icon(
+                            imageVector = Icons.Default.ExpandMore,
+                            contentDescription = "Select metric",
+                            tint = mutedText,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = metricMenuExpanded,
+                        onDismissRequest = { metricMenuExpanded = false }
+                    ) {
+                        metricLabels.forEachIndexed { idx, label ->
+                            DropdownMenuItem(
+                                text = { Text(label) },
+                                onClick = {
+                                    selectedMetric = idx
+                                    metricMenuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(20.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                MileageCategoryToggle(
-                    label = "Business",
-                    selected = showBusiness,
-                    color = emeraldAccent,
-                    mutedColor = mutedText,
-                    onClick = onToggleBusiness
-                )
-                MileageCategoryToggle(
-                    label = "Personal",
-                    selected = showPersonal,
-                    color = personalAccent,
-                    mutedColor = mutedText,
-                    onClick = onTogglePersonal
-                )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { showBusiness = !showBusiness }
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(12.dp)
+                            .height(3.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(if (showBusiness) emeraldAccent else mutedText.copy(alpha = 0.3f))
+                    )
+                    Text(
+                        text = "Business",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = if (showBusiness) primaryText else mutedText
+                    )
+                }
+
+                if (selectedMetric != 1) {
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable { showPersonal = !showPersonal }
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(12.dp)
+                                .height(3.dp)
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(if (showPersonal) personalBlue else mutedText.copy(alpha = 0.3f))
+                        )
+                        Text(
+                            text = "Personal",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (showPersonal) primaryText else mutedText
+                        )
+                    }
+                }
             }
 
-            val chartMonths = monthlySummaries.take(6).reversed()
-            if (!showBusiness && !showPersonal) {
-                Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+            if (chartMonths.isEmpty() || (!showBusiness && !showPersonal)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
-                        text = "Select a category to view mileage.",
+                        text = if (chartMonths.isEmpty()) "No data for selected period." else "Select a series to display.",
                         fontSize = 12.sp,
                         color = mutedText
                     )
                 }
             } else {
-                MonthlyStackedMileageChart(
-                    months = chartMonths,
-                    showBusiness = showBusiness,
-                    showPersonal = showPersonal,
-                    selectedMonthIso = selectedMonthIso,
-                    businessColor = emeraldAccent,
-                    personalColor = personalAccent,
-                    onSelectMonth = onSelectMonth
+                val plotHeight = 124.dp
+                Row(modifier = Modifier.fillMaxWidth().height(plotHeight + 22.dp)) {
+                    Column(
+                        modifier = Modifier.width(34.dp).height(plotHeight),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        val topStr = if (selectedMetric == 1) "$${String.format(Locale.US, "%.0f", maxVal)}" else String.format(Locale.US, "%.0f", maxVal)
+                        val midStr = if (selectedMetric == 1) "$${String.format(Locale.US, "%.0f", maxVal / 2)}" else String.format(Locale.US, "%.0f", maxVal / 2)
+                        Text(topStr, fontSize = 10.sp, color = mutedText)
+                        Text(midStr, fontSize = 10.sp, color = mutedText)
+                        Text("0", fontSize = 10.sp, color = mutedText)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(plotHeight)
+                        ) {
+                            val dashEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
+                            val gridColor = dividerColor.copy(alpha = 0.7f)
+                            listOf(0f, size.height / 2f, size.height).forEach { y ->
+                                drawLine(
+                                    color = gridColor,
+                                    start = Offset(0f, y),
+                                    end = Offset(size.width, y),
+                                    strokeWidth = 1.dp.toPx(),
+                                    pathEffect = dashEffect
+                                )
+                            }
+
+                            val count = chartMonths.size
+                            val stepX = if (count > 1) size.width / (count - 1).coerceAtLeast(1) else size.width / 2f
+
+                            fun drawSeries(isBiz: Boolean, lineColor: Color) {
+                                var prevPoint: Offset? = null
+                                chartMonths.forEachIndexed { idx, m ->
+                                    if (m.totalDrives == 0) {
+                                        prevPoint = null
+                                        return@forEachIndexed
+                                    }
+                                    val v = seriesValue(m, isBiz)
+                                    val x = if (count == 1) size.width / 2f else idx * stepX
+                                    val y = (size.height * (1.0 - (v / maxVal).coerceIn(0.0, 1.0))).toFloat()
+                                    val pt = Offset(x, y)
+                                    prevPoint?.let { prev ->
+                                        drawLine(
+                                            color = lineColor,
+                                            start = prev,
+                                            end = pt,
+                                            strokeWidth = 2.dp.toPx()
+                                        )
+                                    }
+                                    drawCircle(
+                                        color = lineColor,
+                                        radius = if (m.monthIso == tappedMonthIso) 4.5.dp.toPx() else 3.dp.toPx(),
+                                        center = pt
+                                    )
+                                    prevPoint = pt
+                                }
+                            }
+
+                            if (showPersonal && selectedMetric != 1) {
+                                drawSeries(false, personalBlue)
+                            }
+                            if (showBusiness) {
+                                drawSeries(true, emeraldAccent)
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            chartMonths.forEach { m ->
+                                Text(
+                                    text = m.monthName.take(3),
+                                    fontSize = 11.sp,
+                                    fontWeight = if (m.monthIso == tappedMonthIso) FontWeight.SemiBold else FontWeight.Normal,
+                                    color = if (m.monthIso == tappedMonthIso) emeraldAccent else mutedText,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .clickable {
+                                            tappedMonthIso = if (tappedMonthIso == m.monthIso) null else m.monthIso
+                                        }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                chartMonths.firstOrNull { it.monthIso == tappedMonthIso }?.let { selected ->
+                    val prevCalIso = runCatching {
+                        java.time.LocalDate.parse("${selected.monthIso}-01").minusMonths(1)
+                            .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM"))
+                    }.getOrNull()
+                    val prevMonth = prevCalIso?.let { iso -> summaries.firstOrNull { it.monthIso == iso && it.totalDrives > 0 } }
+                    val curVal = seriesValue(selected, true)
+                    val momText = if (prevMonth != null) {
+                        val prevVal = seriesValue(prevMonth, true)
+                        val diff = curVal - prevVal
+                        val sign = if (diff >= 0) "+" else ""
+                        if (selectedMetric == 1) " ($sign$${String.format(Locale.US, "%.2f", diff)} vs ${prevMonth.monthName.take(3)})"
+                        else if (selectedMetric == 0) " ($sign${String.format(Locale.US, "%.1f", diff)} mi vs ${prevMonth.monthName.take(3)})"
+                        else " ($sign${diff.toInt()} vs ${prevMonth.monthName.take(3)})"
+                    } else ""
+
+                    HorizontalDivider(color = dividerColor.copy(alpha = 0.6f))
+                    Text(
+                        text = "${selected.monthName} ${selected.year}: " + when (selectedMetric) {
+                            0 -> "Biz ${String.format(Locale.US, "%.1f", selected.businessMiles)} mi · Pers ${String.format(Locale.US, "%.1f", selected.personalMiles)} mi$momText"
+                            1 -> "$${String.format(Locale.US, "%,.2f", selected.loggedDeduction)}$momText"
+                            else -> "${selected.totalDrives} trips$momText"
+                        },
+                        fontSize = 12.sp,
+                        color = primaryText
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ReportingPeriodBottomSheet(
+    initialYear: String,
+    initialMonths: Set<String>,
+    availableYears: List<String>,
+    onDismiss: () -> Unit,
+    onApply: (String, Set<String>) -> Unit
+) {
+    var draftYear by remember { mutableStateOf(initialYear) }
+    var draftMonths by remember { mutableStateOf(initialMonths) }
+    val yearInt = draftYear.toIntOrNull() ?: java.time.LocalDate.now().year
+    val now = java.time.LocalDate.now()
+    val monthNames = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+    AppFloatingBottomSheet(
+        onDismissRequest = onDismiss,
+        title = "Reporting period",
+        onClose = onDismiss
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = { draftYear = (yearInt - 1).toString() },
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(Icons.Default.ChevronLeft, contentDescription = "Previous year")
+                }
+                Text(
+                    text = draftYear,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
-                chartMonths.firstOrNull { it.monthIso == selectedMonthIso }?.let { selected ->
-                    HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))
+                IconButton(
+                    onClick = { draftYear = (yearInt + 1).toString() },
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(Icons.Default.ChevronRight, contentDescription = "Next year")
+                }
+            }
+
+            // Quick presets (2x2)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            val maxM = if (yearInt == now.year) now.monthValue else 12
+                            draftMonths = (1..maxM).map { String.format(Locale.US, "%s-%02d", draftYear, it) }.toSet()
+                        },
+                        modifier = Modifier.weight(1f).height(36.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) { Text("Year to date", fontSize = 12.sp) }
+                    OutlinedButton(
+                        onClick = {
+                            val endM = if (yearInt == now.year) now.monthValue else 12
+                            val startM = (endM - 2).coerceAtLeast(1)
+                            draftMonths = (startM..endM).map { String.format(Locale.US, "%s-%02d", draftYear, it) }.toSet()
+                        },
+                        modifier = Modifier.weight(1f).height(36.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) { Text("Last 3 months", fontSize = 12.sp) }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            val endM = if (yearInt == now.year) now.monthValue else 12
+                            val startM = (endM - 5).coerceAtLeast(1)
+                            draftMonths = (startM..endM).map { String.format(Locale.US, "%s-%02d", draftYear, it) }.toSet()
+                        },
+                        modifier = Modifier.weight(1f).height(36.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) { Text("Last 6 months", fontSize = 12.sp) }
+                    OutlinedButton(
+                        onClick = { draftMonths = emptySet() },
+                        modifier = Modifier.weight(1f).height(36.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp)
+                    ) { Text("All year", fontSize = 12.sp) }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Select multiple months",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = if (draftMonths.isEmpty()) "All year" else "${draftMonths.size} selected",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = SucculentPrimary
+                    )
+                    Text(
+                        text = "Clear",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.clickable { draftMonths = emptySet() }
+                    )
+                }
+            }
+
+            // 4x3 Month Grid
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (row in 0..2) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        for (col in 0..3) {
+                            val mIdx = row * 4 + col + 1
+                            val iso = String.format(Locale.US, "%s-%02d", draftYear, mIdx)
+                            val isSelected = iso in draftMonths
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (isSelected) SucculentPrimary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(38.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .clickable {
+                                        draftMonths = if (isSelected) draftMonths - iso else draftMonths + iso
+                                    }
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxSize(),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (isSelected) {
+                                        Icon(
+                                            imageVector = Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(13.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                    }
+                                    Text(
+                                        text = monthNames[mIdx - 1],
+                                        fontSize = 13.sp,
+                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Button(
+                onClick = { onApply(draftYear, draftMonths) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(44.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onSurface)
+            ) {
+                val applyLabel = if (draftMonths.isEmpty()) "Apply · All $draftYear" else "Apply · ${draftMonths.size} months"
+                Text(
+                    text = applyLabel,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.surface
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TripReviewCard(
+    unclassifiedCount: Int,
+    incompleteCount: Int,
+    missingPurposeCount: Int,
+    cardBg: Color,
+    primaryText: Color,
+    mutedText: Color,
+    emeraldAccent: Color,
+    dividerColor: Color,
+    onReviewClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.7f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Trip review",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = primaryText
+                )
+                Text(
+                    text = "Before exporting",
+                    fontSize = 12.sp,
+                    color = mutedText
+                )
+            }
+
+            TripReviewRow(
+                icon = Icons.Outlined.AssignmentTurnedIn,
+                label = "Unclassified trips",
+                count = unclassifiedCount,
+                primaryText = primaryText,
+                mutedText = mutedText,
+                emeraldAccent = emeraldAccent,
+                onClick = onReviewClick
+            )
+            HorizontalDivider(color = dividerColor.copy(alpha = 0.6f))
+            TripReviewRow(
+                icon = Icons.Outlined.LocationOn,
+                label = "Incomplete trip records",
+                count = incompleteCount,
+                primaryText = primaryText,
+                mutedText = mutedText,
+                emeraldAccent = emeraldAccent,
+                onClick = onReviewClick
+            )
+            HorizontalDivider(color = dividerColor.copy(alpha = 0.6f))
+            TripReviewRow(
+                icon = Icons.Outlined.BusinessCenter,
+                label = "Missing business purpose",
+                count = missingPurposeCount,
+                primaryText = primaryText,
+                mutedText = mutedText,
+                emeraldAccent = emeraldAccent,
+                onClick = onReviewClick
+            )
+        }
+    }
+}
+
+@Composable
+private fun TripReviewRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    count: Int,
+    primaryText: Color,
+    mutedText: Color,
+    emeraldAccent: Color,
+    onClick: () -> Unit
+) {
+    val hasIssues = count > 0
+    val badgeColor = if (hasIssues) Color(0xFFD97706) else emeraldAccent
+    val badgeBg = if (hasIssues) Color(0xFFFEF3C7) else emeraldAccent.copy(alpha = 0.12f)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = mutedText,
+            modifier = Modifier.size(16.dp)
+        )
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            color = primaryText,
+            modifier = Modifier.weight(1f)
+        )
+        Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = badgeBg
+        ) {
+            Text(
+                text = "$count",
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = badgeColor
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = mutedText,
+            modifier = Modifier.size(16.dp)
+        )
+    }
+}
+
+@Composable
+private fun ReportCenterTab(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    activeColor: Color,
+    inactiveColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val tint = if (selected) activeColor else inactiveColor
+    Column(
+        modifier = modifier
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(15.dp)
+            )
+            Text(
+                text = label,
+                fontSize = 13.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                color = tint,
+                maxLines = 1
+            )
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(if (selected) activeColor else Color.Transparent)
+        )
+    }
+}
+
+@Composable
+private fun MonthlyRecordsTableCard(
+    year: String,
+    summaries: List<MonthSummary>,
+    showAllMonths: Boolean,
+    onToggleShowAll: () -> Unit,
+    onSelectMonth: (String) -> Unit,
+    cardBg: Color,
+    primaryText: Color,
+    mutedText: Color,
+    emeraldAccent: Color,
+    dividerColor: Color
+) {
+    val visibleSummaries = if (showAllMonths) summaries else summaries.take(3)
+    val personalBlue = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) Color(0xFF75B9FF) else PersonalBlue
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.7f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "Monthly records",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = primaryText
+                )
+                Text(
+                    text = year,
+                    fontSize = 12.sp,
+                    color = mutedText
+                )
+            }
+
+            // Table Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Month", fontSize = 11.sp, color = mutedText, modifier = Modifier.weight(0.85f))
+                Text("Business", fontSize = 11.sp, color = emeraldAccent, textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(1f))
+                Text("Personal", fontSize = 11.sp, color = personalBlue, textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(1f))
+                Text("Est. deduction", fontSize = 11.sp, color = mutedText, textAlign = androidx.compose.ui.text.style.TextAlign.End, modifier = Modifier.weight(1.1f))
+                Spacer(modifier = Modifier.width(18.dp))
+            }
+            HorizontalDivider(color = dividerColor.copy(alpha = 0.8f))
+
+            visibleSummaries.forEachIndexed { idx, s ->
+                if (idx > 0) HorizontalDivider(color = dividerColor.copy(alpha = 0.5f))
+                val hasData = s.totalDrives > 0
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onSelectMonth(s.monthIso) }
+                        .padding(vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = s.monthName.take(3),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = primaryText,
+                        modifier = Modifier.weight(0.85f)
+                    )
+                    Text(
+                        text = if (hasData) "${String.format(Locale.US, "%.1f", s.businessMiles)} mi" else "—",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontFeatureSettings = "tnum"),
+                        color = if (hasData) primaryText else mutedText,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = if (hasData) "${String.format(Locale.US, "%.1f", s.personalMiles)} mi" else "—",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontFeatureSettings = "tnum"),
+                        color = if (hasData) primaryText else mutedText,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = if (hasData) "$${String.format(Locale.US, "%,.2f", s.loggedDeduction)}" else "—",
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp, fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum"),
+                        color = if (hasData && s.loggedDeduction > 0.0) emeraldAccent else mutedText,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                        modifier = Modifier.weight(1.1f)
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = mutedText,
+                        modifier = Modifier.size(16.dp).padding(start = 2.dp)
+                    )
+                }
+            }
+
+            if (summaries.size > 3) {
+                HorizontalDivider(color = dividerColor.copy(alpha = 0.6f))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(onClick = onToggleShowAll)
+                        .padding(vertical = 6.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (showAllMonths) "Show fewer months" else "View all months",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = emeraldAccent
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        imageVector = if (showAllMonths) Icons.Default.KeyboardArrowDown else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        tint = emeraldAccent,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun VehicleReportsCard(
+    vehicles: List<VehicleReportSummary>,
+    onSelectVehicle: (VehicleReportSummary) -> Unit,
+    cardBg: Color,
+    primaryText: Color,
+    mutedText: Color,
+    emeraldAccent: Color,
+    dividerColor: Color
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
+        border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.7f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "By vehicle",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = primaryText
+            )
+            if (vehicles.isEmpty()) {
+                Text(
+                    text = "No vehicle trips recorded for this period.",
+                    fontSize = 13.sp,
+                    color = mutedText,
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            } else {
+                vehicles.forEachIndexed { idx, v ->
+                    if (idx > 0) HorizontalDivider(color = dividerColor.copy(alpha = 0.6f))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onSelectVehicle(v) }
+                            .padding(vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = "${selected.monthName} ${selected.year}",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                text = v.vehicleName,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
                                 color = primaryText
                             )
-                            val detailText = buildString {
-                                if (showBusiness) append("Business ${String.format(Locale.US, "%.1f", selected.businessMiles)} mi")
-                                if (showBusiness && showPersonal) append(" · ")
-                                if (showPersonal) append("Personal ${String.format(Locale.US, "%.1f", selected.personalMiles)} mi")
-                            }
                             Text(
-                                text = detailText,
+                                text = "${v.tripCount} trips · Biz ${String.format(Locale.US, "%.1f", v.businessMiles)} mi · Pers ${String.format(Locale.US, "%.1f", v.personalMiles)} mi",
                                 fontSize = 12.sp,
                                 color = mutedText
                             )
                         }
                         Text(
-                            text = "$${String.format(Locale.US, "%,.2f", selected.loggedDeduction)}",
-                            style = MaterialTheme.typography.titleSmall.copy(
+                            text = "$${String.format(Locale.US, "%,.2f", v.estimatedDeduction)}",
+                            style = MaterialTheme.typography.bodyMedium.copy(
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 fontFeatureSettings = "tnum"
                             ),
-                            color = emeraldAccent
+                            color = if (v.estimatedDeduction > 0.0) emeraldAccent else mutedText
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = mutedText,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
@@ -1046,28 +1880,16 @@ private fun MonthlyMileageChartCard(
 }
 
 @Composable
-private fun MonthlyDetailsSection(
-    year: String,
-    summaries: List<MonthSummary>,
-    expanded: Boolean,
-    selectedMonthIso: String?,
-    onExpandedChange: (Boolean) -> Unit,
-    onSelectMonth: (String?) -> Unit,
-    onExportMonth: (String) -> Unit,
-    onViewMonthDrives: (String) -> Unit
+private fun SavedReportsCard(
+    reports: List<SavedReportItem>,
+    onOpenReport: (SavedReportItem) -> Unit,
+    onShareReport: (SavedReportItem) -> Unit,
+    cardBg: Color,
+    primaryText: Color,
+    mutedText: Color,
+    emeraldAccent: Color,
+    dividerColor: Color
 ) {
-    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val cardBg = if (isDark) MaterialTheme.colorScheme.surface else Color.White
-    val primaryText = if (isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF172536)
-    val mutedText = if (isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF64748B)
-    val dividerColor = if (isDark) MaterialTheme.colorScheme.outlineVariant else Color(0xFFE2E8F0)
-    val emeraldAccent = if (isDark) Color(0xFF43D99A) else Color(0xFF168354)
-    val rotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = tween(200),
-        label = "monthly_details_rotation"
-    )
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -1075,60 +1897,72 @@ private fun MonthlyDetailsSection(
         border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.7f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onExpandedChange(!expanded) }
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = emeraldAccent.copy(alpha = 0.12f),
-                    modifier = Modifier.size(34.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CalendarMonth,
-                        contentDescription = null,
-                        tint = emeraldAccent,
-                        modifier = Modifier.padding(8.dp)
-                    )
-                }
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Monthly details",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = primaryText
-                    )
-                    Text(
-                        text = if (expanded) "Tap a month for breakdown & export" else "${summaries.size} months in $year",
-                        fontSize = 12.sp,
-                        color = mutedText
-                    )
-                }
-                Icon(
-                    Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (expanded) "Hide monthly details" else "Show monthly details",
-                    tint = mutedText,
-                    modifier = Modifier.rotate(rotation)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Saved reports",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = primaryText
+            )
+            if (reports.isEmpty()) {
+                Text(
+                    text = "Generated PDF and CSV reports will appear here.",
+                    fontSize = 13.sp,
+                    color = mutedText,
+                    modifier = Modifier.padding(vertical = 8.dp)
                 )
-            }
-
-            AnimatedVisibility(visible = expanded) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    HorizontalDivider(color = dividerColor.copy(alpha = 0.8f))
-                    summaries.forEachIndexed { index, summary ->
-                        if (index > 0) HorizontalDivider(color = dividerColor.copy(alpha = 0.6f))
-                        CompactMonthRow(
-                            summary = summary,
-                            expanded = selectedMonthIso == summary.monthIso,
-                            onToggle = { onSelectMonth(if (selectedMonthIso == summary.monthIso) null else summary.monthIso) },
-                            onExportMonth = { onExportMonth(summary.monthIso) },
-                            onViewMonthDrives = { onViewMonthDrives(summary.monthIso) }
-                        )
+            } else {
+                reports.forEachIndexed { idx, item ->
+                    if (idx > 0) HorizontalDivider(color = dividerColor.copy(alpha = 0.6f))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onOpenReport(item) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = item.name,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = primaryText,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = "${item.period} · ${item.createdDate} · ${item.format}",
+                                fontSize = 12.sp,
+                                color = mutedText
+                            )
+                        }
+                        IconButton(
+                            onClick = { onOpenReport(item) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Visibility,
+                                contentDescription = "Open report",
+                                tint = emeraldAccent,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        IconButton(
+                            onClick = { onShareReport(item) },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Share report",
+                                tint = mutedText,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                     }
                 }
             }
