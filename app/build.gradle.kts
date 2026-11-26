@@ -14,9 +14,9 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 218
-        versionName = "1.0.218"
-        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Redesign Dashboard and bottom navigation in Trackr minimalist style with annual YTD summary.\"")
+        versionCode = 219
+        versionName = "1.0.219"
+        buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Redesign Trip Details and Reports screens with Option C compact metric strips in Trackr minimalist style.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

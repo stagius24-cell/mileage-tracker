@@ -36,6 +36,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.OpenInFull
+import androidx.compose.material.icons.filled.CloseFullscreen
+import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.Route
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.Paid
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -160,9 +169,13 @@ fun TripDetailScreen(
 
     val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     val dateFormatter = remember { SimpleDateFormat("MMM d", Locale.getDefault()) }
+    val fullReceiptDateFormatter = remember { SimpleDateFormat("EEEE, MMM d, yyyy", Locale.getDefault()) }
 
     val dateFormatted = remember(trip.startTime) {
         if (trip.startTime > 0) dateFormatter.format(Date(trip.startTime)) else trip.date
+    }
+    val receiptDateFormatted = remember(trip.startTime, trip.date) {
+        if (trip.startTime > 0) fullReceiptDateFormatter.format(Date(trip.startTime)) else trip.date
     }
     val startTimeStr = remember(trip.startTime) { timeFormatter.format(Date(trip.startTime)) }
     val endTimeStr = remember(trip.endTime) { timeFormatter.format(Date(trip.endTime)) }
@@ -172,16 +185,36 @@ fun TripDetailScreen(
         if (diff > 0) TimeUnit.MILLISECONDS.toMinutes(diff) else 0L
     }
 
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val pageBackground = if (isDark) MaterialTheme.colorScheme.background else Color(0xFFF1F4F9)
+    val cardBackground = if (isDark) MaterialTheme.colorScheme.surface else Color.White
+    val primaryText = if (isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF172536)
+    val mutedText = if (isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF64748B)
+    val emeraldAccent = if (isDark) Color(0xFF43D99A) else Color(0xFF168354)
+    val dividerColor = if (isDark) MaterialTheme.colorScheme.outlineVariant else Color(0xFFE2E8F0)
+
     val isBusiness = trip.classification == TripClassification.BUSINESS.value
-    val classificationColor = if (isBusiness) SucculentPrimary else SlateNeutral
+    val isPersonal = trip.classification == TripClassification.PERSONAL.value
+    val classificationColor = when {
+        isBusiness -> emeraldAccent
+        isPersonal -> if (isDark) Color(0xFF75B9FF) else Color(0xFF3B82F6)
+        else -> mutedText
+    }
+    val classificationLabel = when {
+        isBusiness -> "Business"
+        isPersonal -> "Personal"
+        else -> "Unclassified"
+    }
 
     var outerDragOffset by remember(trip.id) { mutableFloatStateOf(0f) }
     var suggestionDismissed by remember(trip.id) { mutableStateOf(false) }
+    var isMapExpanded by remember { mutableStateOf(false) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(pageBackground)
             .pointerInput(trip.id, onPreviousTrip, onNextTrip) {
                 detectHorizontalDragGestures(
                     onDragStart = { outerDragOffset = 0f },
@@ -202,31 +235,56 @@ fun TripDetailScreen(
             }
             .verticalScroll(rememberScrollState())
     ) {
-        // The route map leads the screen, with a close action layered above it.
+        val mapHeight by animateDpAsState(
+            targetValue = if (isMapExpanded) 340.dp else 200.dp,
+            animationSpec = tween(250),
+            label = "trip_map_height"
+        )
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(220.dp)
+                .height(mapHeight)
         ) {
             TripRouteMap(trip = trip, modifier = Modifier.fillMaxSize())
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(8.dp)
-                    .size(44.dp),
+                    .padding(10.dp)
+                    .size(34.dp),
                 shape = CircleShape,
-                color = Color.White,
-                shadowElevation = 3.dp
+                color = if (isDark) MaterialTheme.colorScheme.surface.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.94f),
+                shadowElevation = 2.dp
             ) {
                 IconButton(
                     onClick = onBack,
-                    modifier = Modifier.size(44.dp)
+                    modifier = Modifier.size(34.dp)
                 ) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Close trip details",
-                        tint = Color(0xFF718096),
-                        modifier = Modifier.size(20.dp)
+                        tint = mutedText,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(10.dp)
+                    .size(34.dp),
+                shape = CircleShape,
+                color = if (isDark) MaterialTheme.colorScheme.surface.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.94f),
+                shadowElevation = 2.dp
+            ) {
+                IconButton(
+                    onClick = { isMapExpanded = !isMapExpanded },
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isMapExpanded) Icons.Default.CloseFullscreen else Icons.Default.OpenInFull,
+                        contentDescription = if (isMapExpanded) "Collapse map" else "Expand map",
+                        tint = mutedText,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
@@ -235,9 +293,153 @@ fun TripDetailScreen(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Trip details",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = primaryText
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = classificationColor.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = classificationLabel,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = classificationColor
+                            )
+                        }
+                    }
+                    Text(
+                        text = receiptDateFormatted,
+                        fontSize = 13.sp,
+                        color = mutedText
+                    )
+                }
+
+                Box {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = cardBackground,
+                        border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.8f)),
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { showOverflowMenu = true }
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "Trip options",
+                                tint = mutedText,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    DropdownMenu(
+                        expanded = showOverflowMenu,
+                        onDismissRequest = { showOverflowMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit trip") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            onClick = {
+                                showOverflowMenu = false
+                                showEditSheet = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Select vehicle") },
+                            leadingIcon = { Icon(Icons.Default.BusinessCenter, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            onClick = {
+                                showOverflowMenu = false
+                                showVehiclePicker = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete trip", color = SpeedRed) },
+                            leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = SpeedRed, modifier = Modifier.size(18.dp)) },
+                            onClick = {
+                                showOverflowMenu = false
+                                showDeleteConfirmation = true
+                            }
+                        )
+                    }
+                }
+            }
+
+            val sageBg = if (isDark) SucculentPrimary.copy(alpha = 0.10f) else Color(0xFFEDF5F0)
+            val deductionPositive = trip.calculatedDeduction > 0.0
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                color = sageBg
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    CompactMetricCell(
+                        icon = Icons.Outlined.Route,
+                        iconTint = emeraldAccent,
+                        label = "Distance",
+                        value = "${String.format(Locale.US, "%.1f", trip.totalDistanceMiles)} mi",
+                        valueColor = primaryText,
+                        labelColor = mutedText,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(34.dp)
+                            .background(dividerColor.copy(alpha = 0.9f))
+                    )
+                    CompactMetricCell(
+                        icon = Icons.Outlined.Schedule,
+                        iconTint = mutedText,
+                        label = "Duration",
+                        value = "$durationMinutes min",
+                        valueColor = primaryText,
+                        labelColor = mutedText,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .width(1.dp)
+                            .height(34.dp)
+                            .background(dividerColor.copy(alpha = 0.9f))
+                    )
+                    CompactMetricCell(
+                        icon = Icons.Outlined.AccountBalanceWallet,
+                        iconTint = if (deductionPositive) emeraldAccent else mutedText,
+                        label = "Deduction",
+                        value = "$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}",
+                        valueColor = if (deductionPositive) emeraldAccent else mutedText,
+                        labelColor = mutedText,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
             // Smart Auto-Classified Indicator or Smart Suggestion Card
             val isUnreviewed = trip.classification == TripClassification.UNREVIEWED.value
             val isSmartAuto = trip.classificationSource == com.businesstracker.mileage.domain.model.ClassificationSource.SMART_AUTO.value
@@ -385,22 +587,18 @@ fun TripDetailScreen(
                 }
             }
 
-            // Route and more-info tabs matching container roundness.
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(19.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
+            // Minimal underline tabs (Trackr style)
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(3.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TripDetailTabButton(
                         label = "Route",
                         icon = Icons.Default.LocationOn,
                         selected = pagerState.currentPage == 0,
+                        activeColor = emeraldAccent,
+                        inactiveColor = mutedText,
                         onClick = {
                             coroutineScope.launch { pagerState.animateScrollToPage(0) }
                         },
@@ -410,18 +608,23 @@ fun TripDetailScreen(
                         label = "More info",
                         icon = Icons.Default.Info,
                         selected = pagerState.currentPage == 1,
+                        activeColor = emeraldAccent,
+                        inactiveColor = mutedText,
                         onClick = {
                             coroutineScope.launch { pagerState.animateScrollToPage(1) }
                         },
                         modifier = Modifier.weight(1f)
                     )
                 }
+                HorizontalDivider(color = dividerColor.copy(alpha = 0.8f), thickness = 1.dp)
             }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                colors = CardDefaults.cardColors(containerColor = cardBackground),
+                border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.7f)),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 HorizontalPager(
                     state = pagerState,
@@ -734,64 +937,102 @@ fun TripDetailScreen(
 }
 
 @Composable
+private fun CompactMetricCell(
+    icon: ImageVector,
+    iconTint: Color,
+    label: String,
+    value: String,
+    valueColor: Color,
+    labelColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.padding(horizontal = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                color = labelColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontSize = 20.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontFeatureSettings = "tnum"
+            ),
+            color = valueColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
 private fun TripDetailTabButton(
     label: String,
     icon: ImageVector,
     selected: Boolean,
+    activeColor: Color,
+    inactiveColor: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val selectedColor by animateColorAsState(
-        targetValue = if (selected) SucculentPrimary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-        animationSpec = tween(650, easing = FastOutSlowInEasing),
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) activeColor else inactiveColor,
+        animationSpec = tween(220, easing = FastOutSlowInEasing),
         label = "trip_detail_color_$label"
     )
-    val iconScale by animateFloatAsState(
-        targetValue = if (selected) 1.12f else 1f,
-        animationSpec = tween(650, easing = FastOutSlowInEasing),
-        label = "trip_detail_scale_$label"
-    )
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val indicatorOffset by animateDpAsState(
-            targetValue = if (selected) 0.dp else maxWidth,
-            animationSpec = tween(650, easing = FastOutSlowInEasing),
-            label = "trip_detail_indicator_$label"
-        )
-        Box(
-            modifier = Modifier
-                .offset(x = indicatorOffset)
-                .fillMaxWidth()
-                .height(38.dp)
-                .background(
-                    color = SucculentPrimary.copy(alpha = if (selected) 0.16f else 0f),
-                    shape = RoundedCornerShape(19.dp)
-                )
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = 38.dp)
-                .clip(RoundedCornerShape(19.dp))
-                .semantics {
-                    role = Role.Tab
-                    this.selected = selected
-                }
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    modifier = Modifier.size(17.dp).graphicsLayer(scaleX = iconScale, scaleY = iconScale),
-                    tint = selectedColor
-                )
-                Text(label, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = selectedColor)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .semantics {
+                role = Role.Tab
+                this.selected = selected
             }
+            .clickable(onClick = onClick),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Row(
+            modifier = Modifier.padding(vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = contentColor
+            )
+            Text(
+                text = label,
+                fontSize = 14.sp,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                color = contentColor
+            )
         }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .background(if (selected) activeColor else Color.Transparent)
+        )
     }
 }
 
@@ -810,137 +1051,48 @@ private fun RouteDetailsTab(
     onSaveStartLocation: (() -> Unit)? = null,
     onSaveEndLocation: (() -> Unit)? = null
 ) {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val primaryText = if (isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF172536)
+    val mutedText = if (isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF64748B)
+    val emeraldAccent = if (isDark) Color(0xFF43D99A) else Color(0xFF168354)
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(0.dp)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Formatted date string (e.g. NOV 15, 2026) and day of week (e.g. Sunday)
-        val fullDateHeader = remember(trip.startTime) {
-            if (trip.startTime > 0) {
-                SimpleDateFormat("MMM d, yyyy", Locale.US).format(Date(trip.startTime)).uppercase(Locale.US)
-            } else {
-                date.uppercase(Locale.US)
-            }
-        }
-        val dayOfWeekStr = remember(trip.startTime) {
-            if (trip.startTime > 0) {
-                SimpleDateFormat("EEEE", Locale.US).format(Date(trip.startTime))
-            } else ""
-        }
-
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Column 1: Date & Day of Week
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.CalendarToday,
-                    contentDescription = null,
-                    tint = SucculentPrimary,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = fullDateHeader,
-                    style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp),
-                    fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = dayOfWeekStr,
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-                    color = SlateNeutral,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            // Divider 1
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(44.dp)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
+            Text(
+                text = "Trip timeline",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = primaryText
             )
-
-            // Column 2: Miles & Road graphic
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                RoadHighwayIcon(
-                    modifier = Modifier.size(24.dp),
-                    tint = SlateNeutral
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
-                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp),
-                    fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "miles",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-                    color = SlateNeutral,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            // Divider 2
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(44.dp)
-                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f))
+            Text(
+                text = "2 locations",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = mutedText
             )
-
-            // Column 3: Potential & Stash of coins
-            Column(
-                modifier = Modifier.weight(1f),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                StackedCoinsIcon(
-                    modifier = Modifier.size(24.dp),
-                    tint = SucculentPrimary
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = "$" + String.format(Locale.US, "%.2f", trip.calculatedDeduction),
-                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 18.sp),
-                    fontWeight = FontWeight.Black,
-                    color = SucculentPrimary
-                )
-                Text(
-                    text = "Potential",
-                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 13.sp),
-                    color = SlateNeutral,
-                    fontWeight = FontWeight.Medium
-                )
-            }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+
         DestinationRow(
+            markerLabel = "START",
             primaryName = smartStartName,
             address = startAddress,
             time = startTime,
-            color = SucculentPrimary,
+            color = emeraldAccent,
             isStart = true,
             locationActionLabel = startLocationActionLabel,
             onSaveLocation = onSaveStartLocation
         )
         DestinationRow(
+            markerLabel = "END",
             primaryName = smartEndName,
             address = endAddress,
             time = endTime,
@@ -954,6 +1106,7 @@ private fun RouteDetailsTab(
 
 @Composable
 private fun DestinationRow(
+    markerLabel: String,
     primaryName: String? = null,
     address: String,
     time: String,
@@ -962,24 +1115,34 @@ private fun DestinationRow(
     locationActionLabel: String,
     onSaveLocation: (() -> Unit)? = null
 ) {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val primaryText = if (isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF172536)
+    val mutedText = if (isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF64748B)
+    val addressParts = remember(address) {
+        val parts = address.split(",", limit = 2)
+        val street = parts.getOrNull(0)?.trim().orEmpty().ifBlank { address }
+        val cityState = parts.getOrNull(1)?.trim().orEmpty()
+        street to cityState
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 64.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .heightIn(min = 56.dp),
+        verticalAlignment = Alignment.Top
     ) {
         Box(
             modifier = Modifier
                 .width(24.dp)
-                .heightIn(min = 64.dp)
+                .heightIn(min = 56.dp)
                 .drawBehind {
                     val cx = size.width / 2f
                     val timelineLineColor = Color(0xFFCBD5E1)
-                    val timelineStrokeWidth = 1.dp.toPx()
+                    val timelineStrokeWidth = 1.5.dp.toPx()
                     if (isStart) {
                         drawLine(
                             color = timelineLineColor,
-                            start = Offset(cx, size.height / 2f),
+                            start = Offset(cx, 18.dp.toPx()),
                             end = Offset(cx, size.height),
                             strokeWidth = timelineStrokeWidth
                         )
@@ -987,72 +1150,87 @@ private fun DestinationRow(
                         drawLine(
                             color = timelineLineColor,
                             start = Offset(cx, 0f),
-                            end = Offset(cx, size.height / 2f),
+                            end = Offset(cx, 10.dp.toPx()),
                             strokeWidth = timelineStrokeWidth
                         )
                     }
                 },
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.TopCenter
         ) {
             if (isStart) {
                 com.businesstracker.mileage.ui.components.StartBeaconIcon(
-                    size = 20.dp,
+                    size = 18.dp,
                     tint = color
                 )
             } else {
                 com.businesstracker.mileage.ui.components.EndPinIcon(
-                    size = 20.dp,
+                    size = 18.dp,
                     tint = color,
                     fillColor = MaterialTheme.colorScheme.surface
                 )
             }
         }
         Spacer(modifier = Modifier.width(10.dp))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.Center
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(bottom = if (isStart) 10.dp else 0.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (!primaryName.isNullOrBlank()) {
-                    Text(
-                        text = primaryName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = address,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                } else {
-                    Text(
-                        text = address,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            // Keep the timestamp and action together, centered as a single group.
-            // A fixed-height wrapper prevents either control from being pinned to a row edge.
-            Box(
-                modifier = Modifier
-                    .widthIn(min = 84.dp)
-                    .height(64.dp),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(0.dp)
-                ) {
+                Text(
+                    text = markerLabel,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = color,
+                    letterSpacing = 0.5.sp
+                )
                 Text(
                     text = time,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
+                    fontWeight = FontWeight.SemiBold,
+                    color = mutedText
                 )
+            }
+
+            if (!primaryName.isNullOrBlank()) {
+                Text(
+                    text = primaryName,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = primaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                ) {
+                    Text(
+                        text = addressParts.first,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = primaryText
+                    )
+                    if (addressParts.second.isNotBlank()) {
+                        Text(
+                            text = addressParts.second,
+                            fontSize = 12.sp,
+                            color = mutedText
+                        )
+                    }
+                }
                 if (onSaveLocation != null) {
                     IconButton(
                         onClick = onSaveLocation,
@@ -1065,14 +1243,14 @@ private fun DestinationRow(
                         Icon(
                             imageVector = if (locationActionLabel == "Save") Icons.Outlined.BookmarkBorder else Icons.Default.Edit,
                             contentDescription = null,
-                            tint = SucculentPrimary,
-                            modifier = Modifier.size(18.dp)
+                            tint = mutedText,
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                 }
-                }
             }
         }
+    }
 }
 
 @Composable
