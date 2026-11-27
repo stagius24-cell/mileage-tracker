@@ -1309,49 +1309,6 @@ private fun ReportingPeriodBottomSheet(
                 }
             }
 
-            // Quick presets (2x2)
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            val maxM = if (yearInt == now.year) now.monthValue else 12
-                            draftMonths = (1..maxM).map { String.format(Locale.US, "%s-%02d", draftYear, it) }.toSet()
-                        },
-                        modifier = Modifier.weight(1f).height(36.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) { Text("Year to date", fontSize = 12.sp) }
-                    OutlinedButton(
-                        onClick = {
-                            val endM = if (yearInt == now.year) now.monthValue else 12
-                            val startM = (endM - 2).coerceAtLeast(1)
-                            draftMonths = (startM..endM).map { String.format(Locale.US, "%s-%02d", draftYear, it) }.toSet()
-                        },
-                        modifier = Modifier.weight(1f).height(36.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) { Text("Last 3 months", fontSize = 12.sp) }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            val endM = if (yearInt == now.year) now.monthValue else 12
-                            val startM = (endM - 5).coerceAtLeast(1)
-                            draftMonths = (startM..endM).map { String.format(Locale.US, "%s-%02d", draftYear, it) }.toSet()
-                        },
-                        modifier = Modifier.weight(1f).height(36.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) { Text("Last 6 months", fontSize = 12.sp) }
-                    OutlinedButton(
-                        onClick = { draftMonths = emptySet() },
-                        modifier = Modifier.weight(1f).height(36.dp),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp)
-                    ) { Text("All year", fontSize = 12.sp) }
-                }
-            }
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
