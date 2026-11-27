@@ -445,40 +445,40 @@ fun TripDetailScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(12.dp),
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     CompactMetricCell(
-                        label = "Distance",
+                        icon = Icons.Outlined.Route,
+                        iconTint = emeraldAccent,
                         value = "${String.format(Locale.US, "%.1f", trip.totalDistanceMiles)} mi",
                         valueColor = primaryText,
-                        labelColor = mutedText,
                         modifier = Modifier.weight(1f)
                     )
                     Box(
                         modifier = Modifier
                             .width(1.dp)
-                            .height(34.dp)
+                            .height(20.dp)
                             .background(dividerColor.copy(alpha = 0.9f))
                     )
                     CompactMetricCell(
-                        label = "Duration",
+                        icon = Icons.Outlined.Schedule,
+                        iconTint = emeraldAccent,
                         value = "$durationMinutes min",
                         valueColor = primaryText,
-                        labelColor = mutedText,
                         modifier = Modifier.weight(1f)
                     )
                     Box(
                         modifier = Modifier
                             .width(1.dp)
-                            .height(34.dp)
+                            .height(20.dp)
                             .background(dividerColor.copy(alpha = 0.9f))
                     )
                     CompactMetricCell(
-                        label = "Deduction",
+                        icon = Icons.Outlined.AccountBalanceWallet,
+                        iconTint = emeraldAccent,
                         value = "$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}",
                         valueColor = if (deductionPositive) emeraldAccent else mutedText,
-                        labelColor = mutedText,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -976,34 +976,34 @@ fun TripDetailScreen(
 
 @Composable
 private fun CompactMetricCell(
-    label: String,
+    icon: ImageVector,
+    iconTint: Color,
     value: String,
     valueColor: Color,
-    labelColor: Color,
     modifier: Modifier = Modifier
 ) {
-    Column(
-        modifier = modifier.padding(horizontal = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(3.dp)
+    Row(
+        modifier = modifier.padding(horizontal = 4.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(
-            text = label,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Normal,
-            color = labelColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = iconTint,
+            modifier = Modifier.size(17.dp)
         )
+        Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = value,
             style = MaterialTheme.typography.titleMedium.copy(
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFeatureSettings = "tnum"
             ),
             color = valueColor,
             maxLines = 1,
+            softWrap = false,
             overflow = TextOverflow.Ellipsis
         )
     }
