@@ -248,48 +248,50 @@ fun TripDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
                 .height(mapHeight)
+                .clip(RoundedCornerShape(20.dp))
         ) {
             TripRouteMap(trip = trip, modifier = Modifier.fillMaxSize())
             Surface(
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(10.dp)
-                    .size(34.dp),
+                    .padding(8.dp)
+                    .size(32.dp),
                 shape = CircleShape,
                 color = if (isDark) MaterialTheme.colorScheme.surface.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.94f),
                 shadowElevation = 2.dp
             ) {
                 IconButton(
                     onClick = onBack,
-                    modifier = Modifier.size(34.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         Icons.Default.Close,
                         contentDescription = "Close trip details",
                         tint = mutedText,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(10.dp)
-                    .size(34.dp),
+                    .padding(8.dp)
+                    .size(32.dp),
                 shape = CircleShape,
                 color = if (isDark) MaterialTheme.colorScheme.surface.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.94f),
                 shadowElevation = 2.dp
             ) {
                 IconButton(
                     onClick = { isMapExpanded = !isMapExpanded },
-                    modifier = Modifier.size(34.dp)
+                    modifier = Modifier.size(32.dp)
                 ) {
                     Icon(
                         imageVector = if (isMapExpanded) Icons.Default.CloseFullscreen else Icons.Default.OpenInFull,
                         contentDescription = if (isMapExpanded) "Collapse map" else "Expand map",
                         tint = mutedText,
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(15.dp)
                     )
                 }
             }
