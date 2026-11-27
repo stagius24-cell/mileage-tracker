@@ -43,8 +43,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.AnimatedVisibility
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -64,6 +66,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -455,14 +458,35 @@ fun TripHistoryScreen(
                                 backgroundColor = pageBg
                             )
                         }
-                        items(group.trips, key = { it.id }) { trip ->
-                            CompactTripHistoryCard(
-                                trip = trip,
-                                smartNames = state.smartNamesMap[trip.id],
-                                onClick = { viewModel.selectTripForDetails(trip) },
-                                onLongClick = { longPressedTripForOptions = trip },
-                                modifier = Modifier.padding(horizontal = 16.dp)
-                            )
+                        item(key = "day-card-${group.date}-${group.firstTripId}") {
+                            val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                            val cardBg = if (isDark) MaterialTheme.colorScheme.surface else Color.White
+                            val borderCol = if (isDark) MaterialTheme.colorScheme.outlineVariant else Color(0xFFE8ECEF)
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                color = cardBg,
+                                border = BorderStroke(1.dp, borderCol)
+                            ) {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    group.trips.forEachIndexed { index, trip ->
+                                        CompactTripReceiptRow(
+                                            trip = trip,
+                                            smartNames = state.smartNamesMap[trip.id],
+                                            onClick = { viewModel.selectTripForDetails(trip) },
+                                            onLongClick = { longPressedTripForOptions = trip }
+                                        )
+                                        if (index < group.trips.lastIndex) {
+                                            androidx.compose.material3.HorizontalDivider(
+                                                color = borderCol.copy(alpha = 0.7f),
+                                                modifier = Modifier.padding(horizontal = 12.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1327,4 +1351,171 @@ internal fun formatDateRangeFilter(startDate: String, endDate: String): String {
             "$sMonth ${s.dayOfMonth}, ${s.year} – $eMonth ${e.dayOfMonth}, ${e.year}"
         }
     }.getOrDefault(if (startDate == endDate) startDate else "$startDate to $endDate")
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun CompactTripReceiptRow(
+    trip: TripEntity,
+    smartNames: com.businesstracker.mileage.domain.usecase.SmartTripNames?,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val primaryText = if (isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF172536)
+    val mutedText = if (isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF64748B)
+    val emeraldAccent = if (isDark) Color(0xFF43D99A) else Color(0xFF168354)
+
+    val startLabel = remember(trip.id, smartNames, trip.startAddress) {
+        smartNames?.startLocation?.name?.takeIf { it.isNotBlank() }
+            ?: trip.startAddress?.substringBefore(",")?.trim()?.takeIf { it.isNotBlank() }
+            ?: "Start location"
+    }
+    val endLabel = remember(trip.id, smartNames, trip.endAddress) {
+        smartNames?.endLocation?.name?.takeIf { it.isNotBlank() }
+            ?: trip.endAddress?.substringBefore(",")?.trim()?.takeIf { it.isNotBlank() }
+            ?: "Destination"
+    }
+    val timeFormatter = remember { SimpleDateFormat("h:mm a", Locale.US) }
+    val startTimeStr = remember(trip.startTime) { timeFormatter.format(Date(trip.startTime)) }
+    val endTimeStr = remember(trip.endTime) { timeFormatter.format(Date(trip.endTime)) }
+
+    val (classLabel, chipBg, chipText) = when (trip.classification) {
+        TripClassification.BUSINESS.value -> Triple(
+            "Business",
+            if (isDark) SucculentPrimary.copy(alpha = 0.16f) else Color(0xFFEDF5F0),
+            emeraldAccent
+        )
+        TripClassification.PERSONAL.value -> Triple(
+            "Personal",
+            if (isDark) Color(0xFF3B82F6).copy(alpha = 0.16f) else Color(0xFFEFF6FF),
+            if (isDark) Color(0xFF93C5FD) else Color(0xFF2563EB)
+        )
+        else -> Triple(
+            "Unclassified",
+            if (isDark) Color(0xFFF59E0B).copy(alpha = 0.16f) else Color(0xFFFEF3C7),
+            if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
+        )
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp)
+    ) {
+        // Row 1: Mileage + unit (left) | Classification chip + chevron (right)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        fontFeatureSettings = "tnum"
+                    ),
+                    color = primaryText
+                )
+                Text(
+                    text = "mi",
+                    fontSize = 12.sp,
+                    color = mutedText,
+                    modifier = Modifier.padding(bottom = 2.dp)
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(7.dp),
+                    color = chipBg
+                ) {
+                    Text(
+                        text = classLabel,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = chipText,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
+                    )
+                }
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Open trip details",
+                    tint = mutedText,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+
+        // Row 2: Origin marker + name + departure timestamp
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            com.businesstracker.mileage.ui.components.StartBeaconIcon(
+                size = 16.dp,
+                tint = emeraldAccent
+            )
+            Text(
+                text = startLabel,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = primaryText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = startTimeStr,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 12.sp,
+                    fontFeatureSettings = "tnum"
+                ),
+                color = mutedText
+            )
+        }
+
+        // Row 3: Destination pin + name + arrival timestamp
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            com.businesstracker.mileage.ui.components.EndPinIcon(
+                size = 16.dp,
+                tint = Color(0xFFD7737D),
+                fillColor = MaterialTheme.colorScheme.surface
+            )
+            Text(
+                text = endLabel,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = primaryText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = endTimeStr,
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = 12.sp,
+                    fontFeatureSettings = "tnum"
+                ),
+                color = mutedText
+            )
+        }
+    }
 }
