@@ -516,21 +516,21 @@ fun SettingsScreen(
         }
 
         item {
+            Text(
+                text = "Trip organization",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+            )
+        }
+
+        item {
             com.businesstracker.mileage.ui.smart.SmartClassificationCard(
                 isEnabled = state.isSmartTripRecognitionEnabled,
                 currentMode = state.smartClassificationMode,
                 onToggleEnabled = viewModel::setSmartTripRecognitionEnabled,
                 onModeSelected = viewModel::setSmartClassificationMode
-            )
-        }
-
-        item {
-            Text(
-                text = "Driving & vehicle",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
             )
         }
 
@@ -569,8 +569,19 @@ fun SettingsScreen(
         }
 
         item {
+            Text(
+                text = "Data & synchronization",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+            )
+        }
+
+        item {
             val timeFormat = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
             val lastBackupTime = state.latestBackupTimestamp.takeIf { it > 0L }
+            var isBackupExpanded by rememberSaveable { mutableStateOf(false) }
             var isAdvancedExpanded by rememberSaveable { mutableStateOf(false) }
             val clipboardManager = LocalClipboardManager.current
             val isBackingUp = state.isUnifiedBackingUp
@@ -580,7 +591,7 @@ fun SettingsScreen(
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
@@ -588,19 +599,20 @@ fun SettingsScreen(
                     modifier = Modifier.fillMaxWidth().padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(shape = RoundedCornerShape(12.dp), color = SucculentPrimary.copy(alpha = .10f)) {
-                            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
-                                Icon(Icons.Outlined.CloudUpload, contentDescription = null,
-                                    tint = SucculentPrimary, modifier = Modifier.size(22.dp))
-                            }
-                        }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .clickable { isBackupExpanded = !isBackupExpanded },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        VehicleSettingsIcon(Icons.Outlined.CloudUpload)
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
-                            Text("Backup & Restore", style = MaterialTheme.typography.titleMedium,
+                            Text("Backup & restore", style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold)
                             val syncSubtitle = if (state.isSheetsConnected) {
-                                lastBackupTime?.let { "Synced on ${timeFormat.format(Date(it))}" } ?: "Connected"
+                                lastBackupTime?.let { "Last synced ${timeFormat.format(Date(it))}" } ?: "Connected"
                             } else {
                                 "Disconnected"
                             }
@@ -610,6 +622,11 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        Icon(
+                            imageVector = if (isBackupExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isBackupExpanded) "Collapse Backup & restore" else "Expand Backup & restore",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
 
                     if (!backupError.isNullOrBlank()) {
@@ -617,7 +634,8 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.error)
                     }
 
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    if (isBackupExpanded) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(onClick = viewModel::backupAllNow,
                             enabled = !isBackingUp && !isRestoring && state.isSheetsConnected,
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp),
@@ -649,6 +667,7 @@ fun SettingsScreen(
                             Spacer(Modifier.width(6.dp))
                             Text(if (isRestoring) "Loading" else "Restore", fontWeight = FontWeight.SemiBold)
                         }
+                    }
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
@@ -740,28 +759,40 @@ fun SettingsScreen(
         }
 
         item {
-            SettingsSection(
-                title = "Dark mode",
-                icon = Icons.Default.DarkMode,
-                trailing = {
-                    SettingsToggle(
-                        checked = state.themeMode == AppThemeMode.DARK,
-                        onCheckedChange = { isDark ->
-                            viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
-                        },
-                        label = "Dark mode"
-                    )
-                }
-            )
-        }
-
-        item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                Row(
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 52.dp)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        VehicleSettingsIcon(Icons.Default.DarkMode)
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = "Dark mode",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        SettingsToggle(
+                            checked = state.themeMode == AppThemeMode.DARK,
+                            onCheckedChange = { isDark ->
+                                viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
+                            },
+                            label = "Dark mode"
+                        )
+                    }
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                    )
+                    Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = 52.dp)
@@ -795,6 +826,7 @@ fun SettingsScreen(
                         contentDescription = "Open Bluetooth diagnostics",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
                 }
             }
         }
@@ -1844,8 +1876,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.245",
+                    summary = "Group Settings into 4 unified cards (Driving & vehicle, Trip organization, Data & sync, Preferences & diagnostics) with collapsible Backup & restore.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.244",
                     summary = "Merge Driving & vehicle into a single white card in Settings.",
+                    commitHash = "aaa07a9",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
