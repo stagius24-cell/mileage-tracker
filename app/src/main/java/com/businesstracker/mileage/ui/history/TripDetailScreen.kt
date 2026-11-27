@@ -197,7 +197,7 @@ fun TripDetailScreen(
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val pageBackground = if (isDark) MaterialTheme.colorScheme.background else Color(0xFFF1F4F9)
     val cardBackground = if (isDark) MaterialTheme.colorScheme.surface else Color.White
-    val canvasBackground = if (isDark) MaterialTheme.colorScheme.background else Color(0xFFF6F8FA)
+    val canvasBackground = if (isDark) MaterialTheme.colorScheme.background else Color(0xFFF1F4F9)
     val primaryText = if (isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF172536)
     val mutedText = if (isDark) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFF64748B)
     val emeraldAccent = if (isDark) Color(0xFF43D99A) else Color(0xFF168354)
@@ -372,23 +372,24 @@ fun TripDetailScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Card A: Hero Metrics & Trip Classification
+            // Card A: Compact Trip Summary Card (2 rows)
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(16.dp),
                 color = cardBackground,
                 border = BorderStroke(1.dp, dividerColor)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    // Row 1: Distance (left) | Current Classification (center) | Circular Vehicle Button (right)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.Top
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
@@ -403,9 +404,8 @@ fun TripDetailScreen(
                                 Text(
                                     text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
                                     style = MaterialTheme.typography.headlineMedium.copy(
-                                        fontSize = 32.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = (-1).sp,
+                                        fontSize = 28.sp,
+                                        fontWeight = FontWeight.SemiBold,
                                         fontFeatureSettings = "tnum"
                                     ),
                                     color = primaryText
@@ -415,163 +415,117 @@ fun TripDetailScreen(
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = mutedText,
-                                    modifier = Modifier.padding(bottom = 5.dp)
+                                    modifier = Modifier.padding(bottom = 4.dp)
                                 )
                             }
                         }
 
-                        Column(
-                            horizontalAlignment = Alignment.End,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        // Single read-only status chip for current saved classification
+                        val chipBg = when (trip.classification) {
+                            TripClassification.BUSINESS.value -> if (isDark) SucculentPrimary.copy(alpha = 0.16f) else Color(0xFFEDF5F0)
+                            TripClassification.PERSONAL.value -> if (isDark) Color(0xFF3B82F6).copy(alpha = 0.16f) else Color(0xFFEFF6FF)
+                            else -> if (isDark) Color(0xFFF59E0B).copy(alpha = 0.16f) else Color(0xFFFEF3C7)
+                        }
+                        val chipText = when (trip.classification) {
+                            TripClassification.BUSINESS.value -> emeraldAccent
+                            TripClassification.PERSONAL.value -> if (isDark) Color(0xFF93C5FD) else Color(0xFF2563EB)
+                            else -> if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = chipBg,
+                            modifier = Modifier.height(28.dp)
                         ) {
-                            // Segmented Personal | Business pill
-                            val isBusiness = trip.classification == TripClassification.BUSINESS.value
-                            val isPersonal = trip.classification == TripClassification.PERSONAL.value
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.padding(horizontal = 12.dp)
+                            ) {
+                                Text(
+                                    text = classificationLabel,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = chipText
+                                )
+                            }
+                        }
+
+                        // Circular Vehicle Button with lower-right chevron overlay
+                        Box(
+                            modifier = Modifier
+                                .size(46.dp)
+                                .semantics { contentDescription = "Vehicle: $tripVehicleName" }
+                                .clickable { showVehiclePicker = true },
+                            contentAlignment = Alignment.Center
+                        ) {
                             Surface(
-                                shape = RoundedCornerShape(20.dp),
-                                color = if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF1F3F5),
+                                modifier = Modifier.size(46.dp),
+                                shape = CircleShape,
+                                color = if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF8FAFC),
                                 border = BorderStroke(1.dp, dividerColor)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(3.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Surface(
-                                        onClick = { showEditSheet = true },
-                                        shape = RoundedCornerShape(16.dp),
-                                        color = if (isPersonal) cardBackground else Color.Transparent,
-                                        shadowElevation = if (isPersonal) 1.dp else 0.dp
-                                    ) {
-                                        Text(
-                                            text = "Personal",
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isPersonal) FontWeight.SemiBold else FontWeight.Medium,
-                                            color = if (isPersonal) primaryText else mutedText,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                        )
-                                    }
-                                    Surface(
-                                        onClick = { showEditSheet = true },
-                                        shape = RoundedCornerShape(16.dp),
-                                        color = if (isBusiness) emeraldAccent else Color.Transparent,
-                                        shadowElevation = if (isBusiness) 1.dp else 0.dp
-                                    ) {
-                                        Text(
-                                            text = "Business",
-                                            fontSize = 12.sp,
-                                            fontWeight = if (isBusiness) FontWeight.SemiBold else FontWeight.Medium,
-                                            color = if (isBusiness) Color.White else mutedText,
-                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Neutral Vehicle Pill
-                            Surface(
-                                onClick = { showVehiclePicker = true },
-                                shape = RoundedCornerShape(16.dp),
-                                color = if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF1F3F5)
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                ) {
+                                Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = Icons.Outlined.DirectionsCar,
                                         contentDescription = null,
                                         tint = primaryText,
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(22.dp)
                                     )
-                                    Text(
-                                        text = tripVehicleName,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = primaryText,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
+                                }
+                            }
+                            Surface(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(16.dp),
+                                shape = CircleShape,
+                                color = cardBackground,
+                                border = BorderStroke(1.dp, dividerColor)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = mutedText,
+                                        modifier = Modifier.size(12.dp)
                                     )
                                 }
                             }
                         }
                     }
 
-                    // Two side-by-side soft tonal metric tiles
-                    val tileBg = if (isDark) SucculentPrimary.copy(alpha = 0.12f) else Color(0xFFECFDF5)
-                    val neutralTileBg = if (isDark) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f) else Color(0xFFF6F8FA)
+                    // Row 2: Single subtle sage-green Duration | Deduction strip
+                    val sageBg = if (isDark) SucculentPrimary.copy(alpha = 0.10f) else Color(0xFFEDF5F0)
                     val deductionPositive = trip.calculatedDeduction > 0.0
-                    Row(
+                    Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        color = sageBg
                     ) {
-                        Surface(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            color = neutralTileBg
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Schedule,
-                                    contentDescription = null,
-                                    tint = emeraldAccent,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Column {
-                                    Text(
-                                        text = "$durationMinutes min",
-                                        style = MaterialTheme.typography.titleSmall.copy(
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontFeatureSettings = "tnum"
-                                        ),
-                                        color = primaryText
-                                    )
-                                    Text(
-                                        text = "Duration",
-                                        fontSize = 11.sp,
-                                        color = mutedText
-                                    )
-                                }
-                            }
-                        }
-                        Surface(
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (deductionPositive) tileBg else neutralTileBg
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.AccountBalanceWallet,
-                                    contentDescription = null,
-                                    tint = if (deductionPositive) emeraldAccent else mutedText,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Column {
-                                    Text(
-                                        text = "$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}",
-                                        style = MaterialTheme.typography.titleSmall.copy(
-                                            fontSize = 15.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontFeatureSettings = "tnum"
-                                        ),
-                                        color = if (deductionPositive) emeraldAccent else primaryText
-                                    )
-                                    Text(
-                                        text = "Est. deduction",
-                                        fontSize = 11.sp,
-                                        color = mutedText
-                                    )
-                                }
-                            }
+                            CompactMetricCell(
+                                icon = Icons.Outlined.Schedule,
+                                iconTint = emeraldAccent,
+                                value = "$durationMinutes min",
+                                valueColor = primaryText,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .width(1.dp)
+                                    .height(18.dp)
+                                    .background(dividerColor.copy(alpha = 0.9f))
+                            )
+                            CompactMetricCell(
+                                icon = Icons.Outlined.AccountBalanceWallet,
+                                iconTint = emeraldAccent,
+                                value = "$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}",
+                                valueColor = if (deductionPositive) emeraldAccent else mutedText,
+                                modifier = Modifier.weight(1f)
+                            )
                         }
                     }
                 }
