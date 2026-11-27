@@ -3,9 +3,13 @@ name: Build & Test Business Mileage Tracker APK
 on:
   push:
     branches: [ "main", "feature/**", "fix/**", "audit/**" ]
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main", "feature/**", "fix/**", "audit/**" ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -85,6 +89,7 @@ jobs:
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
 
       - name: Verify APK Signature, Application ID, and Version Code
+        id: apk_meta
         env:
           APK_PATH: ${{ steps.find_apk.outputs.apk_path }}
         run: |
@@ -121,11 +126,23 @@ jobs:
             exit 1
           fi
           echo "APK version code verification PASSED ($VERSION_CODE >= 163)."
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          cp "$APK_PATH" "$RUNNER_TEMP/BusinessMileageTracker-v${VERSION_NAME}.apk"
+          echo "release_apk=$RUNNER_TEMP/BusinessMileageTracker-v${VERSION_NAME}.apk" >> $GITHUB_OUTPUT
 
       - name: Upload Verified Update-Ready APK
         uses: actions/upload-artifact@v4
         with:
-          name: BusinessMileageTracker-v1.0.220-reports-period-comparison
-          path: ${{ steps.find_apk.outputs.apk_path }}
+          name: BusinessMileageTracker-v${{ steps.apk_meta.outputs.version_name }}
+          path: ${{ steps.apk_meta.outputs.release_apk }}
           retention-days: 30
           if-no-files-found: error
+
+      - name: Publish GitHub Release APK
+        if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.apk_meta.outputs.version_name }}
+          name: Business Mileage Tracker v${{ steps.apk_meta.outputs.version_name }}
+          files: ${{ steps.apk_meta.outputs.release_apk }}
