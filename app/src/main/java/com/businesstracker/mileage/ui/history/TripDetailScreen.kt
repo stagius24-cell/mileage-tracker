@@ -305,6 +305,7 @@ fun TripDetailScreen(
                     .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -433,6 +434,7 @@ fun TripDetailScreen(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+            }
             }
 
             val sageBg = if (isDark) SucculentPrimary.copy(alpha = 0.10f) else Color(0xFFEDF5F0)
