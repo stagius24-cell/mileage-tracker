@@ -309,7 +309,7 @@ fun TripDetailScreen(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(
                     modifier = Modifier.weight(1f),
@@ -343,7 +343,7 @@ fun TripDetailScreen(
                 Box {
                     IconButton(
                         onClick = { showOverflowMenu = true },
-                        modifier = Modifier.size(36.dp)
+                        modifier = Modifier.size(28.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.MoreVert,
@@ -1102,7 +1102,7 @@ private fun RouteDetailsTab(
             modifier = Modifier
                 .padding(start = 11.dp)
                 .width(1.5.dp)
-                .height(16.dp)
+                .height(30.dp)
                 .background(dividerColor.copy(alpha = 0.8f))
         )
         DestinationRow(
