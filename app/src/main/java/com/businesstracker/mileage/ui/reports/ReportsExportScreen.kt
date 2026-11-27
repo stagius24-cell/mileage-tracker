@@ -265,21 +265,6 @@ fun ReportsExportScreen(
                 dividerColor = dividerColor
             )
         }
-
-        // 4. Trip Review Section
-        item {
-            TripReviewCard(
-                unclassifiedCount = state.unclassifiedCount,
-                incompleteCount = state.incompleteCount,
-                missingPurposeCount = state.missingPurposeCount,
-                cardBg = cardBg,
-                primaryText = primaryText,
-                mutedText = mutedText,
-                emeraldAccent = emeraldAccent,
-                dividerColor = dividerColor,
-                onReviewClick = { onNavigateToTrips?.invoke(state.selectedYear) }
-            )
-        }
     }
 
     if (showCreateReportDialog) {
@@ -287,7 +272,7 @@ fun ReportsExportScreen(
 
         AppFloatingBottomSheet(
             onDismissRequest = { showCreateReportDialog = false },
-            title = "Create Yearly Report",
+            title = "Create Report",
             onClose = { showCreateReportDialog = false }
         ) {
             Column(
@@ -316,6 +301,79 @@ fun ReportsExportScreen(
                                 options = state.availableYears.map { it to "$it tax year" },
                                 onSelect = viewModel::selectYear
                             )
+                        }
+
+                        // 1b. Reporting Period (Whole year, single month, or multiple months)
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Period",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = SlateNeutral
+                                )
+                                val isFullYear = state.selectedMonths.isEmpty() || state.selectedMonths.size == 12
+                                Surface(
+                                    onClick = { viewModel.setSelectedPeriod(state.selectedYear, emptySet()) },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (isFullYear) SucculentPrimary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                ) {
+                                    Text(
+                                        text = "Whole year",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (isFullYear) Color.White else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                            val monthLabels = listOf(
+                                "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+                            )
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                for (rowIdx in 0 until 3) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        for (colIdx in 0 until 4) {
+                                            val monthNum = rowIdx * 4 + colIdx + 1
+                                            val monthKey = "%04d-%02d".format(state.selectedYear, monthNum)
+                                            val isSelected = monthKey in state.selectedMonths
+                                            Surface(
+                                                onClick = {
+                                                    val updated = if (isSelected) {
+                                                        state.selectedMonths - monthKey
+                                                    } else {
+                                                        state.selectedMonths + monthKey
+                                                    }
+                                                    viewModel.setSelectedPeriod(state.selectedYear, updated)
+                                                },
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = if (isSelected) SucculentPrimary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                                modifier = Modifier.weight(1f)
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier.padding(vertical = 6.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = monthLabels[monthNum - 1],
+                                                        fontSize = 12.sp,
+                                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
 
                         // 2. Drive Type (Business, Personal, All) Selection
