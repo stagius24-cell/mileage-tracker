@@ -328,13 +328,6 @@ fun DashboardScreen(
                 }
             }
 
-            item {
-                AnnualSummaryCard(
-                    year = state.selectedYear,
-                    annualSummary = state.annualSummary
-                )
-            }
-
             // Section: Trips to Review (Hidden by default when 0 to review, only appears if actual drives exist)
             if (state.unreviewedTrips.isNotEmpty()) {
                 item {
