@@ -1816,7 +1816,7 @@ fun SettingsScreen(
     if (showVersionHistoryDialog) {
         val updates = remember {
             listOf(
-                "Version 1.0.221 (Build 221)" to "2026-11-26: Rework Dashboard filter button into a floating filter sheet with multi-month, Today, and This Week selection.",
+                "Version 1.0.221 (Build 221)" to "2026-11-26 • https://github.com/stagius24-cell/mileage-tracker/commit/d76ddcd\nRework Dashboard filter button into a floating filter sheet with multi-month, Today, and This Week selection.",
                 "Version 1.0.214 (Build 214)" to "Rename the Bluetooth diagnostics description to Bluetooth & auto-start log.",
                 "Version 1.0.213 (Build 213)" to "Move the Settings version label below all Settings sections.",
                 "Version 1.0.212 (Build 212)" to "Move Bluetooth diagnostics to the bottom of Settings.",
