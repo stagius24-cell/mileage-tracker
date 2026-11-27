@@ -85,6 +85,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.businesstracker.mileage.service.TrackingServiceState
 import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
+import com.businesstracker.mileage.ui.components.FilterTripsBottomSheet
 import com.businesstracker.mileage.ui.components.SwipeableTripCard
 import com.businesstracker.mileage.ui.theme.AmoledBlack
 import com.businesstracker.mileage.ui.theme.HighAccuracyGreen
@@ -108,7 +109,7 @@ fun DashboardScreen(
     val serviceState by viewModel.serviceState.collectAsStateWithLifecycle()
     val savedVehicles by viewModel.savedVehicles.collectAsStateWithLifecycle()
     var monthMenuExpanded by remember { mutableStateOf(false) }
-    var isTimeFilterExpanded by remember { mutableStateOf(false) }
+    var showFilterSheet by remember { mutableStateOf(false) }
     var isAmoledDimmed by remember { mutableStateOf(false) }
     var showActiveVehiclePicker by remember { mutableStateOf(false) }
 
@@ -209,45 +210,19 @@ fun DashboardScreen(
                                 }
                             }
 
+                            val hasActiveFilter = state.selectedMonths.isNotEmpty() ||
+                                state.timeFilter == TimeFilter.TODAY ||
+                                state.timeFilter == TimeFilter.THIS_WEEK
                             IconButton(
-                                onClick = { isTimeFilterExpanded = !isTimeFilterExpanded },
+                                onClick = { showFilterSheet = true },
                                 modifier = Modifier.size(36.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Tune,
                                     contentDescription = "Filter by Time Period",
-                                    tint = if (isTimeFilterExpanded) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = if (hasActiveFilter) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(20.dp)
                                 )
-                            }
-                        }
-                    }
-
-                    AnimatedVisibility(
-                        visible = isTimeFilterExpanded,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
-                    ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            LazyRow(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(TimeFilter.entries.filter { it != TimeFilter.CUSTOM }) { filter ->
-                                    FilterChip(
-                                        selected = state.timeFilter == filter,
-                                        onClick = { viewModel.setTimeFilter(filter) },
-                                        label = { Text(filter.displayName) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = SucculentPrimary,
-                                            selectedLabelColor = Color.White
-                                        )
-                                    )
-                                }
                             }
                         }
                     }
@@ -277,12 +252,22 @@ fun DashboardScreen(
                     customStartDate = state.customStartDate,
                     customEndDate = state.customEndDate
                 )
-                val periodLabel = if (state.timeFilter == TimeFilter.CUSTOM && state.selectedMonthName.isNotBlank()) {
-                    "${state.selectedMonthName} ${state.selectedYear}"
-                } else if (state.timeFilter == TimeFilter.THIS_MONTH) {
-                    "${state.selectedMonthName} ${state.selectedYear}"
-                } else {
-                    state.timeFilter.displayName
+                val periodLabel = when {
+                    state.selectedMonths.size > 1 -> "${state.selectedMonths.size} months"
+                    state.selectedMonths.size == 1 -> {
+                        val m = state.selectedMonths.first()
+                        try {
+                            val d = LocalDate.parse("$m-01")
+                            "${d.month.getDisplayName(TextStyle.FULL, Locale.getDefault())} ${d.year}"
+                        } catch (_: Exception) {
+                            m
+                        }
+                    }
+                    state.timeFilter == TimeFilter.CUSTOM && state.selectedMonthName.isNotBlank() ->
+                        "${state.selectedMonthName} ${state.selectedYear}"
+                    state.timeFilter == TimeFilter.THIS_MONTH ->
+                        "${state.selectedMonthName} ${state.selectedYear}"
+                    else -> state.timeFilter.displayName
                 }
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
@@ -447,6 +432,29 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+
+    if (showFilterSheet) {
+        var pendingTimeFilter by remember {
+            mutableStateOf(
+                state.timeFilter.takeIf { it == TimeFilter.TODAY || it == TimeFilter.THIS_WEEK }
+            )
+        }
+        FilterTripsBottomSheet(
+            onDismissRequest = { showFilterSheet = false },
+            title = "Filter dashboard",
+            initialSelectedMonths = state.selectedMonths,
+            availableYears = state.availableMonths.mapNotNull { it.take(4).toIntOrNull() }.distinct(),
+            showVehicleFilter = false,
+            showTripTypeFilter = false,
+            showMissingPurposeToggle = false,
+            showQuickTimePresets = true,
+            initialTimeFilter = pendingTimeFilter,
+            onApplyTimeFilter = { tf -> pendingTimeFilter = tf },
+            onApplyFilters = { months, _, _, _ ->
+                viewModel.applyDashboardFilters(months, pendingTimeFilter)
+            }
+        )
     }
 
     if (showActiveVehiclePicker) {

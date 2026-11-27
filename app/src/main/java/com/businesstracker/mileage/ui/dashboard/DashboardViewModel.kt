@@ -53,6 +53,7 @@ data class DashboardUiState(
     val selectedMonthName: String = "",
     val selectedYear: Int = LocalDate.now().year,
     val selectedMonthPrefix: String = "",
+    val selectedMonths: Set<String> = emptySet(),
     val availableMonths: List<String> = emptyList(),
     val summary: DashboardSummary = DashboardSummary(),
     val annualSummary: DashboardSummary = DashboardSummary(),
@@ -85,6 +86,7 @@ class DashboardViewModel @Inject constructor(
     private val _customStartDate = MutableStateFlow("")
     private val _customEndDate = MutableStateFlow("")
     private val _selectedMonthPrefix = MutableStateFlow(currentMonthIso)
+    private val _selectedMonths = MutableStateFlow<Set<String>>(emptySet())
     private val _processingTripIds = MutableStateFlow<Set<String>>(emptySet())
     private val _lastClassifiedTrip = MutableStateFlow<TripEntity?>(null)
     private val _lastClassificationLabel = MutableStateFlow<String?>(null)
@@ -201,7 +203,8 @@ class DashboardViewModel @Inject constructor(
         val unreviewed: List<TripEntity>,
         val allTrips: List<TripEntity>,
         val timeFilter: TimeFilter,
-        val monthPrefix: String
+        val monthPrefix: String,
+        val selectedMonths: Set<String>
     )
 
     private data class CustomRangeAndActionState(
@@ -217,9 +220,10 @@ class DashboardViewModel @Inject constructor(
         tripRepository.getUnclassifiedTrips(),
         tripRepository.getAllTrips(),
         _timeFilter,
-        _selectedMonthPrefix
-    ) { unreviewed, allTrips, filter, monthPrefix ->
-        TripFilterState(unreviewed, allTrips, filter, monthPrefix)
+        _selectedMonthPrefix,
+        _selectedMonths
+    ) { unreviewed, allTrips, filter, monthPrefix, selectedMonths ->
+        TripFilterState(unreviewed, allTrips, filter, monthPrefix, selectedMonths)
     }
 
     private val customPurposesFlow: Flow<List<String>> = preferencesManager?.customPurposes ?: flowOf(emptyList())
@@ -259,13 +263,24 @@ class DashboardViewModel @Inject constructor(
             tripState.timeFilter
         }
 
-        val summary = summaryUseCase.execute(
-            trips = tripState.allTrips,
-            timeFilter = effectiveFilter,
-            customStartDate = if (actionState.customStart.isNotBlank()) actionState.customStart else null,
-            customEndDate = if (actionState.customEnd.isNotBlank()) actionState.customEnd else null,
-            referenceDate = now
-        )
+        val summary = if (tripState.selectedMonths.isNotEmpty()) {
+            val filteredTrips = tripState.allTrips.filter { trip ->
+                trip.date.length >= 7 && trip.date.substring(0, 7) in tripState.selectedMonths
+            }
+            summaryUseCase.execute(
+                trips = filteredTrips,
+                timeFilter = TimeFilter.ALL_TIME,
+                referenceDate = now
+            )
+        } else {
+            summaryUseCase.execute(
+                trips = tripState.allTrips,
+                timeFilter = effectiveFilter,
+                customStartDate = if (actionState.customStart.isNotBlank()) actionState.customStart else null,
+                customEndDate = if (actionState.customEnd.isNotBlank()) actionState.customEnd else null,
+                referenceDate = now
+            )
+        }
 
         val monthDate = try {
             LocalDate.parse("${tripState.monthPrefix}-01")
@@ -294,6 +309,7 @@ class DashboardViewModel @Inject constructor(
             selectedMonthName = monthDisplayName,
             selectedYear = selectedYear,
             selectedMonthPrefix = tripState.monthPrefix,
+            selectedMonths = tripState.selectedMonths,
             availableMonths = availableMonths,
             summary = summary,
             annualSummary = annualSummary,
@@ -316,7 +332,27 @@ class DashboardViewModel @Inject constructor(
     )
 
     fun setTimeFilter(filter: TimeFilter) {
+        _selectedMonths.value = emptySet()
         _timeFilter.value = filter
+    }
+
+    fun applyDashboardFilters(months: Set<String>, timeFilter: TimeFilter?) {
+        if (months.isNotEmpty()) {
+            _selectedMonths.value = months
+            _timeFilter.value = TimeFilter.CUSTOM
+            if (months.size == 1) {
+                _selectedMonthPrefix.value = months.first()
+            }
+        } else if (timeFilter != null) {
+            _selectedMonths.value = emptySet()
+            _timeFilter.value = timeFilter
+        } else {
+            _selectedMonths.value = emptySet()
+            _timeFilter.value = TimeFilter.THIS_MONTH
+            _selectedMonthPrefix.value = currentMonthIso
+            _customStartDate.value = ""
+            _customEndDate.value = ""
+        }
     }
 
     fun setCustomDateRange(startDate: String, endDate: String) {
@@ -326,6 +362,7 @@ class DashboardViewModel @Inject constructor(
     }
 
     fun selectMonth(monthPrefix: String) {
+        _selectedMonths.value = emptySet()
         _selectedMonthPrefix.value = monthPrefix
         val parts = monthPrefix.split("-")
         if (parts.size == 2) {

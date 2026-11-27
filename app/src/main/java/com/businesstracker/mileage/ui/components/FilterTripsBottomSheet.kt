@@ -67,6 +67,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.businesstracker.mileage.data.local.entity.VehicleEntity
+import com.businesstracker.mileage.domain.model.TimeFilter
 import com.businesstracker.mileage.ui.theme.AppShapes
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
 import java.time.LocalDate
@@ -102,7 +103,10 @@ fun FilterTripsBottomSheet(
     initialOnlyMissingPurpose: Boolean = false,
     showVehicleFilter: Boolean = true,
     showTripTypeFilter: Boolean = true,
-    showMissingPurposeToggle: Boolean = true
+    showMissingPurposeToggle: Boolean = true,
+    showQuickTimePresets: Boolean = false,
+    initialTimeFilter: TimeFilter? = null,
+    onApplyTimeFilter: ((TimeFilter?) -> Unit)? = null
 ) {
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val scrimColor = if (isDark) Color.Black.copy(alpha = 0.65f) else Color.Black.copy(alpha = 0.45f)
@@ -120,6 +124,7 @@ fun FilterTripsBottomSheet(
         )
     }
     var draftMonths by remember { mutableStateOf(initialSelectedMonths) }
+    var draftTimeFilter by remember { mutableStateOf(initialTimeFilter) }
     var draftVehicles by remember { mutableStateOf(initialSelectedVehicles) }
     var draftTripTypes by remember { mutableStateOf(initialSelectedTripTypes) }
     var draftOnlyMissingPurpose by remember { mutableStateOf(initialOnlyMissingPurpose) }
@@ -138,6 +143,7 @@ fun FilterTripsBottomSheet(
 
     fun resetDraft() {
         draftMonths = emptySet()
+        draftTimeFilter = null
         draftVehicles = emptySet()
         draftTripTypes = emptySet()
         draftOnlyMissingPurpose = false
@@ -304,23 +310,52 @@ fun FilterTripsBottomSheet(
                         .map { "%04d-%02d".format(activeYear, it) }
                         .toSet()
 
+                    if (showQuickTimePresets) {
+                        FilterPresetChip(
+                            label = "Today",
+                            selected = draftTimeFilter == TimeFilter.TODAY && draftMonths.isEmpty(),
+                            unselectedBg = chipUnselectedBg,
+                            onClick = {
+                                draftTimeFilter = TimeFilter.TODAY
+                                draftMonths = emptySet()
+                            }
+                        )
+                        FilterPresetChip(
+                            label = "This Week",
+                            selected = draftTimeFilter == TimeFilter.THIS_WEEK && draftMonths.isEmpty(),
+                            unselectedBg = chipUnselectedBg,
+                            onClick = {
+                                draftTimeFilter = TimeFilter.THIS_WEEK
+                                draftMonths = emptySet()
+                            }
+                        )
+                    }
                     FilterPresetChip(
                         label = "YTD",
                         selected = draftMonths == ytdMonths,
                         unselectedBg = chipUnselectedBg,
-                        onClick = { draftMonths = ytdMonths }
+                        onClick = {
+                            draftTimeFilter = null
+                            draftMonths = ytdMonths
+                        }
                     )
                     FilterPresetChip(
                         label = "Last 3 months",
                         selected = draftMonths == last3Months,
                         unselectedBg = chipUnselectedBg,
-                        onClick = { draftMonths = last3Months }
+                        onClick = {
+                            draftTimeFilter = null
+                            draftMonths = last3Months
+                        }
                     )
                     FilterPresetChip(
                         label = "All year",
                         selected = draftMonths == allYearMonths,
                         unselectedBg = chipUnselectedBg,
-                        onClick = { draftMonths = allYearMonths }
+                        onClick = {
+                            draftTimeFilter = null
+                            draftMonths = allYearMonths
+                        }
                     )
                 }
 
@@ -350,6 +385,7 @@ fun FilterTripsBottomSheet(
                                         .clip(RoundedCornerShape(10.dp))
                                         .background(if (isSelected) SucculentPrimary else chipUnselectedBg)
                                         .clickable {
+                                            draftTimeFilter = null
                                             draftMonths = if (isSelected) {
                                                 draftMonths - monthKey
                                             } else {
@@ -563,6 +599,7 @@ fun FilterTripsBottomSheet(
                 }
                 Button(
                     onClick = {
+                        onApplyTimeFilter?.invoke(draftTimeFilter)
                         onApplyFilters(
                             draftMonths,
                             draftVehicles,
