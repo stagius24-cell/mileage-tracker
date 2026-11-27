@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
+import androidx.compose.material.icons.outlined.DirectionsCar
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.DropdownMenu
@@ -237,7 +238,7 @@ fun TripDetailScreen(
             .verticalScroll(rememberScrollState())
     ) {
         val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
-        val collapsedMapHeight = (screenHeightDp * 0.28f).coerceIn(170.dp, 220.dp)
+        val collapsedMapHeight = (screenHeightDp * 0.25f).coerceIn(150.dp, 200.dp)
         val mapHeight by animateDpAsState(
             targetValue = if (isMapExpanded) 340.dp else collapsedMapHeight,
             animationSpec = tween(250),
@@ -293,12 +294,17 @@ fun TripDetailScreen(
             }
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            color = cardBackground
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -339,23 +345,16 @@ fun TripDetailScreen(
                 }
 
                 Box {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = cardBackground,
-                        border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.8f)),
-                        modifier = Modifier
-                            .size(36.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { showOverflowMenu = true }
+                    IconButton(
+                        onClick = { showOverflowMenu = true },
+                        modifier = Modifier.size(36.dp)
                     ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = "Trip options",
-                                tint = mutedText,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "Trip options",
+                            tint = mutedText,
+                            modifier = Modifier.size(20.dp)
+                        )
                     }
                     DropdownMenu(
                         expanded = showOverflowMenu,
@@ -389,6 +388,38 @@ fun TripDetailScreen(
                 }
             }
 
+            // Vehicle row (visible across both Route and More info tabs)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showVehiclePicker = true }
+                    .padding(vertical = 2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.DirectionsCar,
+                    contentDescription = null,
+                    tint = mutedText,
+                    modifier = Modifier.size(16.dp)
+                )
+                Text(
+                    text = tripVehicleName,
+                    modifier = Modifier.weight(1f),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = primaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "Edit trip vehicle",
+                    tint = mutedText,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+
             val sageBg = if (isDark) SucculentPrimary.copy(alpha = 0.10f) else Color(0xFFEDF5F0)
             val deductionPositive = trip.calculatedDeduction > 0.0
             Surface(
@@ -403,8 +434,6 @@ fun TripDetailScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     CompactMetricCell(
-                        icon = Icons.Outlined.Route,
-                        iconTint = emeraldAccent,
                         label = "Distance",
                         value = "${String.format(Locale.US, "%.1f", trip.totalDistanceMiles)} mi",
                         valueColor = primaryText,
@@ -418,8 +447,6 @@ fun TripDetailScreen(
                             .background(dividerColor.copy(alpha = 0.9f))
                     )
                     CompactMetricCell(
-                        icon = Icons.Outlined.Schedule,
-                        iconTint = mutedText,
                         label = "Duration",
                         value = "$durationMinutes min",
                         valueColor = primaryText,
@@ -433,8 +460,6 @@ fun TripDetailScreen(
                             .background(dividerColor.copy(alpha = 0.9f))
                     )
                     CompactMetricCell(
-                        icon = Icons.Outlined.AccountBalanceWallet,
-                        iconTint = if (deductionPositive) emeraldAccent else mutedText,
                         label = "Deduction",
                         value = "$${String.format(Locale.US, "%.2f", trip.calculatedDeduction)}",
                         valueColor = if (deductionPositive) emeraldAccent else mutedText,
@@ -622,18 +647,11 @@ fun TripDetailScreen(
                 HorizontalDivider(color = dividerColor.copy(alpha = 0.8f), thickness = 1.dp)
             }
 
-            Card(
+            HorizontalPager(
+                state = pagerState,
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = cardBackground),
-                border = BorderStroke(1.dp, dividerColor.copy(alpha = 0.7f)),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Top
-                ) { page ->
+                verticalAlignment = Alignment.Top
+            ) { page ->
                     if (page == 0) {
                         val resolvedStart = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
                             ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
@@ -943,8 +961,6 @@ fun TripDetailScreen(
 
 @Composable
 private fun CompactMetricCell(
-    icon: ImageVector,
-    iconTint: Color,
     label: String,
     value: String,
     valueColor: Color,
@@ -956,25 +972,14 @@ private fun CompactMetricCell(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = iconTint,
-                modifier = Modifier.size(14.dp)
-            )
-            Text(
-                text = label,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
-                color = labelColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Normal,
+            color = labelColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
         Text(
             text = value,
             style = MaterialTheme.typography.titleMedium.copy(
@@ -1065,44 +1070,8 @@ private fun RouteDetailsTab(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 14.dp, vertical = 2.dp)
+            .padding(vertical = 2.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 44.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Vehicle",
-                fontSize = 12.sp,
-                color = SlateNeutral
-            )
-            Text(
-                text = vehicleName,
-                modifier = Modifier.weight(1f),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            IconButton(
-                onClick = onEditVehicle,
-                modifier = Modifier
-                    .size(36.dp)
-                    .semantics { contentDescription = "Edit trip vehicle" }
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = null,
-                    tint = emeraldAccent,
-                    modifier = Modifier.size(16.dp)
-                )
-            }
-        }
-        HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))
         DestinationRow(
             primaryName = smartStartName,
             address = startAddress,
