@@ -424,89 +424,94 @@ fun TripDetailScreen(
                             }
                         }
 
-                        // Single read-only status chip for current saved classification
-                        val chipBg = when (trip.classification) {
-                            TripClassification.BUSINESS.value -> if (isDark) SucculentPrimary.copy(alpha = 0.16f) else Color(0xFFEDF5F0)
-                            TripClassification.PERSONAL.value -> if (isDark) Color(0xFF3B82F6).copy(alpha = 0.16f) else Color(0xFFEFF6FF)
-                            else -> if (isDark) Color(0xFFF59E0B).copy(alpha = 0.16f) else Color(0xFFFEF3C7)
-                        }
-                        val chipText = when (trip.classification) {
-                            TripClassification.BUSINESS.value -> emeraldAccent
-                            TripClassification.PERSONAL.value -> if (isDark) Color(0xFF93C5FD) else Color(0xFF2563EB)
-                            else -> if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
-                        }
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = chipBg,
-                            modifier = Modifier.height(28.dp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 12.dp)
-                            ) {
-                                Text(
-                                    text = classificationLabel,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = chipText
-                                )
+                            // Single read-only status chip for current saved classification
+                            val chipBg = when (trip.classification) {
+                                TripClassification.BUSINESS.value -> if (isDark) SucculentPrimary.copy(alpha = 0.16f) else Color(0xFFEDF5F0)
+                                TripClassification.PERSONAL.value -> if (isDark) Color(0xFF3B82F6).copy(alpha = 0.16f) else Color(0xFFEFF6FF)
+                                else -> if (isDark) Color(0xFFF59E0B).copy(alpha = 0.16f) else Color(0xFFFEF3C7)
                             }
-                        }
-
-                        // Circular Vehicle Button with realistic vehicle image + lower-right chevron overlay
-                        val vehicleDrawable = when {
-                            tripVehicleName.contains("Model 3", ignoreCase = true) -> R.drawable.vehicle_tesla_model_3
-                            tripVehicleName.contains("Model Y", ignoreCase = true) -> R.drawable.vehicle_tesla_model_y
-                            else -> null
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(46.dp)
-                                .semantics { contentDescription = "Vehicle: $tripVehicleName" }
-                                .clickable { showVehiclePicker = true },
-                            contentAlignment = Alignment.Center
-                        ) {
+                            val chipText = when (trip.classification) {
+                                TripClassification.BUSINESS.value -> emeraldAccent
+                                TripClassification.PERSONAL.value -> if (isDark) Color(0xFF93C5FD) else Color(0xFF2563EB)
+                                else -> if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
+                            }
                             Surface(
-                                modifier = Modifier.size(46.dp),
-                                shape = CircleShape,
-                                color = if (vehicleDrawable != null) Color.White else if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF8FAFC),
-                                border = BorderStroke(1.dp, dividerColor)
+                                shape = RoundedCornerShape(8.dp),
+                                color = chipBg,
+                                modifier = Modifier.height(28.dp)
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    if (vehicleDrawable != null) {
-                                        Image(
-                                            painter = painterResource(id = vehicleDrawable),
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Fit,
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .padding(3.dp)
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = Icons.Outlined.DirectionsCar,
-                                            contentDescription = null,
-                                            tint = primaryText,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    }
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.padding(horizontal = 12.dp)
+                                ) {
+                                    Text(
+                                        text = classificationLabel,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = chipText
+                                    )
                                 }
                             }
-                            Surface(
+
+                            // Circular Vehicle Button with zoomed-in realistic vehicle image + lower-right chevron overlay
+                            val vehicleDrawable = when {
+                                tripVehicleName.contains("Model 3", ignoreCase = true) -> R.drawable.vehicle_tesla_model_3
+                                tripVehicleName.contains("Model Y", ignoreCase = true) -> R.drawable.vehicle_tesla_model_y
+                                else -> null
+                            }
+                            Box(
                                 modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .size(16.dp),
-                                shape = CircleShape,
-                                color = cardBackground,
-                                border = BorderStroke(1.dp, dividerColor)
+                                    .size(46.dp)
+                                    .semantics { contentDescription = "Vehicle: $tripVehicleName" }
+                                    .clickable { showVehiclePicker = true },
+                                contentAlignment = Alignment.Center
                             ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.KeyboardArrowDown,
-                                        contentDescription = null,
-                                        tint = mutedText,
-                                        modifier = Modifier.size(12.dp)
-                                    )
+                                Surface(
+                                    modifier = Modifier.size(46.dp),
+                                    shape = CircleShape,
+                                    color = if (vehicleDrawable != null) Color.White else if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF8FAFC),
+                                    border = BorderStroke(1.dp, dividerColor)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        if (vehicleDrawable != null) {
+                                            Image(
+                                                painter = painterResource(id = vehicleDrawable),
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .graphicsLayer(scaleX = 1.45f, scaleY = 1.45f)
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Outlined.DirectionsCar,
+                                                contentDescription = null,
+                                                tint = primaryText,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                Surface(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .size(16.dp),
+                                    shape = CircleShape,
+                                    color = cardBackground,
+                                    border = BorderStroke(1.dp, dividerColor)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.KeyboardArrowDown,
+                                            contentDescription = null,
+                                            tint = mutedText,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
