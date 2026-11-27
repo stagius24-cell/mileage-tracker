@@ -343,7 +343,7 @@ fun ReportsExportScreen(
                                     ) {
                                         for (colIdx in 0 until 4) {
                                             val monthNum = rowIdx * 4 + colIdx + 1
-                                            val monthKey = "%04d-%02d".format(state.selectedYear, monthNum)
+                                            val monthKey = "%s-%02d".format(state.selectedYear, monthNum)
                                             val isSelected = monthKey in state.selectedMonths
                                             Surface(
                                                 onClick = {
