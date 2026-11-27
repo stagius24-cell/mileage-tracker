@@ -114,6 +114,10 @@ fun DashboardScreen(
     var showFilterSheet by remember { mutableStateOf(false) }
     var isAmoledDimmed by remember { mutableStateOf(false) }
     var showActiveVehiclePicker by remember { mutableStateOf(false) }
+    var selectedIdleVehicleId by remember { mutableStateOf<String?>(null) }
+    val selectedIdleVehicle = remember(savedVehicles, selectedIdleVehicleId) {
+        savedVehicles.firstOrNull { it.id == selectedIdleVehicleId } ?: savedVehicles.firstOrNull()
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         LazyColumn(
@@ -172,23 +176,7 @@ fun DashboardScreen(
                     DriveTrackingTable(
                         serviceState = serviceState,
                         isAutoTrackingEnabled = state.isAutoTrackingEnabled,
-                        onStart = { viewModel.startManualTracking() },
-                        onPause = { viewModel.pauseTracking() },
-                        onResume = { viewModel.resumeTracking() },
-                        onEnd = { viewModel.endTracking() },
-                        onSelectVehicle = if (savedVehicles.isNotEmpty()) {
-                            { showActiveVehiclePicker = true }
-                        } else null
-                    )
-                }
-            }
-
-            if (!isLiveOrRecovery) {
-                item {
-                    DriveTrackingTable(
-                        serviceState = serviceState,
-                        isAutoTrackingEnabled = state.isAutoTrackingEnabled,
-                        fallbackVehicleName = savedVehicles.firstOrNull()?.name,
+                        fallbackVehicleName = selectedIdleVehicle?.name,
                         onStart = { viewModel.startManualTracking() },
                         onPause = { viewModel.pauseTracking() },
                         onResume = { viewModel.resumeTracking() },
@@ -273,6 +261,23 @@ fun DashboardScreen(
                             { category -> onNavigateToHistory(category, startDate, endDate) }
                         } else null,
                         onDeductionClick = onNavigateToReports
+                    )
+                }
+            }
+
+            if (!isLiveOrRecovery) {
+                item {
+                    DriveTrackingTable(
+                        serviceState = serviceState,
+                        isAutoTrackingEnabled = state.isAutoTrackingEnabled,
+                        fallbackVehicleName = selectedIdleVehicle?.name,
+                        onStart = { viewModel.startManualTracking() },
+                        onPause = { viewModel.pauseTracking() },
+                        onResume = { viewModel.resumeTracking() },
+                        onEnd = { viewModel.endTracking() },
+                        onSelectVehicle = if (savedVehicles.isNotEmpty()) {
+                            { showActiveVehiclePicker = true }
+                        } else null
                     )
                 }
             }
@@ -447,6 +452,7 @@ fun DashboardScreen(
                                 else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
                             )
                             .clickable {
+                                selectedIdleVehicleId = vehicle.id
                                 viewModel.selectActiveTripVehicle(vehicle.id)
                                 showActiveVehiclePicker = false
                             }
@@ -568,98 +574,95 @@ private fun DriveTrackingTable(
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.weight(1f)
+                    Surface(
+                        onClick = { onSelectVehicle?.invoke() },
+                        enabled = onSelectVehicle != null,
+                        modifier = Modifier.size(48.dp),
+                        shape = CircleShape,
+                        color = if (vehicleDrawable != null) Color.White else SucculentPrimary.copy(alpha = 0.12f),
+                        border = BorderStroke(1.dp, dividerColor)
                     ) {
-                        Surface(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .then(if (onSelectVehicle != null) Modifier.clickable(onClick = onSelectVehicle) else Modifier),
-                            shape = CircleShape,
-                            color = if (vehicleDrawable != null) Color.White else SucculentPrimary.copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, dividerColor)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                if (vehicleDrawable != null) {
-                                    androidx.compose.foundation.Image(
-                                        painter = androidx.compose.ui.res.painterResource(id = vehicleDrawable),
-                                        contentDescription = "Vehicle: $displayVehicleName",
-                                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(3.dp)
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.DirectionsCar,
-                                        contentDescription = null,
-                                        tint = SucculentPrimary,
-                                        modifier = Modifier.size(22.dp)
-                                    )
-                                }
+                        Box(contentAlignment = Alignment.Center) {
+                            if (vehicleDrawable != null) {
+                                androidx.compose.foundation.Image(
+                                    painter = androidx.compose.ui.res.painterResource(id = vehicleDrawable),
+                                    contentDescription = "Vehicle: $displayVehicleName",
+                                    contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(3.dp)
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.DirectionsCar,
+                                    contentDescription = null,
+                                    tint = SucculentPrimary,
+                                    modifier = Modifier.size(22.dp)
+                                )
                             }
                         }
-                        Column(
-                            verticalArrangement = Arrangement.spacedBy(2.dp),
-                            modifier = if (onSelectVehicle != null) Modifier.clickable(onClick = onSelectVehicle) else Modifier
+                    }
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .then(if (onSelectVehicle != null) Modifier.clickable(onClick = onSelectVehicle) else Modifier)
+                    ) {
+                        Text(
+                            text = "Ready to drive",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             Text(
-                                text = "Ready to\ndrive",
-                                fontSize = 15.sp,
-                                lineHeight = 19.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                text = displayVehicleName,
+                                fontSize = 12.sp,
+                                color = mutedColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Text(
-                                    text = displayVehicleName,
-                                    fontSize = 12.sp,
-                                    color = mutedColor,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                            if (onSelectVehicle != null) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "Select vehicle",
+                                    tint = mutedColor,
+                                    modifier = Modifier.size(14.dp)
                                 )
-                                if (onSelectVehicle != null) {
-                                    Icon(
-                                        imageVector = Icons.Default.KeyboardArrowDown,
-                                        contentDescription = "Select vehicle",
-                                        tint = mutedColor,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                }
                             }
                         }
                     }
+                }
 
-                    Button(
-                        onClick = onStart,
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = SucculentPrimary,
-                            contentColor = Color.White
-                        ),
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                        modifier = Modifier.height(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Start trip",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
+                Button(
+                    onClick = onStart,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = SucculentPrimary,
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Start trip",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
 
                 HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))

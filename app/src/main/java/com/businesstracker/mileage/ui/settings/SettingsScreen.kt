@@ -1868,8 +1868,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.250",
+                    summary = "Move idle Ready to drive card below Monthly mileage, make Start trip full-width, and fix vehicle picker tap.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.249",
                     summary = "Redesign Dashboard Ready to drive card with circular vehicle image, footer status, canvas-level total mileage, and compact breakdown card.",
+                    commitHash = "12f6802",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
