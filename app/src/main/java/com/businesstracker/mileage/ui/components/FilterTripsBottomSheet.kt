@@ -3,6 +3,7 @@ package com.businesstracker.mileage.ui.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -182,28 +183,15 @@ fun FilterTripsBottomSheet(
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(
-                        onClick = { resetDraft() },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = "Reset",
-                            color = SucculentPrimary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    IconButton(
-                        onClick = onDismissRequest,
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                IconButton(
+                    onClick = onDismissRequest,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 
@@ -418,10 +406,11 @@ fun FilterTripsBottomSheet(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
                     ) {
                         FilterSelectableChip(
                             label = "All vehicles",
@@ -475,10 +464,11 @@ fun FilterTripsBottomSheet(
                         "PERSONAL" to "Personal",
                         "UNREVIEWED" to "Unclassified"
                     )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
                     ) {
                         FilterSelectableChip(
                             label = "All",
@@ -638,12 +628,12 @@ private fun FilterSelectableChip(
     ) {
         Text(
             text = label,
-            fontSize = 13.sp,
+            fontSize = 12.sp,
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
             color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
         )
     }
 }
