@@ -360,22 +360,6 @@ fun SettingsScreen(
         }
 
         item {
-            SettingsSection(
-                title = "Dark mode",
-                icon = Icons.Default.DarkMode,
-                trailing = {
-                    SettingsToggle(
-                        checked = state.themeMode == AppThemeMode.DARK,
-                        onCheckedChange = { isDark ->
-                            viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
-                        },
-                        label = "Dark mode"
-                    )
-                }
-            )
-        }
-
-        item {
             Text(
                 text = "Driving & vehicle",
                 fontSize = 13.sp,
@@ -767,9 +751,35 @@ fun SettingsScreen(
         }
 
         item {
+            Text(
+                text = "Preferences & diagnostics",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+            )
+        }
+
+        item {
+            SettingsSection(
+                title = "Dark mode",
+                icon = Icons.Default.DarkMode,
+                trailing = {
+                    SettingsToggle(
+                        checked = state.themeMode == AppThemeMode.DARK,
+                        onCheckedChange = { isDark ->
+                            viewModel.setThemeMode(if (isDark) AppThemeMode.DARK else AppThemeMode.LIGHT)
+                        },
+                        label = "Dark mode"
+                    )
+                }
+            )
+        }
+
+        item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Row(
@@ -1855,8 +1865,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.243",
+                    summary = "Move Dark mode into Preferences & diagnostics group in Settings.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.242",
                     summary = "Redesign Settings with grouped white containers, clean outline icons, and #F1F4F9 canvas.",
+                    commitHash = "802010c",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
