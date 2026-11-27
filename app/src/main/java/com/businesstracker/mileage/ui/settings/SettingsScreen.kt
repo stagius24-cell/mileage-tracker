@@ -526,15 +526,6 @@ fun SettingsScreen(
         }
 
         item {
-            com.businesstracker.mileage.ui.smart.SmartClassificationCard(
-                isEnabled = state.isSmartTripRecognitionEnabled,
-                currentMode = state.smartClassificationMode,
-                onToggleEnabled = viewModel::setSmartTripRecognitionEnabled,
-                onModeSelected = viewModel::setSmartClassificationMode
-            )
-        }
-
-        item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
@@ -542,6 +533,16 @@ fun SettingsScreen(
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column {
+                    com.businesstracker.mileage.ui.smart.SmartClassificationCard(
+                        isEnabled = state.isSmartTripRecognitionEnabled,
+                        currentMode = state.smartClassificationMode,
+                        onToggleEnabled = viewModel::setSmartTripRecognitionEnabled,
+                        onModeSelected = viewModel::setSmartClassificationMode
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+                    )
                     val purposeCount = state.customPurposes.size
                     val purposeSubtitle = if (purposeCount == 1) "1 business purpose" else "$purposeCount business purposes"
                     SettingsManagementRow(
@@ -1876,8 +1877,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.246",
+                    summary = "Merge Smart classification into the Trip organization card in Settings.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.245",
                     summary = "Group Settings into 4 unified cards (Driving & vehicle, Trip organization, Data & sync, Preferences & diagnostics) with collapsible Backup & restore.",
+                    commitHash = "2ac6920",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
