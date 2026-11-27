@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
@@ -1096,14 +1097,9 @@ private fun RouteDetailsTab(
             color = emeraldAccent,
             isStart = true,
             locationActionLabel = startLocationActionLabel,
-            onSaveLocation = onSaveStartLocation
-        )
-        Box(
-            modifier = Modifier
-                .padding(start = 10.dp)
-                .width(1.5.dp)
-                .height(24.dp)
-                .background(dividerColor.copy(alpha = 0.8f))
+            onSaveLocation = onSaveStartLocation,
+            showConnectorBelow = true,
+            connectorColor = dividerColor.copy(alpha = 0.85f)
         )
         DestinationRow(
             primaryName = smartEndName,
@@ -1125,7 +1121,9 @@ private fun DestinationRow(
     color: Color,
     isStart: Boolean,
     locationActionLabel: String,
-    onSaveLocation: (() -> Unit)? = null
+    onSaveLocation: (() -> Unit)? = null,
+    showConnectorBelow: Boolean = false,
+    connectorColor: Color = Color.Transparent
 ) {
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     val primaryText = if (isDark) MaterialTheme.colorScheme.onSurface else Color(0xFF172536)
@@ -1140,31 +1138,49 @@ private fun DestinationRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .height(IntrinsicSize.Min),
         verticalAlignment = Alignment.Top
     ) {
-        Box(
+        Column(
             modifier = Modifier
-                .padding(top = 1.dp)
-                .size(22.dp),
-            contentAlignment = Alignment.Center
+                .width(22.dp)
+                .fillMaxHeight(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (isStart) {
-                com.businesstracker.mileage.ui.components.StartBeaconIcon(
-                    size = 20.dp,
-                    tint = color
-                )
-            } else {
-                com.businesstracker.mileage.ui.components.EndPinIcon(
-                    size = 20.dp,
-                    tint = color,
-                    fillColor = MaterialTheme.colorScheme.surface
+            Box(
+                modifier = Modifier
+                    .padding(top = 1.dp)
+                    .size(22.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isStart) {
+                    com.businesstracker.mileage.ui.components.StartBeaconIcon(
+                        size = 20.dp,
+                        tint = color
+                    )
+                } else {
+                    com.businesstracker.mileage.ui.components.EndPinIcon(
+                        size = 20.dp,
+                        tint = color,
+                        fillColor = MaterialTheme.colorScheme.surface
+                    )
+                }
+            }
+            if (showConnectorBelow) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 3.dp, bottom = 2.dp)
+                        .width(1.5.dp)
+                        .weight(1f)
+                        .background(connectorColor)
                 )
             }
         }
         Spacer(modifier = Modifier.width(12.dp))
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .padding(bottom = if (showConnectorBelow) 10.dp else 2.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
