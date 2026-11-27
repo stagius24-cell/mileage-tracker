@@ -145,26 +145,6 @@ fun DashboardScreen(
                             ),
                             color = MaterialTheme.colorScheme.onBackground
                         )
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            val hasActiveFilter = state.selectedMonths.isNotEmpty() ||
-                                state.timeFilter == TimeFilter.TODAY ||
-                                state.timeFilter == TimeFilter.THIS_WEEK
-                            IconButton(
-                                onClick = { showFilterSheet = true },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Tune,
-                                    contentDescription = "Filter by Time Period",
-                                    tint = if (hasActiveFilter) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
                     }
                 }
             }

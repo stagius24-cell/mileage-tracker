@@ -1868,8 +1868,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.251",
+                    summary = "Remove filter icon inline with Dashboard title.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.250",
                     summary = "Move idle Ready to drive card below Monthly mileage, make Start trip full-width, and fix vehicle picker tap.",
+                    commitHash = "cc688e1",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
