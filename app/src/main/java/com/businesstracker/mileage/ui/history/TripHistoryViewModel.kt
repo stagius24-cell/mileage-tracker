@@ -51,6 +51,10 @@ data class TripHistoryUiState(
     val selectedSyncStatusFilter: String = "ALL",     // "ALL", "SYNCED", "PENDING", "FAILED"
     val startDateFilter: String = "",
     val endDateFilter: String = "",
+    val selectedMonths: Set<String> = emptySet(),
+    val selectedVehicles: Set<String> = emptySet(),
+    val selectedTripTypes: Set<String> = emptySet(),
+    val onlyMissingPurpose: Boolean = false,
     val sortOrder: SortOrder = SortOrder.NEWEST_FIRST,
     val selectedTripForDetails: TripEntity? = null,
     val selectedTripForConfirmationSheet: TripEntity? = null,
@@ -78,6 +82,10 @@ class TripHistoryViewModel @Inject constructor(
     private val _syncStatusFilter = MutableStateFlow("ALL")
     private val _startDateFilter = MutableStateFlow("")
     private val _endDateFilter = MutableStateFlow("")
+    private val _selectedMonths = MutableStateFlow<Set<String>>(emptySet())
+    private val _selectedVehicles = MutableStateFlow<Set<String>>(emptySet())
+    private val _selectedTripTypes = MutableStateFlow<Set<String>>(emptySet())
+    private val _onlyMissingPurpose = MutableStateFlow(false)
     private val _sortOrder = MutableStateFlow(SortOrder.NEWEST_FIRST)
     private val _selectedTripForDetails = MutableStateFlow<TripEntity?>(null)
     private val _selectedTripForConfirmationSheet = MutableStateFlow<TripEntity?>(null)
@@ -142,6 +150,18 @@ class TripHistoryViewModel @Inject constructor(
             UndoState(deletedTrips.lastOrNull(), restoreFailed, isRestoring, actionError)
         }
     ) { (part1, part2, part3), undoState ->
+        Triple(Triple(part1, part2, part3), undoState, Unit)
+    }.combine(
+        combine(
+            _selectedMonths,
+            _selectedVehicles,
+            _selectedTripTypes,
+            _onlyMissingPurpose
+        ) { months, vehicles, tripTypes, missingPurpose ->
+            MultiFilterState(months, vehicles, tripTypes, missingPurpose)
+        }
+    ) { (triple, undoState, _), multiFilter ->
+        val (part1, part2, part3) = triple
         // Compute smart names map
         val namesMap = if (resolveSmartTripNamesUseCase != null && part1.savedLocations.isNotEmpty()) {
             part1.allTrips.associate { trip ->
@@ -167,30 +187,50 @@ class TripHistoryViewModel @Inject constructor(
                     (trip.notes?.contains(part1.query, ignoreCase = true) == true) ||
                     trip.date.contains(part1.query, ignoreCase = true)
 
-            // Classification filter
-            val matchesClassification = part1.classification == "ALL" ||
+            // Classification filter (multi-select or legacy single-select)
+            val matchesClassification = if (multiFilter.tripTypes.isNotEmpty()) {
+                multiFilter.tripTypes.any { type ->
+                    trip.classification.equals(type, ignoreCase = true)
+                }
+            } else {
+                part1.classification == "ALL" ||
                     trip.classification.equals(part1.classification, ignoreCase = true)
+            }
 
             // Business entity filter
             val matchesEntity = part2.entity == "ALL" ||
                     trip.businessEntity.equals(part2.entity, ignoreCase = true)
 
-            // Vehicle filter
-            val matchesVehicle = when (part2.vehicle) {
-                "ALL" -> true
-                "UNKNOWN" -> trip.vehicleId.isNullOrBlank()
-                else -> trip.vehicleId == part2.vehicle
+            // Vehicle filter (multi-select or legacy single-select)
+            val matchesVehicle = if (multiFilter.vehicles.isNotEmpty()) {
+                multiFilter.vehicles.any { vehicleId ->
+                    if (vehicleId == "UNKNOWN") trip.vehicleId.isNullOrBlank()
+                    else trip.vehicleId == vehicleId
+                }
+            } else {
+                when (part2.vehicle) {
+                    "ALL" -> true
+                    "UNKNOWN" -> trip.vehicleId.isNullOrBlank()
+                    else -> trip.vehicleId == part2.vehicle
+                }
             }
 
             // Sync status filter
             val matchesSync = part2.syncStatus == "ALL" ||
                     trip.syncStatus.equals(part2.syncStatus, ignoreCase = true)
 
-            // Date range filter
+            // Date range / multi-month filter
+            val matchesMonths = multiFilter.months.isEmpty() ||
+                    trip.date.take(7) in multiFilter.months
             val matchesStartDate = part2.startDate.isBlank() || trip.date >= part2.startDate
             val matchesEndDate = part2.endDate.isBlank() || trip.date <= part2.endDate
 
-            matchesQuery && matchesClassification && matchesEntity && matchesVehicle && matchesSync && matchesStartDate && matchesEndDate
+            // Only missing purpose (applicable to business trips)
+            val matchesMissingPurpose = !multiFilter.onlyMissingPurpose ||
+                    (trip.classification.equals(TripClassification.BUSINESS.value, ignoreCase = true) &&
+                        trip.purpose.isBlank())
+
+            matchesQuery && matchesClassification && matchesEntity && matchesVehicle && matchesSync && matchesMonths && matchesStartDate && matchesEndDate && matchesMissingPurpose
         }
 
         // Sorting
@@ -223,6 +263,10 @@ class TripHistoryViewModel @Inject constructor(
             selectedSyncStatusFilter = part2.syncStatus,
             startDateFilter = part2.startDate,
             endDateFilter = part2.endDate,
+            selectedMonths = multiFilter.months,
+            selectedVehicles = multiFilter.vehicles,
+            selectedTripTypes = multiFilter.tripTypes,
+            onlyMissingPurpose = multiFilter.onlyMissingPurpose,
             sortOrder = part3.sortOrder,
             selectedTripForDetails = part3.selectedTrip,
             selectedTripForConfirmationSheet = part3.selectedTripForConfirmationSheet,
@@ -261,6 +305,36 @@ class TripHistoryViewModel @Inject constructor(
     fun setDateRange(startDate: String, endDate: String) {
         _startDateFilter.value = startDate
         _endDateFilter.value = endDate
+    }
+
+    fun applyFilters(
+        months: Set<String>,
+        vehicles: Set<String>,
+        tripTypes: Set<String>,
+        onlyMissingPurpose: Boolean
+    ) {
+        _selectedMonths.value = months
+        _selectedVehicles.value = vehicles
+        _selectedTripTypes.value = tripTypes
+        _onlyMissingPurpose.value = onlyMissingPurpose
+        // Clear legacy single-select overrides when applying from the filter sheet
+        _classificationFilter.value = "ALL"
+        _vehicleFilter.value = "ALL"
+        _startDateFilter.value = ""
+        _endDateFilter.value = ""
+    }
+
+    fun resetFilters() {
+        _selectedMonths.value = emptySet()
+        _selectedVehicles.value = emptySet()
+        _selectedTripTypes.value = emptySet()
+        _onlyMissingPurpose.value = false
+        _classificationFilter.value = "ALL"
+        _businessEntityFilter.value = "ALL"
+        _vehicleFilter.value = "ALL"
+        _syncStatusFilter.value = "ALL"
+        _startDateFilter.value = ""
+        _endDateFilter.value = ""
     }
 
     fun setSortOrder(order: SortOrder) {
@@ -550,5 +624,12 @@ class TripHistoryViewModel @Inject constructor(
         val selectedTrip: TripEntity?,
         val selectedTripForConfirmationSheet: TripEntity? = null,
         val customPurposes: List<String> = emptyList()
+    )
+
+    private data class MultiFilterState(
+        val months: Set<String>,
+        val vehicles: Set<String>,
+        val tripTypes: Set<String>,
+        val onlyMissingPurpose: Boolean
     )
 }

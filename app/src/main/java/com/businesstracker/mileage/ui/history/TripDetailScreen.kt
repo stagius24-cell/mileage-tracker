@@ -649,6 +649,8 @@ fun TripDetailScreen(
                         RouteDetailsTab(
                             trip = trip,
                             date = dateFormatted,
+                            vehicleName = tripVehicleName,
+                            onEditVehicle = { showVehiclePicker = true },
                             startAddress = finalStartAddress,
                             endAddress = finalEndAddress,
                             smartStartName = smartNames?.startLocation?.name,
@@ -1043,6 +1045,8 @@ private fun TripDetailTabButton(
 private fun RouteDetailsTab(
     trip: TripEntity,
     date: String,
+    vehicleName: String,
+    onEditVehicle: () -> Unit,
     startAddress: String,
     endAddress: String,
     smartStartName: String? = null,
@@ -1063,6 +1067,42 @@ private fun RouteDetailsTab(
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 2.dp)
     ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 44.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Vehicle",
+                fontSize = 12.sp,
+                color = SlateNeutral
+            )
+            Text(
+                text = vehicleName,
+                modifier = Modifier.weight(1f),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            IconButton(
+                onClick = onEditVehicle,
+                modifier = Modifier
+                    .size(36.dp)
+                    .semantics { contentDescription = "Edit trip vehicle" }
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = null,
+                    tint = emeraldAccent,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+        HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))
         DestinationRow(
             primaryName = smartStartName,
             address = startAddress,
@@ -1246,40 +1286,8 @@ private fun TripStatusTab(
             .padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(0.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                "Vehicle",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = MaterialTheme.typography.labelSmall.fontSize * 1.15f),
-                color = SlateNeutral
-            )
-            Text(
-                vehicleName,
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = MaterialTheme.typography.bodySmall.fontSize * 1.15f),
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            IconButton(
-                onClick = onEditVehicle,
-                modifier = Modifier.size(48.dp).semantics { contentDescription = "Edit trip vehicle" }
-            ) {
-                Icon(Icons.Default.Edit, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(17.dp))
-            }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-            StatusValue(tripTypePurpose.label, tripTypePurpose.value, Modifier.weight(1f), classificationColor)
             StatusValue("Sync status", trip.syncStatus, Modifier.weight(1f), if (trip.syncStatus == "SYNCED") SucculentPrimary else SlateNeutral)
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-            StatusValue("Duration", "$durationMinutes min", Modifier.weight(1f))
             StatusValue("Tracking", TripDetailsDisplayFormatter.trackingMethod(trip.trackingMethod), Modifier.weight(1f))
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
@@ -1290,19 +1298,6 @@ private fun TripStatusTab(
         if (!trip.notes.isNullOrBlank()) {
             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
             StatusValue("Notes", trip.notes, Modifier.fillMaxWidth().padding(vertical = 8.dp))
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onEdit, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Default.Edit, contentDescription = "Edit trip", tint = SucculentPrimary, modifier = Modifier.size(18.dp))
-            }
-            IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete trip", tint = SpeedRed, modifier = Modifier.size(18.dp))
-            }
         }
     }
 }

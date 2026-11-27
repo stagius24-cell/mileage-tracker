@@ -266,7 +266,7 @@ fun ReportsExportScreen(
             )
         }
 
-        // 3. Trip Review Section
+        // 4. Trip Review Section
         item {
             TripReviewCard(
                 unclassifiedCount = state.unclassifiedCount,
@@ -279,93 +279,6 @@ fun ReportsExportScreen(
                 dividerColor = dividerColor,
                 onReviewClick = { onNavigateToTrips?.invoke(state.selectedYear) }
             )
-        }
-
-        // 4. Minimal Underline Reporting Tabs: Monthly | By vehicle | Saved reports
-        item {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    ReportCenterTab(
-                        label = "Monthly",
-                        icon = Icons.Default.CalendarMonth,
-                        selected = selectedReportTab == 0,
-                        activeColor = emeraldAccent,
-                        inactiveColor = mutedText,
-                        onClick = { selectedReportTab = 0 },
-                        modifier = Modifier.weight(1f)
-                    )
-                    ReportCenterTab(
-                        label = "By vehicle",
-                        icon = Icons.Default.DirectionsCar,
-                        selected = selectedReportTab == 1,
-                        activeColor = emeraldAccent,
-                        inactiveColor = mutedText,
-                        onClick = { selectedReportTab = 1 },
-                        modifier = Modifier.weight(1f)
-                    )
-                    ReportCenterTab(
-                        label = "Saved reports",
-                        icon = Icons.Default.FolderOpen,
-                        selected = selectedReportTab == 2,
-                        activeColor = emeraldAccent,
-                        inactiveColor = mutedText,
-                        onClick = {
-                            viewModel.refreshSavedReports()
-                            selectedReportTab = 2
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                HorizontalDivider(color = dividerColor.copy(alpha = 0.8f), thickness = 1.dp)
-            }
-        }
-
-        // 5/6/7. Tab Content
-        item {
-            when (selectedReportTab) {
-                0 -> MonthlyRecordsTableCard(
-                    year = state.selectedYear,
-                    summaries = state.monthlySummaries,
-                    showAllMonths = showAllMonths,
-                    onToggleShowAll = { showAllMonths = !showAllMonths },
-                    onSelectMonth = { monthIso -> onNavigateToTrips?.invoke(monthIso) },
-                    cardBg = cardBg,
-                    primaryText = primaryText,
-                    mutedText = mutedText,
-                    emeraldAccent = emeraldAccent,
-                    dividerColor = dividerColor
-                )
-                1 -> VehicleReportsCard(
-                    vehicles = state.vehicleSummaries,
-                    onSelectVehicle = { onNavigateToTrips?.invoke(state.selectedYear) },
-                    cardBg = cardBg,
-                    primaryText = primaryText,
-                    mutedText = mutedText,
-                    emeraldAccent = emeraldAccent,
-                    dividerColor = dividerColor
-                )
-                else -> SavedReportsCard(
-                    reports = state.savedReports,
-                    onOpenReport = { item ->
-                        if (item.format == "PDF") {
-                            previewPdfFile = item.file
-                        } else {
-                            context.startActivity(viewModel.buildShareIntent(item.file))
-                        }
-                    },
-                    onShareReport = { item ->
-                        context.startActivity(viewModel.buildShareIntent(item.file))
-                    },
-                    cardBg = cardBg,
-                    primaryText = primaryText,
-                    mutedText = mutedText,
-                    emeraldAccent = emeraldAccent,
-                    dividerColor = dividerColor
-                )
-            }
         }
     }
 
