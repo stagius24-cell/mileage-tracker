@@ -1,5 +1,7 @@
 package com.businesstracker.mileage.ui.history
 
+import androidx.compose.animation.AnimatedVisibility
+
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -36,6 +38,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.OpenInFull
@@ -238,8 +244,90 @@ fun TripDetailScreen(
             }
             .verticalScroll(rememberScrollState())
     ) {
+        // 1. Navigation header above the map
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(cardBackground)
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = primaryText,
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                Text(
+                    text = "Trip details",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = primaryText
+                )
+                Text(
+                    text = receiptDateFormatted,
+                    fontSize = 12.sp,
+                    color = mutedText
+                )
+            }
+            Box {
+                IconButton(
+                    onClick = { showOverflowMenu = true },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Trip options",
+                        tint = mutedText,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                DropdownMenu(
+                    expanded = showOverflowMenu,
+                    onDismissRequest = { showOverflowMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Edit trip") },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        onClick = {
+                            showOverflowMenu = false
+                            showEditSheet = true
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Select vehicle") },
+                        leadingIcon = { Icon(Icons.Default.BusinessCenter, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        onClick = {
+                            showOverflowMenu = false
+                            showVehiclePicker = true
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete trip", color = SpeedRed) },
+                        leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = SpeedRed, modifier = Modifier.size(18.dp)) },
+                        onClick = {
+                            showOverflowMenu = false
+                            showDeleteConfirmation = true
+                        }
+                    )
+                }
+            }
+        }
+
+        // 2. Full-width Route Map
         val screenHeightDp = LocalConfiguration.current.screenHeightDp.dp
-        val collapsedMapHeight = (screenHeightDp * 0.25f).coerceIn(150.dp, 200.dp)
+        val collapsedMapHeight = (screenHeightDp * 0.28f).coerceIn(170.dp, 220.dp)
         val mapHeight by animateDpAsState(
             targetValue = if (isMapExpanded) 340.dp else collapsedMapHeight,
             animationSpec = tween(250),
@@ -248,258 +336,114 @@ fun TripDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
                 .height(mapHeight)
-                .clip(RoundedCornerShape(20.dp))
         ) {
             TripRouteMap(trip = trip, modifier = Modifier.fillMaxSize())
             Surface(
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(8.dp)
-                    .size(32.dp),
-                shape = CircleShape,
-                color = if (isDark) MaterialTheme.colorScheme.surface.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.94f),
-                shadowElevation = 2.dp
-            ) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        Icons.Default.Close,
-                        contentDescription = "Close trip details",
-                        tint = mutedText,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-            Surface(
-                modifier = Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(8.dp)
-                    .size(32.dp),
+                    .padding(10.dp)
+                    .size(34.dp),
                 shape = CircleShape,
                 color = if (isDark) MaterialTheme.colorScheme.surface.copy(alpha = 0.92f) else Color.White.copy(alpha = 0.94f),
                 shadowElevation = 2.dp
             ) {
                 IconButton(
                     onClick = { isMapExpanded = !isMapExpanded },
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(34.dp)
                 ) {
                     Icon(
                         imageVector = if (isMapExpanded) Icons.Default.CloseFullscreen else Icons.Default.OpenInFull,
                         contentDescription = if (isMapExpanded) "Collapse map" else "Expand map",
                         tint = mutedText,
-                        modifier = Modifier.size(15.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
         }
 
-        Surface(
+        // 3. Continuous white content surface
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = cardBackground
+                .background(cardBackground)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            // Primary trip summary: Trip distance + editable classification
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = "Trip distance",
+                        fontSize = 12.sp,
+                        color = mutedText
+                    )
                     Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "Trip details",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.SemiBold,
+                            text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontSize = 30.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFeatureSettings = "tnum"
+                            ),
                             color = primaryText
                         )
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = classificationColor.copy(alpha = 0.12f)
-                        ) {
-                            Text(
-                                text = classificationLabel,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = classificationColor
-                            )
-                        }
-                    }
-                }
-
-                Box {
-                    IconButton(
-                        onClick = { showOverflowMenu = true },
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.MoreVert,
-                            contentDescription = "Trip options",
-                            tint = mutedText,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showOverflowMenu,
-                        onDismissRequest = { showOverflowMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("Edit trip") },
-                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                            onClick = {
-                                showOverflowMenu = false
-                                showEditSheet = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Select vehicle") },
-                            leadingIcon = { Icon(Icons.Default.BusinessCenter, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                            onClick = {
-                                showOverflowMenu = false
-                                showVehiclePicker = true
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Delete trip", color = SpeedRed) },
-                            leadingIcon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = SpeedRed, modifier = Modifier.size(18.dp)) },
-                            onClick = {
-                                showOverflowMenu = false
-                                showDeleteConfirmation = true
-                            }
+                        Text(
+                            text = "mi",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = mutedText,
+                            modifier = Modifier.padding(bottom = 4.dp)
                         )
                     }
                 }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = receiptDateFormatted,
-                    fontSize = 12.sp,
-                    color = mutedText
-                )
-                Row(
-                    modifier = Modifier
-                        .clickable { showVehiclePicker = true }
-                        .padding(vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Surface(
+                    onClick = { showEditSheet = true },
+                    shape = RoundedCornerShape(10.dp),
+                    color = classificationColor.copy(alpha = 0.10f)
                 ) {
-                    val isModel3 = tripVehicleName.contains("Model 3", ignoreCase = true)
-                    val isModelY = tripVehicleName.contains("Model Y", ignoreCase = true)
-                    if (isModelY) {
-                        Box(
-                            modifier = Modifier
-                                .size(20.dp)
-                                .background(Color(0xFF475569), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.DirectionsCar,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(13.dp)
-                            )
-                        }
-                    } else {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = classificationLabel,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = classificationColor
+                        )
                         Icon(
-                            imageVector = Icons.Outlined.DirectionsCar,
-                            contentDescription = null,
-                            tint = if (isModel3) Color(0xFFDC2626) else mutedText,
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = "Change classification",
+                            tint = classificationColor,
                             modifier = Modifier.size(16.dp)
                         )
                     }
-                    Text(
-                        text = tripVehicleName,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = primaryText,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
                 }
             }
-            }
 
-            // Minimal underline tabs (Trackr style)
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TripDetailTabButton(
-                        label = "Route",
-                        icon = Icons.Default.LocationOn,
-                        selected = pagerState.currentPage == 0,
-                        activeColor = emeraldAccent,
-                        inactiveColor = mutedText,
-                        onClick = {
-                            coroutineScope.launch { pagerState.animateScrollToPage(0) }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    TripDetailTabButton(
-                        label = "More info",
-                        icon = Icons.Default.Info,
-                        selected = pagerState.currentPage == 1,
-                        activeColor = emeraldAccent,
-                        inactiveColor = mutedText,
-                        onClick = {
-                            coroutineScope.launch { pagerState.animateScrollToPage(1) }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                HorizontalDivider(color = dividerColor.copy(alpha = 0.8f), thickness = 1.dp)
-            }
-
+            // Secondary metric strip: Duration | Deduction
             val sageBg = if (isDark) SucculentPrimary.copy(alpha = 0.10f) else Color(0xFFEDF5F0)
             val deductionPositive = trip.calculatedDeduction > 0.0
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = sageBg
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                        .padding(horizontal = 12.dp, vertical = 11.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    CompactMetricCell(
-                        icon = Icons.Outlined.Route,
-                        iconTint = emeraldAccent,
-                        value = "${String.format(Locale.US, "%.1f", trip.totalDistanceMiles)} mi",
-                        valueColor = primaryText,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .height(20.dp)
-                            .background(dividerColor.copy(alpha = 0.9f))
-                    )
                     CompactMetricCell(
                         icon = Icons.Outlined.Schedule,
                         iconTint = emeraldAccent,
@@ -669,77 +613,158 @@ fun TripDetailScreen(
                 }
             }
 
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
-            ) { page ->
-                    if (page == 0) {
-                        val resolvedStart = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
-                            ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
-                            else "Approximate start location unavailable"
-                        val finalStartAddress = AddressUtil.abbreviateAddress(resolvedStart)
-                        val resolvedEnd = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
-                            ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
-                            else "Approximate destination unavailable"
-                        val finalEndAddress = AddressUtil.abbreviateAddress(resolvedEnd)
-                        val savedStartId = smartNames?.startLocation?.id
-                        val savedEndId = smartNames?.endLocation?.id
+            // 4. Always-visible Origin & Destination
+            val resolvedStart = startAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                ?: if (addressState.tripId == trip.id && addressState.loading) "Finding start address…"
+                else "Approximate start location unavailable"
+            val finalStartAddress = AddressUtil.abbreviateAddress(resolvedStart)
+            val resolvedEnd = endAddress?.takeUnless { ResolveTripAddressesUseCase.needsAddress(it) }
+                ?: if (addressState.tripId == trip.id && addressState.loading) "Finding destination address…"
+                else "Approximate destination unavailable"
+            val finalEndAddress = AddressUtil.abbreviateAddress(resolvedEnd)
+            val savedStartId = smartNames?.startLocation?.id
+            val savedEndId = smartNames?.endLocation?.id
 
-                        RouteDetailsTab(
-                            trip = trip,
-                            date = dateFormatted,
-                            vehicleName = tripVehicleName,
-                            onEditVehicle = { showVehiclePicker = true },
-                            startAddress = finalStartAddress,
-                            endAddress = finalEndAddress,
-                            smartStartName = smartNames?.startLocation?.name,
-                            smartEndName = smartNames?.endLocation?.name,
-                            startTime = startTimeStr,
-                            endTime = endTimeStr,
-                            startLocationActionLabel = if (smartNames?.startLocation == null) "Save" else "Edit",
-                            endLocationActionLabel = if (smartNames?.endLocation == null) "Save" else "Edit",
-                            onSaveStartLocation = if (savedStartId != null && onNavigateToSavedLocations != null) {
-                                { onNavigateToSavedLocations(savedStartId) }
-                            } else if (onSaveLocation != null && onNavigateToSavedLocations != null) {
-                                {
-                                    val lat = trip.startLatitude ?: 0.0
-                                    val lng = trip.startLongitude ?: 0.0
-                                    if (!locationSaving) {
-                                        locationSaving = true
-                                        onSaveLocation("Start Location", lat, lng, finalStartAddress, 150, "place", null, null,
-                                            { id -> locationSaving = false; onNavigateToSavedLocations(id) },
-                                            { error -> locationSaving = false; locationSaveError = error })
-                                    }
-                                }
-                            } else null,
-                            onSaveEndLocation = if (savedEndId != null && onNavigateToSavedLocations != null) {
-                                { onNavigateToSavedLocations(savedEndId) }
-                            } else if (onSaveLocation != null && onNavigateToSavedLocations != null) {
-                                {
-                                    val lat = trip.endLatitude ?: 0.0
-                                    val lng = trip.endLongitude ?: 0.0
-                                    if (!locationSaving) {
-                                        locationSaving = true
-                                        onSaveLocation("Destination", lat, lng, finalEndAddress, 150, "place", null, null,
-                                            { id -> locationSaving = false; onNavigateToSavedLocations(id) },
-                                            { error -> locationSaving = false; locationSaveError = error })
-                                    }
-                                }
-                            } else null
-                        )
-                    } else {
-                        TripStatusTab(
-                            trip = trip,
-                            durationMinutes = durationMinutes,
-                            classificationColor = classificationColor,
-                            vehicleName = tripVehicleName,
-                            onEditVehicle = { showVehiclePicker = true },
-                            onEdit = { showEditSheet = true },
-                            onDelete = { showDeleteConfirmation = true }
+            RouteDetailsTab(
+                trip = trip,
+                date = dateFormatted,
+                vehicleName = tripVehicleName,
+                onEditVehicle = { showVehiclePicker = true },
+                startAddress = finalStartAddress,
+                endAddress = finalEndAddress,
+                smartStartName = smartNames?.startLocation?.name,
+                smartEndName = smartNames?.endLocation?.name,
+                startTime = startTimeStr,
+                endTime = endTimeStr,
+                startLocationActionLabel = if (smartNames?.startLocation == null) "Save" else "Edit",
+                endLocationActionLabel = if (smartNames?.endLocation == null) "Save" else "Edit",
+                onSaveStartLocation = if (savedStartId != null && onNavigateToSavedLocations != null) {
+                    { onNavigateToSavedLocations(savedStartId) }
+                } else if (onSaveLocation != null && onNavigateToSavedLocations != null) {
+                    {
+                        val lat = trip.startLatitude ?: 0.0
+                        val lng = trip.startLongitude ?: 0.0
+                        if (!locationSaving) {
+                            locationSaving = true
+                            onSaveLocation("Start Location", lat, lng, finalStartAddress, 150, "place", null, null,
+                                { id -> locationSaving = false; onNavigateToSavedLocations(id) },
+                                { error -> locationSaving = false; locationSaveError = error })
+                        }
+                    }
+                } else null,
+                onSaveEndLocation = if (savedEndId != null && onNavigateToSavedLocations != null) {
+                    { onNavigateToSavedLocations(savedEndId) }
+                } else if (onSaveLocation != null && onNavigateToSavedLocations != null) {
+                    {
+                        val lat = trip.endLatitude ?: 0.0
+                        val lng = trip.endLongitude ?: 0.0
+                        if (!locationSaving) {
+                            locationSaving = true
+                            onSaveLocation("Destination", lat, lng, finalEndAddress, 150, "place", null, null,
+                                { id -> locationSaving = false; onNavigateToSavedLocations(id) },
+                                { error -> locationSaving = false; locationSaveError = error })
+                        }
+                    }
+                } else null
+            )
+
+            // 5. Vehicle Row
+            HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showVehiclePicker = true }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                val isModel3 = tripVehicleName.contains("Model 3", ignoreCase = true)
+                val isModelY = tripVehicleName.contains("Model Y", ignoreCase = true)
+                if (isModelY) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .background(Color(0xFF475569), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.DirectionsCar,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(13.dp)
                         )
                     }
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.DirectionsCar,
+                        contentDescription = null,
+                        tint = if (isModel3) Color(0xFFDC2626) else mutedText,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
+                Text(
+                    text = "Vehicle",
+                    fontSize = 14.sp,
+                    color = mutedText,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    text = tripVehicleName,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = primaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Change vehicle",
+                    tint = mutedText,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))
+
+            // 6. Expandable Additional Trip Information
+            var isAdditionalInfoExpanded by remember(trip.id) { mutableStateOf(false) }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isAdditionalInfoExpanded = !isAdditionalInfoExpanded }
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = mutedText,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = "Additional trip information",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = primaryText,
+                    modifier = Modifier.weight(1f)
+                )
+                Icon(
+                    imageVector = if (isAdditionalInfoExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isAdditionalInfoExpanded) "Collapse" else "Expand",
+                    tint = mutedText,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            AnimatedVisibility(visible = isAdditionalInfoExpanded) {
+                TripStatusTab(
+                    trip = trip,
+                    durationMinutes = durationMinutes,
+                    classificationColor = classificationColor,
+                    vehicleName = tripVehicleName,
+                    onEditVehicle = { showVehiclePicker = true },
+                    onEdit = { showEditSheet = true },
+                    onDelete = { showDeleteConfirmation = true }
+                )
             }
         }
     }
@@ -1100,10 +1125,9 @@ private fun RouteDetailsTab(
             color = emeraldAccent,
             isStart = true,
             locationActionLabel = startLocationActionLabel,
-            onSaveLocation = onSaveStartLocation,
-            showConnectorBelow = true,
-            connectorColor = dividerColor.copy(alpha = 0.85f)
+            onSaveLocation = onSaveStartLocation
         )
+        HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))
         DestinationRow(
             primaryName = smartEndName,
             address = endAddress,
