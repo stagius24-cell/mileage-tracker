@@ -22,6 +22,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -34,8 +35,11 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptor
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.JointType
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
+import com.google.android.gms.maps.model.MapStyleOptions
+import com.google.android.gms.maps.model.RoundCap
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
@@ -163,16 +167,40 @@ fun TripRouteMap(trip: TripEntity, modifier: Modifier = Modifier) {
                 },
                 properties = remember {
                     MapProperties(
-                        isBuildingEnabled = true,
-                        isTrafficEnabled = false
+                        isBuildingEnabled = false,
+                        isTrafficEnabled = false,
+                        mapStyleOptions = MapStyleOptions(
+                            """
+                            [
+                              {"featureType":"poi","elementType":"labels","stylers":[{"visibility":"off"}]},
+                              {"featureType":"poi.park","elementType":"geometry","stylers":[{"color":"#e8f0eb"}]},
+                              {"featureType":"road","elementType":"geometry","stylers":[{"color":"#ffffff"}]},
+                              {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#e5e7eb"}]},
+                              {"featureType":"road.arterial","elementType":"labels.text.fill","stylers":[{"color":"#9ca3af"}]},
+                              {"featureType":"water","elementType":"geometry","stylers":[{"color":"#dbeafe"}]},
+                              {"featureType":"landscape","elementType":"geometry","stylers":[{"color":"#f3f4f6"}]}
+                            ]
+                            """.trimIndent()
+                        )
                     )
                 }
             ) {
                 if (polylinePoints.size > 1) {
                     Polyline(
                         points = polylinePoints,
-                        color = SucculentPrimary,
-                        width = 12f
+                        color = Color(0xFF065F46),
+                        width = 16f,
+                        startCap = RoundCap(),
+                        endCap = RoundCap(),
+                        jointType = JointType.ROUND
+                    )
+                    Polyline(
+                        points = polylinePoints,
+                        color = Color(0xFF10B981),
+                        width = 10f,
+                        startCap = RoundCap(),
+                        endCap = RoundCap(),
+                        jointType = JointType.ROUND
                     )
                 }
 

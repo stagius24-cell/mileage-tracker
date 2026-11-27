@@ -1825,6 +1825,11 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.236",
+                    summary = "Refactor Trip Details with modern fintech & mobility card system, desaturated map style, segmented classification toggle, and tonal metric tiles.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.235",
                     summary = "Move vehicle name underneath the Personal/Business classification button on Trip Details.",
                     date = "Nov 27, 2026"
