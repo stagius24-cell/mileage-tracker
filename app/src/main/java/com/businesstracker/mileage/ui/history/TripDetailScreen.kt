@@ -1102,7 +1102,7 @@ private fun RouteDetailsTab(
             modifier = Modifier
                 .padding(start = 11.dp)
                 .width(1.5.dp)
-                .height(30.dp)
+                .height(14.dp)
                 .background(dividerColor.copy(alpha = 0.8f))
         )
         DestinationRow(
