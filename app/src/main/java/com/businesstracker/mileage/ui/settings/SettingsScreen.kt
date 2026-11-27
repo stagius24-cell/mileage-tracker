@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.OutlinedButton
@@ -1814,9 +1815,31 @@ fun SettingsScreen(
     }
 
     if (showVersionHistoryDialog) {
-        val updates = remember {
+        val uriHandler = LocalUriHandler.current
+        data class VersionEntry(
+            val version: String,
+            val summary: String,
+            val commitHash: String? = null,
+            val date: String? = null
+        )
+        val recentUpdates = remember {
             listOf(
-                "Version 1.0.221 (Build 221)" to "2026-11-26 • https://github.com/stagius24-cell/mileage-tracker/commit/d76ddcd\nRework Dashboard filter button into a floating filter sheet with multi-month, Today, and This Week selection.",
+                VersionEntry(
+                    version = "v1.0.222",
+                    summary = "Formatted Version History with clickable GitHub commit links and release dates, plus automated GitHub Release APK publishing.",
+                    commitHash = "c646ee6",
+                    date = "Nov 26, 2026"
+                ),
+                VersionEntry(
+                    version = "v1.0.221",
+                    summary = "Rework Dashboard filter button into a floating filter sheet with multi-month, Today, and This Week selection.",
+                    commitHash = "d76ddcd",
+                    date = "Nov 26, 2026"
+                )
+            )
+        }
+        val legacyUpdates = remember {
+            listOf(
                 "Version 1.0.214 (Build 214)" to "Rename the Bluetooth diagnostics description to Bluetooth & auto-start log.",
                 "Version 1.0.213 (Build 213)" to "Move the Settings version label below all Settings sections.",
                 "Version 1.0.212 (Build 212)" to "Move Bluetooth diagnostics to the bottom of Settings.",
@@ -1887,57 +1910,96 @@ fun SettingsScreen(
                 "Version 1.0.138 (Build 139)" to "Compact Backup & Restore settings with account details on demand.",
             )
         }
+        val updates = remember(recentUpdates, legacyUpdates) {
+            recentUpdates + legacyUpdates.map { (ver, sum) ->
+                val shortVer = ver.removePrefix("Version ").substringBefore(" (")
+                VersionEntry(version = "v$shortVer", summary = sum)
+            }
+        }
 
         AppFloatingBottomSheet(
             onDismissRequest = { showVersionHistoryDialog = false },
             title = "Version History",
             onClose = { showVersionHistoryDialog = false }
         ) {
-            Column(
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp)
             ) {
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f, fill = false),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .heightIn(max = 520.dp)
                 ) {
                     items(updates.size) { index ->
-                        val (version, summary) = updates[index]
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                            modifier = Modifier.fillMaxWidth()
+                        val entry = updates[index]
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    text = version,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                    color = SucculentPrimary
-                                )
-                                Text(
-                                    text = summary,
-                                    style = MaterialTheme.typography.bodySmall.copy(
-                                        fontSize = 12.sp,
-                                        lineHeight = 16.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = entry.version,
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    if (entry.commitHash != null) {
+                                        Text(
+                                            text = entry.commitHash,
+                                            style = MaterialTheme.typography.bodySmall.copy(
+                                                fontSize = 13.sp,
+                                                fontWeight = FontWeight.Medium
+                                            ),
+                                            color = Color(0xFF1D6FA5),
+                                            modifier = Modifier.clickable {
+                                                uriHandler.openUri(
+                                                    "https://github.com/stagius24-cell/mileage-tracker/commit/${entry.commitHash}"
+                                                )
+                                            }
+                                        )
+                                    }
+                                }
+                                if (entry.date != null) {
+                                    Text(
+                                        text = entry.date,
+                                        style = MaterialTheme.typography.bodySmall.copy(
+                                            fontSize = 12.sp
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
+                            Text(
+                                text = entry.summary,
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    fontSize = 13.sp,
+                                    lineHeight = 18.sp
+                                ),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (index < updates.lastIndex) {
+                            HorizontalDivider(
+                                thickness = 0.5.dp,
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                            )
                         }
                     }
                 }
