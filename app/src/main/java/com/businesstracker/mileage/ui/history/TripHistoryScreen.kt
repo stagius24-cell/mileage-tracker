@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.outlined.FilterAlt
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.SolidColor
@@ -780,7 +781,7 @@ private fun HistoryControls(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.FilterAlt,
+                    imageVector = Icons.Outlined.Tune,
                     contentDescription = "Filter trips",
                     tint = filterIconTint,
                     modifier = Modifier.size(24.dp)
