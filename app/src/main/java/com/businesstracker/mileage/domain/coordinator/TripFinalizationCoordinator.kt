@@ -119,11 +119,12 @@ class TripFinalizationCoordinator @Inject constructor(
             val startTime = activeTrip.startTime
             val firstRecordedPoint = waypoints.firstOrNull { it.hasUsableCoordinates() }
             val lastRecordedPoint = waypoints.lastOrNull { it.hasUsableCoordinates() }
+            val lastMovingPoint = waypoints.lastOrNull { it.hasUsableCoordinates() && it.speed >= 1.5f }
+                ?: lastRecordedPoint
 
-            // Option B: Reflect true end time using the timestamp of the last recorded movement/waypoint
-            // (or fallback to activeTrip.lastTimestamp / current time compensated by 4-5 minutes if delayed)
+            // Reflect true end time using the timestamp of the last moving waypoint (ignoring parked GPS drift)
             val now = System.currentTimeMillis()
-            val candidateEndTime = lastRecordedPoint?.timestamp?.takeIf { it > 0L }
+            val candidateEndTime = lastMovingPoint?.timestamp?.takeIf { it > 0L }
                 ?: activeTrip.lastTimestamp.takeIf { it > 0L }
                 ?: (now - 4L * 60L * 1000L)
             val endTime = candidateEndTime.coerceIn(startTime, now)
