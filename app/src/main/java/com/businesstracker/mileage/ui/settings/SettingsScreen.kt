@@ -1825,6 +1825,11 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.235",
+                    summary = "Move vehicle name underneath the Personal/Business classification button on Trip Details.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.234",
                     summary = "Redesign Trip Details as a digital trip receipt with header above map, primary distance, inline duration/deduction, and expandable additional info.",
                     date = "Nov 27, 2026"

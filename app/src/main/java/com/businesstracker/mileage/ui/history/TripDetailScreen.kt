@@ -404,27 +404,72 @@ fun TripDetailScreen(
                         )
                     }
                 }
-                Surface(
-                    onClick = { showEditSheet = true },
-                    shape = RoundedCornerShape(10.dp),
-                    color = classificationColor.copy(alpha = 0.10f)
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    Surface(
+                        onClick = { showEditSheet = true },
+                        shape = RoundedCornerShape(10.dp),
+                        color = classificationColor.copy(alpha = 0.10f)
                     ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = classificationLabel,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = classificationColor
+                            )
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Change classification",
+                                tint = classificationColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
+                    Row(
+                        modifier = Modifier
+                            .clickable { showVehiclePicker = true }
+                            .padding(vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val isModel3 = tripVehicleName.contains("Model 3", ignoreCase = true)
+                        val isModelY = tripVehicleName.contains("Model Y", ignoreCase = true)
+                        if (isModelY) {
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .background(Color(0xFF475569), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.DirectionsCar,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Outlined.DirectionsCar,
+                                contentDescription = null,
+                                tint = if (isModel3) Color(0xFFDC2626) else mutedText,
+                                modifier = Modifier.size(15.dp)
+                            )
+                        }
                         Text(
-                            text = classificationLabel,
+                            text = tripVehicleName,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Medium,
-                            color = classificationColor
-                        )
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = "Change classification",
-                            tint = classificationColor,
-                            modifier = Modifier.size(16.dp)
+                            color = primaryText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -668,64 +713,9 @@ fun TripDetailScreen(
                 } else null
             )
 
-            // 5. Vehicle Row
-            HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showVehiclePicker = true }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                val isModel3 = tripVehicleName.contains("Model 3", ignoreCase = true)
-                val isModelY = tripVehicleName.contains("Model Y", ignoreCase = true)
-                if (isModelY) {
-                    Box(
-                        modifier = Modifier
-                            .size(20.dp)
-                            .background(Color(0xFF475569), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.DirectionsCar,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(13.dp)
-                        )
-                    }
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.DirectionsCar,
-                        contentDescription = null,
-                        tint = if (isModel3) Color(0xFFDC2626) else mutedText,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                Text(
-                    text = "Vehicle",
-                    fontSize = 14.sp,
-                    color = mutedText,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    text = tripVehicleName,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = primaryText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Change vehicle",
-                    tint = mutedText,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
             HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))
 
-            // 6. Expandable Additional Trip Information
+            // 5. Expandable Additional Trip Information
             var isAdditionalInfoExpanded by remember(trip.id) { mutableStateOf(false) }
             Row(
                 modifier = Modifier
