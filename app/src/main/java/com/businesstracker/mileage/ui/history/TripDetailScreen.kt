@@ -1100,9 +1100,9 @@ private fun RouteDetailsTab(
         )
         Box(
             modifier = Modifier
-                .padding(start = 11.dp)
+                .padding(start = 10.dp)
                 .width(1.5.dp)
-                .height(14.dp)
+                .height(24.dp)
                 .background(dividerColor.copy(alpha = 0.8f))
         )
         DestinationRow(
@@ -1140,7 +1140,7 @@ private fun DestinationRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 12.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.Top
     ) {
         Box(
