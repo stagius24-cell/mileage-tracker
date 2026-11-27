@@ -63,9 +63,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.businesstracker.mileage.data.local.entity.VehicleEntity
@@ -105,7 +110,7 @@ fun FilterTripsBottomSheet(
     initialOnlyMissingPurpose: Boolean = false,
     showVehicleFilter: Boolean = true,
     showTripTypeFilter: Boolean = true,
-    showMissingPurposeToggle: Boolean = true,
+    showMissingPurposeToggle: Boolean = false,
     showQuickTimePresets: Boolean = false,
     initialTimeFilter: TimeFilter? = null,
     onApplyTimeFilter: ((TimeFilter?) -> Unit)? = null
@@ -203,10 +208,25 @@ fun FilterTripsBottomSheet(
                 }
             }
 
-            // Scrollable Content
+            // Scrollable Content (consume leftover vertical scroll so dragging inside doesn't dismiss the sheet)
+            val blockSheetDragConnection = remember {
+                object : NestedScrollConnection {
+                    override fun onPostScroll(
+                        consumed: Offset,
+                        available: Offset,
+                        source: NestedScrollSource
+                    ): Offset = Offset(0f, available.y)
+
+                    override suspend fun onPostFling(
+                        consumed: Velocity,
+                        available: Velocity
+                    ): Velocity = Velocity(0f, available.y)
+                }
+            }
             Column(
                 modifier = Modifier
                     .weight(1f, fill = false)
+                    .nestedScroll(blockSheetDragConnection)
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
             ) {
