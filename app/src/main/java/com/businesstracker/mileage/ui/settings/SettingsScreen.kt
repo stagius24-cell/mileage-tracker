@@ -1825,6 +1825,24 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.230",
+                    summary = "Rounded Trip Details map with matching padding and adjusted close/expand buttons.",
+                    commitHash = "52a77db",
+                    date = "Nov 26, 2026"
+                ),
+                VersionEntry(
+                    version = "v1.0.229",
+                    summary = "Use Tune filter icon in Trip History.",
+                    commitHash = "cd0c242",
+                    date = "Nov 26, 2026"
+                ),
+                VersionEntry(
+                    version = "v1.0.228",
+                    summary = "Remove Only missing purpose toggle and lock inner scroll in Filter trips sheet.",
+                    commitHash = "d88725f",
+                    date = "Nov 26, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.227",
                     summary = "Move Create report button underneath Mileage Report card with full-width layout.",
                     date = "Nov 26, 2026"
