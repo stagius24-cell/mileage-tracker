@@ -1825,8 +1825,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.224",
+                    summary = "Clean up Dashboard filter sheet: full-width year selector with arrows, remove Period header and Last 3 months chip, and fix preset row spacing.",
+                    date = "Nov 26, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.223",
                     summary = "Fix crash when tapping Create Report by formatting selectedYear as String instead of %04d.",
+                    commitHash = "8a070e6",
                     date = "Nov 26, 2026"
                 ),
                 VersionEntry(

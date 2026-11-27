@@ -26,6 +26,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -208,84 +210,134 @@ fun FilterTripsBottomSheet(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
             ) {
-                // Period Section
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp, bottom = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                // Period / Year Section
+                if (showQuickTimePresets) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = chipUnselectedBg,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp, bottom = 12.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CalendarToday,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            IconButton(
+                                onClick = { activeYear -= 1 },
+                                modifier = Modifier.size(36.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                    contentDescription = "Previous year",
+                                    tint = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                             Text(
-                                text = "Period",
+                                text = activeYear.toString(),
                                 fontSize = 15.sp,
-                                fontWeight = FontWeight.SemiBold,
+                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                            Text(
-                                text = "Select one or more months",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    // Year Selector Pill
-                    Box {
-                        Surface(
-                            onClick = { showYearDropdown = true },
-                            shape = RoundedCornerShape(10.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            IconButton(
+                                onClick = { if (activeYear < currentYear) activeYear += 1 },
+                                enabled = activeYear < currentYear,
+                                modifier = Modifier.size(36.dp)
                             ) {
-                                Text(
-                                    text = activeYear.toString(),
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
                                 Icon(
-                                    imageVector = Icons.Default.KeyboardArrowDown,
-                                    contentDescription = "Select year",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(16.dp)
+                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = "Next year",
+                                    tint = if (activeYear < currentYear) {
+                                        MaterialTheme.colorScheme.onSurface
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f)
+                                    }
                                 )
                             }
                         }
-                        DropdownMenu(
-                            expanded = showYearDropdown,
-                            onDismissRequest = { showYearDropdown = false }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp, bottom = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            sortedYears.forEach { year ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            text = year.toString(),
-                                            fontWeight = if (year == activeYear) FontWeight.Bold else FontWeight.Normal,
-                                            color = if (year == activeYear) SucculentPrimary else MaterialTheme.colorScheme.onSurface
-                                        )
-                                    },
-                                    onClick = {
-                                        activeYear = year
-                                        showYearDropdown = false
-                                    }
+                            Icon(
+                                imageVector = Icons.Default.CalendarToday,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Column {
+                                Text(
+                                    text = "Period",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
+                                Text(
+                                    text = "Select one or more months",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        // Year Selector Pill
+                        Box {
+                            Surface(
+                                onClick = { showYearDropdown = true },
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = activeYear.toString(),
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Select year",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                            DropdownMenu(
+                                expanded = showYearDropdown,
+                                onDismissRequest = { showYearDropdown = false }
+                            ) {
+                                sortedYears.forEach { year ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                text = year.toString(),
+                                                fontWeight = if (year == activeYear) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (year == activeYear) SucculentPrimary else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        },
+                                        onClick = {
+                                            activeYear = year
+                                            showYearDropdown = false
+                                        }
+                                    )
+                                }
                             }
                         }
                     }
@@ -295,6 +347,7 @@ fun FilterTripsBottomSheet(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
                         .padding(bottom = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -339,15 +392,17 @@ fun FilterTripsBottomSheet(
                             draftMonths = ytdMonths
                         }
                     )
-                    FilterPresetChip(
-                        label = "Last 3 months",
-                        selected = draftMonths == last3Months,
-                        unselectedBg = chipUnselectedBg,
-                        onClick = {
-                            draftTimeFilter = null
-                            draftMonths = last3Months
-                        }
-                    )
+                    if (!showQuickTimePresets) {
+                        FilterPresetChip(
+                            label = "Last 3 months",
+                            selected = draftMonths == last3Months,
+                            unselectedBg = chipUnselectedBg,
+                            onClick = {
+                                draftTimeFilter = null
+                                draftMonths = last3Months
+                            }
+                        )
+                    }
                     FilterPresetChip(
                         label = "All year",
                         selected = draftMonths == allYearMonths,
@@ -645,6 +700,8 @@ private fun FilterPresetChip(
             text = label,
             fontSize = 12.sp,
             fontWeight = FontWeight.Medium,
+            maxLines = 1,
+            softWrap = false,
             color = if (selected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
         )
