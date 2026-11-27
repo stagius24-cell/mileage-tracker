@@ -1825,6 +1825,11 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.240",
+                    summary = "Final visual polish on Trip Details: 20% smaller status chip, 44dp uncropped vehicle button, grouped route & additional info card, and lighter typography.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.239",
                     summary = "Group classification chip closer to vehicle button and zoom in vehicle thumbnail.",
                     date = "Nov 27, 2026"

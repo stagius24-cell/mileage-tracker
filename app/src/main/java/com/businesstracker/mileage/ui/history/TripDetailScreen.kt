@@ -440,24 +440,24 @@ fun TripDetailScreen(
                                 else -> if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
                             }
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(7.dp),
                                 color = chipBg,
-                                modifier = Modifier.height(28.dp)
+                                modifier = Modifier.height(22.dp)
                             ) {
                                 Box(
                                     contentAlignment = Alignment.Center,
-                                    modifier = Modifier.padding(horizontal = 12.dp)
+                                    modifier = Modifier.padding(horizontal = 9.dp)
                                 ) {
                                     Text(
                                         text = classificationLabel,
-                                        fontSize = 12.sp,
+                                        fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = chipText
                                     )
                                 }
                             }
 
-                            // Circular Vehicle Button with zoomed-in realistic vehicle image + lower-right chevron overlay
+                            // Circular Vehicle Button (44dp, ContentScale.Fit) with lower-right chevron overlay
                             val vehicleDrawable = when {
                                 tripVehicleName.contains("Model 3", ignoreCase = true) -> R.drawable.vehicle_tesla_model_3
                                 tripVehicleName.contains("Model Y", ignoreCase = true) -> R.drawable.vehicle_tesla_model_y
@@ -465,13 +465,13 @@ fun TripDetailScreen(
                             }
                             Box(
                                 modifier = Modifier
-                                    .size(46.dp)
+                                    .size(44.dp)
                                     .semantics { contentDescription = "Vehicle: $tripVehicleName" }
                                     .clickable { showVehiclePicker = true },
                                 contentAlignment = Alignment.Center
                             ) {
                                 Surface(
-                                    modifier = Modifier.size(46.dp),
+                                    modifier = Modifier.size(44.dp),
                                     shape = CircleShape,
                                     color = if (vehicleDrawable != null) Color.White else if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF8FAFC),
                                     border = BorderStroke(1.dp, dividerColor)
@@ -481,17 +481,17 @@ fun TripDetailScreen(
                                             Image(
                                                 painter = painterResource(id = vehicleDrawable),
                                                 contentDescription = null,
-                                                contentScale = ContentScale.Crop,
+                                                contentScale = ContentScale.Fit,
                                                 modifier = Modifier
                                                     .fillMaxSize()
-                                                    .graphicsLayer(scaleX = 1.45f, scaleY = 1.45f)
+                                                    .padding(2.dp)
                                             )
                                         } else {
                                             Icon(
                                                 imageVector = Icons.Outlined.DirectionsCar,
                                                 contentDescription = null,
                                                 tint = primaryText,
-                                                modifier = Modifier.size(22.dp)
+                                                modifier = Modifier.size(20.dp)
                                             )
                                         }
                                     }
@@ -528,7 +528,7 @@ fun TripDetailScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             CompactMetricCell(
@@ -714,7 +714,19 @@ fun TripDetailScreen(
             val savedStartId = smartNames?.startLocation?.id
             val savedEndId = smartNames?.endLocation?.id
 
-            RouteDetailsTab(
+            // Card B: Route Information + Expandable Additional Info in one white container
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                color = cardBackground,
+                border = BorderStroke(1.dp, dividerColor)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 6.dp)
+                ) {
+                    RouteDetailsTab(
                 trip = trip,
                 date = dateFormatted,
                 vehicleName = tripVehicleName,
@@ -789,16 +801,18 @@ fun TripDetailScreen(
                     modifier = Modifier.size(18.dp)
                 )
             }
-            AnimatedVisibility(visible = isAdditionalInfoExpanded) {
-                TripStatusTab(
-                    trip = trip,
-                    durationMinutes = durationMinutes,
-                    classificationColor = classificationColor,
-                    vehicleName = tripVehicleName,
-                    onEditVehicle = { showVehiclePicker = true },
-                    onEdit = { showEditSheet = true },
-                    onDelete = { showDeleteConfirmation = true }
-                )
+                    AnimatedVisibility(visible = isAdditionalInfoExpanded) {
+                        TripStatusTab(
+                            trip = trip,
+                            durationMinutes = durationMinutes,
+                            classificationColor = classificationColor,
+                            vehicleName = tripVehicleName,
+                            onEditVehicle = { showVehiclePicker = true },
+                            onEdit = { showEditSheet = true },
+                            onDelete = { showDeleteConfirmation = true }
+                        )
+                    }
+                }
             }
         }
     }
