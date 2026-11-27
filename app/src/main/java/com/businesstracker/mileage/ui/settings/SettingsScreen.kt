@@ -1827,51 +1827,61 @@ fun SettingsScreen(
                 VersionEntry(
                     version = "v1.0.241",
                     summary = "Redesign Trip History with grouped daily receipt containers, 3-row trip layout, and Trip Details-matched classification chips.",
+                    commitHash = "4b2ea15",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
                     version = "v1.0.240",
                     summary = "Final visual polish on Trip Details: 20% smaller status chip, 44dp uncropped vehicle button, grouped route & additional info card, and lighter typography.",
+                    commitHash = "fcbc474",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
                     version = "v1.0.239",
                     summary = "Group classification chip closer to vehicle button and zoom in vehicle thumbnail.",
+                    commitHash = "58c42dd",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
                     version = "v1.0.238",
                     summary = "Add realistic white Tesla Model Y and red Tesla Model 3 icons to Trip Details vehicle button.",
+                    commitHash = "a1e6304",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
                     version = "v1.0.237",
                     summary = "Compact Digital Trip Receipt: 2-row summary card with single classification chip, circular vehicle button, and inline duration/deduction strip.",
+                    commitHash = "8d0030e",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
                     version = "v1.0.236",
                     summary = "Refactor Trip Details with modern fintech & mobility card system, desaturated map style, segmented classification toggle, and tonal metric tiles.",
+                    commitHash = "383dcbe",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
                     version = "v1.0.235",
                     summary = "Move vehicle name underneath the Personal/Business classification button on Trip Details.",
+                    commitHash = "42631e6",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
                     version = "v1.0.234",
                     summary = "Redesign Trip Details as a digital trip receipt with header above map, primary distance, inline duration/deduction, and expandable additional info.",
+                    commitHash = "60f2165",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
                     version = "v1.0.233",
                     summary = "Move Route / More info tabs above the metric strip on Trip Details (Option A).",
+                    commitHash = "049c498",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
                     version = "v1.0.232",
                     summary = "Adjust Trip Details metric strip font and spacing so duration never truncates.",
+                    commitHash = "662dc97",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
