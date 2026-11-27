@@ -1825,8 +1825,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.226",
+                    summary = "Add outer padding and matching 20dp rounded bottom corners to Trip details card.",
+                    date = "Nov 26, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.225",
                     summary = "Remove top-right month dropdown pill from Dashboard header.",
+                    commitHash = "d8b2ce4",
                     date = "Nov 26, 2026"
                 ),
                 VersionEntry(

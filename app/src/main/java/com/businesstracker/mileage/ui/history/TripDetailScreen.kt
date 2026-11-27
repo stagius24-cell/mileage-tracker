@@ -296,8 +296,10 @@ fun TripDetailScreen(
         }
 
         Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(20.dp),
             color = cardBackground
         ) {
             Column(
