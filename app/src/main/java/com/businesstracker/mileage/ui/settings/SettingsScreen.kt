@@ -1,5 +1,7 @@
 package com.businesstracker.mileage.ui.settings
 
+import androidx.compose.ui.graphics.graphicsLayer
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -300,22 +302,11 @@ fun SettingsScreen(
                             )
                         }
                         Spacer(Modifier.width(8.dp))
-                        Surface(shape = RoundedCornerShape(14.dp), color = SucculentPrimary.copy(alpha = 0.10f)) {
-                            IconButton(
-                                onClick = {
-                                    editingVehicleId = currentVehicle?.id
-                                    vehicleNameDraft = currentVehicle?.name ?: state.defaultVehicle
-                                    editingVehicleBluetoothAddress = currentVehicle?.bluetoothAddress.orEmpty()
-                                    editingVehicleBluetoothName = currentVehicle?.bluetoothDeviceName.orEmpty()
-                                    vehicleNameError = null
-                                    showEditVehicle = true
-                                },
-                                modifier = Modifier.size(48.dp)
-                            ) {
-                                Icon(Icons.Default.Edit, contentDescription = "Edit vehicle name",
-                                    tint = SucculentPrimary, modifier = Modifier.size(21.dp))
-                            }
-                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = "Manage vehicles",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
 
                     HorizontalDivider(
@@ -1877,8 +1868,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.247",
+                    summary = "Compact toggle switches and replace Vehicle edit button with chevron in Settings.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.246",
                     summary = "Merge Smart classification into the Trip organization card in Settings.",
+                    commitHash = "241be23",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
@@ -2313,7 +2310,9 @@ private fun SettingsToggle(
     label: String
 ) {
     Switch(
-        modifier = Modifier.semantics { contentDescription = label },
+        modifier = Modifier
+            .graphicsLayer(scaleX = 0.85f, scaleY = 0.85f)
+            .semantics { contentDescription = label },
         checked = checked,
         onCheckedChange = onCheckedChange,
         enabled = enabled,
