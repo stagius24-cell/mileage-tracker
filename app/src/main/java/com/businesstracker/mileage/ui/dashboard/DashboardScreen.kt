@@ -180,6 +180,20 @@ fun DashboardScreen(
                 }
             }
 
+            if (!isLiveOrRecovery) {
+                item {
+                    DriveTrackingTable(
+                        serviceState = serviceState,
+                        isAutoTrackingEnabled = state.isAutoTrackingEnabled,
+                        onStart = { viewModel.startManualTracking() },
+                        onPause = { viewModel.pauseTracking() },
+                        onResume = { viewModel.resumeTracking() },
+                        onEnd = { viewModel.endTracking() },
+                        onSelectVehicle = null
+                    )
+                }
+            }
+
             item {
                 val (startDate, endDate) = state.timeFilter.toDateRange(
                     customStartDate = state.customStartDate,
@@ -228,20 +242,6 @@ fun DashboardScreen(
                             { category -> onNavigateToHistory(category, startDate, endDate) }
                         } else null,
                         onDeductionClick = onNavigateToReports
-                    )
-                }
-            }
-
-            if (!isLiveOrRecovery) {
-                item {
-                    DriveTrackingTable(
-                        serviceState = serviceState,
-                        isAutoTrackingEnabled = state.isAutoTrackingEnabled,
-                        onStart = { viewModel.startManualTracking() },
-                        onPause = { viewModel.pauseTracking() },
-                        onResume = { viewModel.resumeTracking() },
-                        onEnd = { viewModel.endTracking() },
-                        onSelectVehicle = null
                     )
                 }
             }

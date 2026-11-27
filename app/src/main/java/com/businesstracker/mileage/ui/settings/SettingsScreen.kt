@@ -1868,8 +1868,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.248",
+                    summary = "Move Ready to Drive card to the top of the Dashboard.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.247",
                     summary = "Compact toggle switches and replace Vehicle edit button with chevron in Settings.",
+                    commitHash = "62da123",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
