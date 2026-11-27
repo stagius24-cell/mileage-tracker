@@ -269,7 +269,9 @@ class DashboardViewModel @Inject constructor(
             }
             summaryUseCase.execute(
                 trips = filteredTrips,
-                timeFilter = TimeFilter.ALL_TIME,
+                timeFilter = TimeFilter.CUSTOM,
+                customStartDate = "1900-01-01",
+                customEndDate = "2999-12-31",
                 referenceDate = now
             )
         } else {
