@@ -84,167 +84,182 @@ internal fun MileageBreakdownCard(
     val businessPercent = if (total > 0) (business / total * 100).roundToInt() else 0
     val personalPercent = if (total > 0) 100 - businessPercent else 0
 
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = colors.surface),
-        border = BorderStroke(1.dp, colors.divider.copy(alpha = 0.7f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        // Total classified mileage & Trips directly on canvas
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        text = "Total classified mileage",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = colors.muted
-                    )
-                    Text(
-                        text = "${String.format(Locale.US, "%,.1f", total)} mi",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colors.text,
-                        style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum")
-                    )
-                }
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = "Total classified mileage",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = colors.muted
+                )
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
-                        text = "Trips",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = colors.muted
-                    )
-                    Text(
-                        text = "${summary.totalTripsCount}",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
+                        text = String.format(Locale.US, "%,.1f", total),
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = colors.text,
                         style = MaterialTheme.typography.headlineSmall.copy(fontFeatureSettings = "tnum")
                     )
-                }
-            }
-
-            Canvas(
-                Modifier
-                    .fillMaxWidth()
-                    .height(7.dp)
-                    .clip(RoundedCornerShape(4.dp))
-                    .semantics {
-                        contentDescription = "Business $businessPercent percent, personal $personalPercent percent"
-                    }
-            ) {
-                if (total <= 0) {
-                    drawRect(colors.divider)
-                } else {
-                    val boundary = size.width * animatedFraction
-                    drawRect(colors.business, size = Size(boundary, size.height))
-                    drawRect(
-                        colors.personal,
-                        topLeft = Offset(boundary, 0f),
-                        size = Size(size.width - boundary, size.height)
+                    Text(
+                        text = "mi",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = colors.muted,
+                        modifier = Modifier.padding(bottom = 4.dp)
                     )
-                    if (animatedFraction > 0.001f && animatedFraction < 0.999f) {
-                        val sepWidth = 2.dp.toPx()
-                        val sepLeft = (boundary - sepWidth / 2f).coerceIn(0f, size.width - sepWidth)
-                        drawRect(
-                            color = colors.surface,
-                            topLeft = Offset(sepLeft, 0f),
-                            size = Size(sepWidth, size.height)
-                        )
-                    }
                 }
             }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                val periodSuffix = if (periodLabel.isNotBlank()) " for $periodLabel" else ""
-                val businessA11y = "Business, ${String.format(Locale.US, "%,.1f", business)} miles, $businessPercent percent. View Business trips$periodSuffix."
-                val personalA11y = "Personal, ${String.format(Locale.US, "%,.1f", personal)} miles, $personalPercent percent. View Personal trips$periodSuffix."
-
-                MileageCategoryColumn(
-                    title = "Business",
-                    miles = business,
-                    percent = businessPercent,
-                    icon = Icons.Outlined.BusinessCenter,
-                    accent = colors.business,
-                    colors = colors,
-                    modifier = Modifier.weight(1f),
-                    onClick = if (onCategoryClick != null) { { onCategoryClick("BUSINESS") } } else null,
-                    accessibilityDescription = businessA11y
+                Text(
+                    text = "${summary.totalTripsCount}",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = colors.text,
+                    style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum")
                 )
-                MileageCategoryColumn(
-                    title = "Personal",
-                    miles = personal,
-                    percent = personalPercent,
-                    icon = Icons.Outlined.Home,
-                    accent = colors.personal,
-                    colors = colors,
-                    modifier = Modifier.weight(1f),
-                    onClick = if (onCategoryClick != null) { { onCategoryClick("PERSONAL") } } else null,
-                    accessibilityDescription = personalA11y
+                Text(
+                    text = "Trips",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = colors.muted
                 )
             }
+        }
 
-            HorizontalDivider(color = colors.divider.copy(alpha = 0.8f))
-
-            Row(
+        // Compact white breakdown container
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = colors.surface),
+            border = BorderStroke(1.dp, colors.divider.copy(alpha = 0.7f)),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        ) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .then(
-                        if (onDeductionClick != null) {
-                            Modifier.clickable(onClickLabel = "Open deduction reports", onClick = onDeductionClick)
-                        } else Modifier
-                    )
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Surface(shape = RoundedCornerShape(12.dp), color = colors.mint) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    val periodSuffix = if (periodLabel.isNotBlank()) " for $periodLabel" else ""
+                    val businessA11y = "Business, ${String.format(Locale.US, "%,.1f", business)} miles, $businessPercent percent. View Business trips$periodSuffix."
+                    val personalA11y = "Personal, ${String.format(Locale.US, "%,.1f", personal)} miles, $personalPercent percent. View Personal trips$periodSuffix."
+
+                    MileageCategoryColumn(
+                        title = "Business",
+                        miles = business,
+                        percent = businessPercent,
+                        icon = Icons.Outlined.BusinessCenter,
+                        accent = colors.business,
+                        colors = colors,
+                        modifier = Modifier.weight(1f),
+                        onClick = if (onCategoryClick != null) { { onCategoryClick("BUSINESS") } } else null,
+                        accessibilityDescription = businessA11y
+                    )
+                    MileageCategoryColumn(
+                        title = "Personal",
+                        miles = personal,
+                        percent = personalPercent,
+                        icon = Icons.Outlined.Home,
+                        accent = colors.personal,
+                        colors = colors,
+                        modifier = Modifier.weight(1f),
+                        onClick = if (onCategoryClick != null) { { onCategoryClick("PERSONAL") } } else null,
+                        accessibilityDescription = personalA11y
+                    )
+                }
+
+                Canvas(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(5.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .semantics {
+                            contentDescription = "Business $businessPercent percent, personal $personalPercent percent"
+                        }
+                ) {
+                    if (total <= 0) {
+                        drawRect(colors.divider)
+                    } else {
+                        val boundary = size.width * animatedFraction
+                        drawRect(colors.business, size = Size(boundary, size.height))
+                        drawRect(
+                            colors.personal,
+                            topLeft = Offset(boundary, 0f),
+                            size = Size(size.width - boundary, size.height)
+                        )
+                        if (animatedFraction > 0.001f && animatedFraction < 0.999f) {
+                            val sepWidth = 2.dp.toPx()
+                            val sepLeft = (boundary - sepWidth / 2f).coerceIn(0f, size.width - sepWidth)
+                            drawRect(
+                                color = colors.surface,
+                                topLeft = Offset(sepLeft, 0f),
+                                size = Size(sepWidth, size.height)
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = colors.divider.copy(alpha = 0.7f))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .then(
+                            if (onDeductionClick != null) {
+                                Modifier.clickable(onClickLabel = "Open deduction reports", onClick = onDeductionClick)
+                            } else Modifier
+                        )
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Outlined.AccountBalanceWallet,
                         contentDescription = null,
                         tint = colors.business,
-                        modifier = Modifier
-                            .padding(10.dp)
-                            .size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
-                }
-                Column(Modifier.weight(1f)) {
                     Text(
                         text = "Estimated tax deduction",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = colors.muted
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = colors.muted,
+                        modifier = Modifier.weight(1f)
                     )
                     Text(
                         text = "$${String.format(Locale.US, "%,.2f", summary.estimatedDeduction)}",
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = colors.business,
-                        style = MaterialTheme.typography.titleLarge.copy(fontFeatureSettings = "tnum")
+                        style = MaterialTheme.typography.titleMedium.copy(fontFeatureSettings = "tnum")
                     )
-                }
-                if (onDeductionClick != null) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = colors.muted
-                    )
+                    if (onDeductionClick != null) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = colors.muted,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }

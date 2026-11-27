@@ -1,5 +1,8 @@
 package com.businesstracker.mileage.ui.dashboard
 
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -185,11 +188,14 @@ fun DashboardScreen(
                     DriveTrackingTable(
                         serviceState = serviceState,
                         isAutoTrackingEnabled = state.isAutoTrackingEnabled,
+                        fallbackVehicleName = savedVehicles.firstOrNull()?.name,
                         onStart = { viewModel.startManualTracking() },
                         onPause = { viewModel.pauseTracking() },
                         onResume = { viewModel.resumeTracking() },
                         onEnd = { viewModel.endTracking() },
-                        onSelectVehicle = null
+                        onSelectVehicle = if (savedVehicles.isNotEmpty()) {
+                            { showActiveVehiclePicker = true }
+                        } else null
                     )
                 }
             }
@@ -228,12 +234,37 @@ fun DashboardScreen(
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onBackground
                         )
-                        Text(
-                            text = periodLabel,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Surface(
+                            onClick = { showFilterSheet = true },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) MaterialTheme.colorScheme.surface else Color.White,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarToday,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = periodLabel,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "Select period",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
                     }
                     MileageBreakdownCard(
                         summary = state.summary,
@@ -488,6 +519,7 @@ fun DashboardScreen(
 private fun DriveTrackingTable(
     serviceState: TrackingServiceState,
     isAutoTrackingEnabled: Boolean,
+    fallbackVehicleName: String? = null,
     onStart: () -> Unit,
     onPause: () -> Unit,
     onResume: () -> Unit,
@@ -522,67 +554,156 @@ private fun DriveTrackingTable(
     ) {
         if (!isActiveOrRecovery) {
             // Compact Ready to Drive Card when idle
-            Row(
+            val displayVehicleName = serviceState.vehicleName ?: fallbackVehicleName ?: "Select vehicle"
+            val vehicleDrawable = when {
+                displayVehicleName.contains("Model 3", ignoreCase = true) -> com.businesstracker.mileage.R.drawable.vehicle_tesla_model_3
+                displayVehicleName.contains("Model Y", ignoreCase = true) -> com.businesstracker.mileage.R.drawable.vehicle_tesla_model_y
+                else -> null
+            }
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = SucculentPrimary.copy(alpha = 0.12f),
-                        modifier = Modifier.size(40.dp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .then(if (onSelectVehicle != null) Modifier.clickable(onClick = onSelectVehicle) else Modifier),
+                            shape = CircleShape,
+                            color = if (vehicleDrawable != null) Color.White else SucculentPrimary.copy(alpha = 0.12f),
+                            border = BorderStroke(1.dp, dividerColor)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                if (vehicleDrawable != null) {
+                                    androidx.compose.foundation.Image(
+                                        painter = androidx.compose.ui.res.painterResource(id = vehicleDrawable),
+                                        contentDescription = "Vehicle: $displayVehicleName",
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(3.dp)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.DirectionsCar,
+                                        contentDescription = null,
+                                        tint = SucculentPrimary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                            modifier = if (onSelectVehicle != null) Modifier.clickable(onClick = onSelectVehicle) else Modifier
+                        ) {
+                            Text(
+                                text = "Ready to\ndrive",
+                                fontSize = 15.sp,
+                                lineHeight = 19.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    text = displayVehicleName,
+                                    fontSize = 12.sp,
+                                    color = mutedColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (onSelectVehicle != null) {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Select vehicle",
+                                        tint = mutedColor,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Button(
+                        onClick = onStart,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = SucculentPrimary,
+                            contentColor = Color.White
+                        ),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier.height(40.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.DirectionsCar,
+                            imageVector = Icons.Default.PlayArrow,
                             contentDescription = null,
-                            tint = SucculentPrimary,
-                            modifier = Modifier.padding(9.dp)
+                            modifier = Modifier.size(18.dp)
                         )
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Ready to Drive",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        val autoLabel = if (isAutoTrackingEnabled) "Auto-tracking on" else "Auto-tracking off"
-                        val subtitle = serviceState.vehicleName?.let { "$it · $autoLabel" } ?: autoLabel
-                        Text(
-                            text = subtitle,
-                            fontSize = 12.sp,
-                            color = mutedColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            text = "Start trip",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
-                OutlinedButton(
-                    onClick = onStart,
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, SucculentPrimary.copy(alpha = 0.5f)),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+
+                HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = SucculentPrimary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Start",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = SucculentPrimary
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(
+                                    if (isAutoTrackingEnabled) SucculentPrimary else mutedColor,
+                                    CircleShape
+                                )
+                        )
+                        Text(
+                            text = if (isAutoTrackingEnabled) "Auto-tracking on" else "Auto-tracking off",
+                            fontSize = 12.sp,
+                            color = if (isAutoTrackingEnabled) SucculentPrimary else mutedColor,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Bluetooth,
+                            contentDescription = null,
+                            tint = mutedColor,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = "Auto-stop enabled",
+                            fontSize = 12.sp,
+                            color = mutedColor
+                        )
+                    }
                 }
             }
         } else {
