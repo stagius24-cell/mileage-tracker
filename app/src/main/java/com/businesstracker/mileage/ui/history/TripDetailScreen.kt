@@ -103,8 +103,12 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.Image
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
+import com.businesstracker.mileage.R
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -449,7 +453,12 @@ fun TripDetailScreen(
                             }
                         }
 
-                        // Circular Vehicle Button with lower-right chevron overlay
+                        // Circular Vehicle Button with realistic vehicle image + lower-right chevron overlay
+                        val vehicleDrawable = when {
+                            tripVehicleName.contains("Model 3", ignoreCase = true) -> R.drawable.vehicle_tesla_model_3
+                            tripVehicleName.contains("Model Y", ignoreCase = true) -> R.drawable.vehicle_tesla_model_y
+                            else -> null
+                        }
                         Box(
                             modifier = Modifier
                                 .size(46.dp)
@@ -460,16 +469,27 @@ fun TripDetailScreen(
                             Surface(
                                 modifier = Modifier.size(46.dp),
                                 shape = CircleShape,
-                                color = if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF8FAFC),
+                                color = if (vehicleDrawable != null) Color.White else if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF8FAFC),
                                 border = BorderStroke(1.dp, dividerColor)
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.DirectionsCar,
-                                        contentDescription = null,
-                                        tint = primaryText,
-                                        modifier = Modifier.size(22.dp)
-                                    )
+                                    if (vehicleDrawable != null) {
+                                        Image(
+                                            painter = painterResource(id = vehicleDrawable),
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Fit,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(3.dp)
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Outlined.DirectionsCar,
+                                            contentDescription = null,
+                                            tint = primaryText,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
                                 }
                             }
                             Surface(

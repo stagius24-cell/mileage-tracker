@@ -1825,6 +1825,11 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.238",
+                    summary = "Add realistic white Tesla Model Y and red Tesla Model 3 icons to Trip Details vehicle button.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.237",
                     summary = "Compact Digital Trip Receipt: 2-row summary card with single classification chip, circular vehicle button, and inline duration/deduction strip.",
                     date = "Nov 27, 2026"
