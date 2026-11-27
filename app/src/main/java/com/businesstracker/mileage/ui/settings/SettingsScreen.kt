@@ -355,28 +355,7 @@ fun SettingsScreen(
                             label = "Bluetooth auto-stop"
                         )
                     }
-                }
-            }
-        }
-
-        item {
-            Text(
-                text = "Driving & vehicle",
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 4.dp, top = 4.dp)
-            )
-        }
-
-        item {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-            ) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
+                    CompactSettingsDivider()
                     // Section 1 — Drive tracking
                     Row(
                         modifier = Modifier
@@ -1865,8 +1844,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.244",
+                    summary = "Merge Driving & vehicle into a single white card in Settings.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.243",
                     summary = "Move Dark mode into Preferences & diagnostics group in Settings.",
+                    commitHash = "e11482e",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
