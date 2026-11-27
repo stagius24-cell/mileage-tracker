@@ -442,6 +442,38 @@ fun TripDetailScreen(
             }
             }
 
+            // Minimal underline tabs (Trackr style)
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TripDetailTabButton(
+                        label = "Route",
+                        icon = Icons.Default.LocationOn,
+                        selected = pagerState.currentPage == 0,
+                        activeColor = emeraldAccent,
+                        inactiveColor = mutedText,
+                        onClick = {
+                            coroutineScope.launch { pagerState.animateScrollToPage(0) }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                    TripDetailTabButton(
+                        label = "More info",
+                        icon = Icons.Default.Info,
+                        selected = pagerState.currentPage == 1,
+                        activeColor = emeraldAccent,
+                        inactiveColor = mutedText,
+                        onClick = {
+                            coroutineScope.launch { pagerState.animateScrollToPage(1) }
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                HorizontalDivider(color = dividerColor.copy(alpha = 0.8f), thickness = 1.dp)
+            }
+
             val sageBg = if (isDark) SucculentPrimary.copy(alpha = 0.10f) else Color(0xFFEDF5F0)
             val deductionPositive = trip.calculatedDeduction > 0.0
             Surface(
@@ -635,38 +667,6 @@ fun TripDetailScreen(
                         }
                     }
                 }
-            }
-
-            // Minimal underline tabs (Trackr style)
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TripDetailTabButton(
-                        label = "Route",
-                        icon = Icons.Default.LocationOn,
-                        selected = pagerState.currentPage == 0,
-                        activeColor = emeraldAccent,
-                        inactiveColor = mutedText,
-                        onClick = {
-                            coroutineScope.launch { pagerState.animateScrollToPage(0) }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    TripDetailTabButton(
-                        label = "More info",
-                        icon = Icons.Default.Info,
-                        selected = pagerState.currentPage == 1,
-                        activeColor = emeraldAccent,
-                        inactiveColor = mutedText,
-                        onClick = {
-                            coroutineScope.launch { pagerState.animateScrollToPage(1) }
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                HorizontalDivider(color = dividerColor.copy(alpha = 0.8f), thickness = 1.dp)
             }
 
             HorizontalPager(

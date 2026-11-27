@@ -1825,6 +1825,11 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.233",
+                    summary = "Move Route / More info tabs above the metric strip on Trip Details (Option A).",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.232",
                     summary = "Adjust Trip Details metric strip font and spacing so duration never truncates.",
                     date = "Nov 27, 2026"
