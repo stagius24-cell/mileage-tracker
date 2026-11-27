@@ -337,52 +337,6 @@ fun TripDetailScreen(
                             )
                         }
                     }
-                    Text(
-                        text = receiptDateFormatted,
-                        fontSize = 12.sp,
-                        color = mutedText
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier
-                            .clickable { showVehiclePicker = true }
-                            .padding(vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        val isModel3 = tripVehicleName.contains("Model 3", ignoreCase = true)
-                        val isModelY = tripVehicleName.contains("Model Y", ignoreCase = true)
-                        if (isModelY) {
-                            Box(
-                                modifier = Modifier
-                                    .size(20.dp)
-                                    .background(Color(0xFF475569), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.DirectionsCar,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                            }
-                        } else {
-                            Icon(
-                                imageVector = Icons.Outlined.DirectionsCar,
-                                contentDescription = null,
-                                tint = if (isModel3) Color(0xFFDC2626) else mutedText,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                        Text(
-                            text = tripVehicleName,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = primaryText,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
                 }
 
                 Box {
@@ -426,6 +380,58 @@ fun TripDetailScreen(
                             }
                         )
                     }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = receiptDateFormatted,
+                    fontSize = 12.sp,
+                    color = mutedText
+                )
+                Row(
+                    modifier = Modifier
+                        .clickable { showVehiclePicker = true }
+                        .padding(vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    val isModel3 = tripVehicleName.contains("Model 3", ignoreCase = true)
+                    val isModelY = tripVehicleName.contains("Model Y", ignoreCase = true)
+                    if (isModelY) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .background(Color(0xFF475569), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.DirectionsCar,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    } else {
+                        Icon(
+                            imageVector = Icons.Outlined.DirectionsCar,
+                            contentDescription = null,
+                            tint = if (isModel3) Color(0xFFDC2626) else mutedText,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Text(
+                        text = tripVehicleName,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = primaryText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
 
@@ -1090,7 +1096,13 @@ private fun RouteDetailsTab(
             locationActionLabel = startLocationActionLabel,
             onSaveLocation = onSaveStartLocation
         )
-        HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))
+        Box(
+            modifier = Modifier
+                .padding(start = 11.dp)
+                .width(1.5.dp)
+                .height(16.dp)
+                .background(dividerColor.copy(alpha = 0.8f))
+        )
         DestinationRow(
             primaryName = smartEndName,
             address = endAddress,
