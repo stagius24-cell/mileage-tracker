@@ -211,34 +211,11 @@ fun ReportsExportScreen(
                             )
                         }
                     }
-
-                    Button(
-                        onClick = { showCreateReportDialog = true },
-                        shape = RoundedCornerShape(10.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier.height(34.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ReceiptLong,
-                            contentDescription = "Create report",
-                            modifier = Modifier.size(14.dp),
-                            tint = Color.White
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = "Create report",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color.White,
-                            maxLines = 1
-                        )
-                    }
                 }
             }
         }
 
-        // 2. Mileage Report Summary Card (no duplicate button inside)
+        // 2. Mileage Report Summary Card
         item {
             AnnualMileageReportCard(
                 periodLabel = state.selectedPeriodLabel,
@@ -252,6 +229,33 @@ fun ReportsExportScreen(
                 emeraldAccent = emeraldAccent,
                 dividerColor = dividerColor
             )
+        }
+
+        // 2b. Full-width Create Report Button underneath Mileage Report
+        item {
+            Button(
+                onClick = { showCreateReportDialog = true },
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ReceiptLong,
+                    contentDescription = "Create report",
+                    modifier = Modifier.size(18.dp),
+                    tint = Color.White
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Create report",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                    maxLines = 1
+                )
+            }
         }
 
         // 3. Monthly Comparison Line Chart

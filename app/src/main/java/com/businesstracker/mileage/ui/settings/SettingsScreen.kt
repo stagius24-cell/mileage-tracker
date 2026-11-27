@@ -1825,8 +1825,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.227",
+                    summary = "Move Create report button underneath Mileage Report card with full-width layout.",
+                    date = "Nov 26, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.226",
                     summary = "Add outer padding and matching 20dp rounded bottom corners to Trip details card.",
+                    commitHash = "5fb9c37",
                     date = "Nov 26, 2026"
                 ),
                 VersionEntry(
