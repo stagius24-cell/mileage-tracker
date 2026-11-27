@@ -1825,8 +1825,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.225",
+                    summary = "Remove top-right month dropdown pill from Dashboard header.",
+                    date = "Nov 26, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.224",
                     summary = "Clean up Dashboard filter sheet: full-width year selector with arrows, remove Period header and Last 3 months chip, and fix preset row spacing.",
+                    commitHash = "385f807",
                     date = "Nov 26, 2026"
                 ),
                 VersionEntry(

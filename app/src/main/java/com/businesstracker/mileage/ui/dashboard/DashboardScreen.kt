@@ -108,7 +108,6 @@ fun DashboardScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val serviceState by viewModel.serviceState.collectAsStateWithLifecycle()
     val savedVehicles by viewModel.savedVehicles.collectAsStateWithLifecycle()
-    var monthMenuExpanded by remember { mutableStateOf(false) }
     var showFilterSheet by remember { mutableStateOf(false) }
     var isAmoledDimmed by remember { mutableStateOf(false) }
     var showActiveVehiclePicker by remember { mutableStateOf(false) }
@@ -144,72 +143,6 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            val compactMonthLabel = remember(state.selectedMonthPrefix, state.selectedMonthName, state.selectedYear) {
-                                try {
-                                    val d = LocalDate.parse("${state.selectedMonthPrefix}-01")
-                                    "${d.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())} ${d.year}"
-                                } catch (_: Exception) {
-                                    val shortMonth = state.selectedMonthName.take(3).ifBlank { "Nov" }
-                                    "$shortMonth ${state.selectedYear}"
-                                }
-                            }
-                            val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-                            Box {
-                                Surface(
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFE9EEF5),
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable { monthMenuExpanded = true }
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CalendarMonth,
-                                            contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                        Text(
-                                            text = compactMonthLabel,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onBackground
-                                        )
-                                        Icon(
-                                            imageVector = Icons.Default.ExpandMore,
-                                            contentDescription = "Select Month",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-
-                                DropdownMenu(
-                                    expanded = monthMenuExpanded,
-                                    onDismissRequest = { monthMenuExpanded = false }
-                                ) {
-                                    state.availableMonths.forEach { monthIso ->
-                                        val date = try {
-                                            LocalDate.parse("$monthIso-01")
-                                        } catch (_: Exception) {
-                                            LocalDate.now()
-                                        }
-                                        val name = date.month.getDisplayName(TextStyle.FULL, Locale.getDefault())
-                                        DropdownMenuItem(
-                                            text = { Text("$name ${date.year}") },
-                                            onClick = {
-                                                viewModel.selectMonth(monthIso)
-                                                monthMenuExpanded = false
-                                            }
-                                        )
-                                    }
-                                }
-                            }
-
                             val hasActiveFilter = state.selectedMonths.isNotEmpty() ||
                                 state.timeFilter == TimeFilter.TODAY ||
                                 state.timeFilter == TimeFilter.THIS_WEEK
