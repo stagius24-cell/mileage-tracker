@@ -990,7 +990,7 @@ private fun CompactMetricCell(
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier.padding(horizontal = 4.dp),
+        modifier = modifier.padding(horizontal = 2.dp),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -998,20 +998,19 @@ private fun CompactMetricCell(
             imageVector = icon,
             contentDescription = null,
             tint = iconTint,
-            modifier = Modifier.size(17.dp)
+            modifier = Modifier.size(15.dp)
         )
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(4.dp))
         Text(
             text = value,
             style = MaterialTheme.typography.titleMedium.copy(
-                fontSize = 18.sp,
+                fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFeatureSettings = "tnum"
             ),
             color = valueColor,
             maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Ellipsis
+            softWrap = false
         )
     }
 }

@@ -1825,6 +1825,17 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.232",
+                    summary = "Adjust Trip Details metric strip font and spacing so duration never truncates.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
+                    version = "v1.0.231",
+                    summary = "Use last moving waypoint for finalized trip end time instead of parked GPS drift.",
+                    commitHash = "2fa691c",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.230",
                     summary = "Rounded Trip Details map with matching padding and adjusted close/expand buttons.",
                     commitHash = "52a77db",
