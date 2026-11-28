@@ -519,20 +519,18 @@ class AutoDriveFalseStartAndStopTest {
 
         service.handleFixProcessed(qualifyingFix)
 
-        // Allow background persistence to complete
-        var cleared = false
-        for (i in 1..40) {
-            if (preferencesManager.getCandidateDeadline() == null) {
-                cleared = true
-                break
+        // The deadline is cleared before the asynchronous Room write completes.
+        val trackingState = TripLifecycleState.TRACKING.value
+        kotlinx.coroutines.withTimeout(5_000L) {
+            while (preferencesManager.getCandidateDeadline() != null ||
+                database.tripLifecycleDao().getState(tripId) != trackingState
+            ) {
+                kotlinx.coroutines.delay(25L)
             }
-            kotlinx.coroutines.delay(50L)
         }
 
         assertTrue("Displacement must be confirmed", service.getInternalDisplacementConfirmed())
         assertFalse("Candidate flag must transition to false once confirmed", service.getInternalIsCandidate())
-        assertTrue("Candidate deadline must be cleared on promotion", cleared)
-        assertEquals("Room lifecycle must update to TRACKING", TripLifecycleState.TRACKING.value, database.tripLifecycleDao().getState(tripId))
     }
 
     // =========================================================================
