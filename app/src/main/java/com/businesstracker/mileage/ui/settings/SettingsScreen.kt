@@ -1868,8 +1868,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.252",
+                    summary = "Show realistic vehicle thumbnail in Active Drive Tracking card.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.251",
                     summary = "Remove filter icon inline with Dashboard title.",
+                    commitHash = "403a280",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(

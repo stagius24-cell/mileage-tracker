@@ -707,17 +707,38 @@ private fun DriveTrackingTable(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         modifier = Modifier.weight(1f)
                     ) {
+                        val activeVehicleDrawable = when {
+                            serviceState.vehicleName?.contains("Model 3", ignoreCase = true) == true -> com.businesstracker.mileage.R.drawable.vehicle_tesla_model_3
+                            serviceState.vehicleName?.contains("Model Y", ignoreCase = true) == true -> com.businesstracker.mileage.R.drawable.vehicle_tesla_model_y
+                            else -> null
+                        }
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = SucculentPrimary.copy(alpha = 0.12f),
-                            modifier = Modifier.size(38.dp)
+                            onClick = { onSelectVehicle?.invoke() },
+                            enabled = onSelectVehicle != null,
+                            shape = CircleShape,
+                            color = if (activeVehicleDrawable != null) Color.White else SucculentPrimary.copy(alpha = 0.12f),
+                            border = BorderStroke(1.dp, dividerColor),
+                            modifier = Modifier.size(44.dp)
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.DirectionsCar,
-                                contentDescription = null,
-                                tint = SucculentPrimary,
-                                modifier = Modifier.padding(8.dp)
-                            )
+                            Box(contentAlignment = Alignment.Center) {
+                                if (activeVehicleDrawable != null) {
+                                    androidx.compose.foundation.Image(
+                                        painter = androidx.compose.ui.res.painterResource(id = activeVehicleDrawable),
+                                        contentDescription = "Vehicle: ${serviceState.vehicleName ?: "Unknown"}",
+                                        contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(3.dp)
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.DirectionsCar,
+                                        contentDescription = null,
+                                        tint = SucculentPrimary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
                         }
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
