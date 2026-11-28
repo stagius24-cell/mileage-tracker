@@ -21,7 +21,7 @@ import com.businesstracker.mileage.domain.usecase.ResolveSmartTripNamesUseCase
 import com.businesstracker.mileage.domain.usecase.SmartTripNames
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
-import com.businesstracker.mileage.worker.GoogleSheetsSyncWorker
+import com.businesstracker.mileage.worker.MileageSyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -395,7 +395,7 @@ class TripHistoryViewModel @Inject constructor(
             if (_selectedTripForConfirmationSheet.value?.id == tripId) {
                 _selectedTripForConfirmationSheet.value = null
             }
-            context?.let { GoogleSheetsSyncWorker.enqueueOneTimeSync(it) }
+            context?.let { MileageSyncWorker.enqueueOneTimeSync(it) }
         } catch (e: Exception) {
             android.util.Log.e("TripHistoryViewModel", "Failed to confirm suggestion: ${e.message}", e)
             _actionErrorMessage.value = "Failed to confirm trip classification."
@@ -439,7 +439,7 @@ class TripHistoryViewModel @Inject constructor(
                 if (_selectedTripForDetails.value?.id == tripId) {
                     _selectedTripForDetails.value = updated
                 }
-                context?.let { GoogleSheetsSyncWorker.enqueueOneTimeSync(it) }
+                context?.let { MileageSyncWorker.enqueueOneTimeSync(it) }
                 onSuccess?.invoke()
             } catch (e: Exception) {
                 android.util.Log.e("TripHistoryViewModel", "Failed to update trip details: ${e.message}", e)
