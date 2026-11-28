@@ -43,7 +43,7 @@ import com.businesstracker.mileage.domain.usecase.DrainPendingGpsFixesUseCase
 import com.businesstracker.mileage.domain.usecase.FilterGpsPointUseCase
 import com.businesstracker.mileage.domain.usecase.FinalizeTripUseCase
 import com.businesstracker.mileage.domain.usecase.GpsInboxProcessor
-import com.businesstracker.mileage.worker.GoogleSheetsSyncWorker
+import com.businesstracker.mileage.worker.MileageSyncWorker
 import com.businesstracker.mileage.worker.TripDebounceWorker
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -1546,7 +1546,7 @@ class LocationTrackingService : Service() {
                                 notificationHelper.showTripDetectedNotification(trip.id, trip.totalDistanceMiles)
                             } else {
                                 // Auto-classified trip (e.g. from Saved Location), sync immediately to Google Sheets
-                                GoogleSheetsSyncWorker.enqueueOneTimeSync(applicationContext)
+                                MileageSyncWorker.enqueueOneTimeSync(applicationContext)
                             }
                         }
                     }
