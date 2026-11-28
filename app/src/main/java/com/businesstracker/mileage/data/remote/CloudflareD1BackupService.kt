@@ -125,6 +125,13 @@ class CloudflareD1BackupService @Inject constructor(
                         "Cloudflare did not confirm every trip; retry is safe.", true
                     )
                 }
+                if (index == 0 && (ack.getAsJsonArray("syncedVehicleIds")?.size() != vehicles.size ||
+                    ack.getAsJsonArray("syncedSavedLocationIds")?.size() != locations.size)
+                ) {
+                    return@withContext CloudflareBackupResult.Failure(
+                        "Cloudflare did not confirm every vehicle and saved location; retry is safe.", true
+                    )
+                }
                 chunk.forEach { tripRepository.markSynced(it.id, System.currentTimeMillis()) }
             }
             if (isInitialSnapshot || canCompleteLegacyImport) preferencesManager.setCfInitialSnapshotComplete(true)
