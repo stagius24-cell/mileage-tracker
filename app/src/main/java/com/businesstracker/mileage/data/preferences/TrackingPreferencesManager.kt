@@ -83,6 +83,7 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_CF_CLIENT_ID = stringPreferencesKey("cf_client_id")
         private val KEY_CF_CLIENT_SECRET = stringPreferencesKey("cf_client_secret")
         private val KEY_CF_BEARER_TOKEN = stringPreferencesKey("cf_bearer_token")
+        private val KEY_CF_INITIAL_MIGRATION_COMPLETE = booleanPreferencesKey("cf_initial_migration_complete")
         private val KEY_DEFAULT_VEHICLE = stringPreferencesKey("default_vehicle")
         private val KEY_CUSTOM_CATEGORIES = stringPreferencesKey("custom_categories")
         private val KEY_CUSTOM_PURPOSES = stringPreferencesKey("custom_trip_purposes")
@@ -683,6 +684,14 @@ class TrackingPreferencesManager @Inject constructor(
         context.dataStore.edit { prefs ->
             prefs[KEY_CF_BEARER_TOKEN] = token
         }
+    }
+
+    val cfInitialMigrationComplete: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CF_INITIAL_MIGRATION_COMPLETE] ?: false
+    }
+
+    suspend fun setCfInitialMigrationComplete(complete: Boolean) {
+        context.dataStore.edit { prefs -> prefs[KEY_CF_INITIAL_MIGRATION_COMPLETE] = complete }
     }
 
     val defaultVehicle: Flow<String> = context.dataStore.data.map { prefs ->
