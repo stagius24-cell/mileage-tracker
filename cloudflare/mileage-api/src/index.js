@@ -47,7 +47,9 @@ async function authenticate(request) {
 
   const tokenInfo = await response.json();
   const expiresIn = Number(tokenInfo.expires_in);
-  const userId = typeof tokenInfo.user_id === "string" ? tokenInfo.user_id : "";
+  const userId = [tokenInfo.sub, tokenInfo.user_id].find(
+    value => typeof value === "string" && value.length > 0
+  );
   if (!userId || !Number.isFinite(expiresIn) || expiresIn <= 0) return null;
   return { userId, email: typeof tokenInfo.email === "string" ? tokenInfo.email : null };
 }
