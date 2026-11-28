@@ -13,6 +13,7 @@ import androidx.work.WorkerParameters
 import com.businesstracker.mileage.data.remote.SavedLocationsSheetsService
 import com.businesstracker.mileage.data.remote.SavedLocationsSyncResult
 import com.businesstracker.mileage.domain.repository.SavedLocationBackupScheduler
+import com.businesstracker.mileage.worker.MileageSyncWorker
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -80,7 +81,7 @@ class WorkManagerSavedLocationBackupScheduler @Inject constructor(
 
     override fun scheduleAutoBackup() {
         runCatching {
-            SavedLocationBackupWorker.enqueueOneTimeBackup(context)
+            MileageSyncWorker.enqueueOneTimeSync(context)
         }
     }
 }
