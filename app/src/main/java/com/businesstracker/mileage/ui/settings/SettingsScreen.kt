@@ -1869,8 +1869,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.254",
+                    summary = "Evenly space Trip Details route rows and use outline Edit icon.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.253",
                     summary = "Place Trip Details classification chip beside mileage and replace Additional trip information row with discreet More details link.",
+                    commitHash = "7433f65",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(

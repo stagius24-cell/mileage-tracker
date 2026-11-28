@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Schedule
@@ -1227,7 +1228,7 @@ private fun DestinationRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(IntrinsicSize.Min),
+            .padding(vertical = 10.dp),
         verticalAlignment = Alignment.Top
     ) {
         Column(
@@ -1268,8 +1269,7 @@ private fun DestinationRow(
         Spacer(modifier = Modifier.width(12.dp))
         Column(
             modifier = Modifier
-                .weight(1f)
-                .padding(bottom = if (showConnectorBelow) 10.dp else 2.dp),
+                .weight(1f),
             verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Text(
@@ -1315,7 +1315,7 @@ private fun DestinationRow(
                         }
                 ) {
                     Icon(
-                        imageVector = if (locationActionLabel == "Save") Icons.Outlined.BookmarkBorder else Icons.Default.Edit,
+                        imageVector = if (locationActionLabel == "Save") Icons.Outlined.BookmarkBorder else Icons.Outlined.Edit,
                         contentDescription = null,
                         tint = mutedText,
                         modifier = Modifier.size(16.dp)
