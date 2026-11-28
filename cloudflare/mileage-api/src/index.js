@@ -7,6 +7,10 @@ const JSON_HEADERS = {
   "access-control-max-age": "86400",
 };
 
+const MAX_REQUEST_BYTES = 32_000_000;
+const MAX_D1_BATCH_BYTES = 1_850_000;
+const utf8 = new TextEncoder();
+
 const TRIP_COLUMNS = [
   "id", "date", "startTime", "endTime", "startAddress", "endAddress",
   "startLatitude", "startLongitude", "endLatitude", "endLongitude",
@@ -55,12 +59,33 @@ async function authenticate(request) {
 }
 
 async function sync(request, env, identity) {
-  const length = Number(request.headers.get("content-length") || 0);
-  if (length > 2_000_000) return json({ error: "Payload too large" }, 413);
+  if (Number(request.headers.get("content-length") || 0) > MAX_REQUEST_BYTES) {
+    return json({ error: "Payload too large" }, 413);
+  }
 
+  // Enforce the cap even when the client omits Content-Length.
+  const reader = request.body?.getReader();
+  if (!reader) return json({ error: "Missing request body" }, 400);
   let body;
   try {
-    body = await request.json();
+    const decoder = new TextDecoder();
+    const fragments = [];
+    let bytes = 0;
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > MAX_REQUEST_BYTES) {
+        await reader.cancel();
+        return json({ error: "Payload too large" }, 413);
+      }
+      fragments.push(decoder.decode(value, { stream: true }));
+    }
+    fragments.push(decoder.decode());
+    body = JSON.parse(fragments.join(""));
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+      return json({ error: "Invalid backup payload" }, 400);
+    }
   } catch {
     return json({ error: "Invalid JSON" }, 400);
   }
@@ -74,8 +99,14 @@ async function sync(request, env, identity) {
 
   const now = Date.now();
   const statements = [];
+  const tripSizes = [];
 
   for (const trip of trips) {
+    const size = utf8.encode(JSON.stringify(trip)).byteLength + 4096;
+    if (size > MAX_D1_BATCH_BYTES) {
+      return json({ error: "A single trip exceeds the storage limit" }, 413);
+    }
+    tripSizes.push(size);
     const id = text(trip.id, 128);
     if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(text(trip.date, 10) || "")) {
       return json({ error: "Invalid trip identity or date" }, 400);
@@ -113,7 +144,7 @@ async function sync(request, env, identity) {
       text(trip.businessEntity, 256), text(trip.purpose, 1024),
       text(trip.trackingMethod, 64), text(trip.classification, 64),
       finite(trip.applicableRate), finite(trip.calculatedDeduction),
-      text(trip.notes, 8192), text(trip.waypointsJson, 1_000_000) || "[]",
+      text(trip.notes, 8192), text(trip.waypointsJson, MAX_D1_BATCH_BYTES) || "[]",
       text(trip.syncStatus, 32) || "PENDING", finite(trip.syncedAt, true),
       text(trip.classificationSource, 64) || "UNCLASSIFIED",
       text(trip.suggestedClassification, 64), text(trip.vehicleId, 128), now
@@ -162,9 +193,19 @@ async function sync(request, env, identity) {
   `).bind(identity.userId, now));
 
   try {
-    for (let offset = 0; offset < statements.length; offset += 100) {
-      const results = await env.DB.batch(statements.slice(offset, offset + 100));
+    let offset = 0;
+    while (offset < statements.length) {
+      let end = offset;
+      let bytes = 0;
+      while (end < statements.length && end - offset < 100) {
+        const size = tripSizes[end] ?? 16_384;
+        if (bytes + size > MAX_D1_BATCH_BYTES) break;
+        bytes += size;
+        end++;
+      }
+      const results = await env.DB.batch(statements.slice(offset, end));
       if (results.some(result => !result.success)) throw new Error("D1 batch failed");
+      offset = end;
     }
     return json({
       syncedTripIds: trips.map(row => row.id),
