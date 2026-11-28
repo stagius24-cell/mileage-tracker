@@ -9,6 +9,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -30,17 +33,23 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.MoreVert
@@ -86,13 +95,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -310,8 +326,26 @@ fun SavedLocationDialog(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val scrimColor = if (isDark) Color.Black.copy(alpha = 0.65f) else Color.Black.copy(alpha = 0.45f)
+    val sageBg = if (isDark) SucculentPrimary.copy(alpha = 0.16f) else Color(0xFFEDF5F0)
+    val neutralTileBg = if (isDark) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f) else Color(0xFFF8FAFC)
+    val mutedBorder = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
 
-    var name by remember { mutableStateOf(initialLocation?.name ?: "") }
+    // Do not populate new saved locations with auto-generated names like "Start Location" / "End Location"
+    val initialNameText = remember(initialLocation) {
+        val raw = initialLocation?.name.orEmpty()
+        if (initialLocation == null && (raw == "Start Location" || raw == "End Location" || raw == "Current Location" || raw == "Saved Location")) {
+            ""
+        } else {
+            raw
+        }
+    }
+    var nameValue by remember { mutableStateOf(TextFieldValue(initialNameText)) }
+    var hasSelectedNameOnFirstFocus by remember { mutableStateOf(false) }
+
     var address by remember { mutableStateOf(initialLocation?.address ?: prefillAddress ?: "") }
     var latitude by remember { mutableStateOf(initialLocation?.latitude ?: prefillLat ?: 0.0) }
     var longitude by remember { mutableStateOf(initialLocation?.longitude ?: prefillLng ?: 0.0) }
@@ -320,17 +354,40 @@ fun SavedLocationDialog(
     var classificationPref by remember { mutableStateOf(initialLocation?.classificationPreference ?: "NONE") }
     var businessEntity by remember { mutableStateOf(initialLocation?.businessEntity ?: BusinessEntity.MY_SUCCULENT_CORNER.displayName) }
 
-    // Search Mode State
-    var searchQuery by remember { mutableStateOf("") }
+    // Search & GPS state
     var searchResults by remember { mutableStateOf<List<SearchAddressResult>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
     var searchJob by remember { mutableStateOf<Job?>(null) }
     var searchError by remember { mutableStateOf<String?>(null) }
     var formError by remember { mutableStateOf<String?>(null) }
     var isSaving by remember { mutableStateOf(false) }
-
-    // GPS fetch state
     var isLocating by remember { mutableStateOf(false) }
+    var showLocationDetails by remember { mutableStateOf(false) }
+
+    fun triggerAddressSearch() {
+        val requestedQuery = address.trim()
+        if (requestedQuery.isBlank()) return
+        searchJob?.cancel()
+        searchError = null
+        searchJob = coroutineScope.launch {
+            isSearching = true
+            try {
+                val results = onSearchAddress(requestedQuery)
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                if (address.trim() != requestedQuery) return@launch
+                searchResults = results
+                if (results.isEmpty()) {
+                    searchError = "No locations found"
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                searchError = "Search unavailable: ${e.localizedMessage ?: "network error"}"
+            } finally {
+                isSearching = false
+            }
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -344,7 +401,8 @@ fun SavedLocationDialog(
                         latitude = res.latitude
                         longitude = res.longitude
                         address = res.formattedAddress ?: address
-                        if (name.isBlank()) name = "Current Location"
+                        searchResults = emptyList()
+                        searchError = null
                     } else {
                         formError = "Unable to determine current location"
                     }
@@ -359,366 +417,656 @@ fun SavedLocationDialog(
         }
     }
 
-    AppFloatingBottomSheet(
-        onDismissRequest = { if (!isSaving) onDismiss() },
-        title = if (initialLocation != null) "Edit Saved Location" else "Add Saved Location",
-        onClose = { onDismiss() },
-        isDismissible = !isSaving
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 12.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                    // Search Address + Inline GPS button
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = {
-                                searchJob?.cancel()
-                                isSearching = false
-                                searchQuery = it
-                                searchResults = emptyList()
-                                searchError = null
-                            },
-                            modifier = Modifier.weight(1f).heightIn(min = 56.dp),
-                            label = { Text("Search Address", style = MaterialTheme.typography.labelMedium) },
-                            placeholder = { Text("Search address", style = MaterialTheme.typography.bodySmall) },
-                            textStyle = MaterialTheme.typography.bodyMedium,
-                            trailingIcon = {
-                                if (isSearching) {
-                                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                } else {
-                                    IconButton(
-                                        onClick = {
-                                            if (searchQuery.isNotBlank()) {
-                                                searchJob?.cancel()
-                                                val requestedQuery = searchQuery.trim()
-                                                searchJob = coroutineScope.launch {
-                                                    isSearching = true
-                                                    try {
-                                                        val results = onSearchAddress(requestedQuery)
-                                                        kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                                                        if (searchQuery.trim() != requestedQuery) return@launch
-                                                        searchResults = results
-                                                        if (results.isEmpty()) {
-                                                            searchError = "No locations found"
-                                                        }
-                                                    } catch (e: kotlinx.coroutines.CancellationException) {
-                                                        throw e
-                                                    } catch (e: Exception) {
-                                                        searchError = "Search unavailable: ${e.localizedMessage ?: "network error"}"
-                                                    } finally {
-                                                        isSearching = false
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        modifier = Modifier
-                                            .size(40.dp)
-                                            .semantics {
-                                                role = Role.Button
-                                                contentDescription = "Search address query"
-                                            }
-                                    ) {
-                                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(20.dp))
-                                    }
-                                }
-                            },
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp)
-                        )
+    val maxSheetHeight = (configuration.screenHeightDp * 0.90f).dp
+    val dismissThresholdPx = with(density) { 80.dp.toPx() }
+    var dragOffsetPx by remember { mutableFloatStateOf(0f) }
 
-                        // Inline Use GPS button on the right
-                        OutlinedButton(
-                            onClick = {
-                                if (hasLocationPermission(context)) {
-                                    coroutineScope.launch {
-                                        isLocating = true
-                                        try {
-                                            val res = onGetCurrentLocation()
-                                            if (res != null) {
-                                                latitude = res.latitude
-                                                longitude = res.longitude
-                                                address = res.formattedAddress ?: address
-                                                if (name.isBlank()) name = "Current Location"
-                                            } else {
-                                                formError = "Unable to determine current location"
-                                            }
-                                        } catch (e: Exception) {
-                                            formError = e.localizedMessage ?: "Location lookup failed"
-                                        } finally {
-                                            isLocating = false
+    Dialog(
+        onDismissRequest = { if (!isSaving) onDismiss() },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(scrimColor)
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = { if (!isSaving) onDismiss() }
+                ),
+            contentAlignment = Alignment.BottomCenter
+        ) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxSheetHeight)
+                    .offset { IntOffset(0, dragOffsetPx.roundToInt().coerceAtLeast(0)) }
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
+                    ),
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                tonalElevation = 0.dp,
+                shadowElevation = 16.dp
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .imePadding()
+                ) {
+                    // 1. Draggable top handle (only region that drags/dismisses the sheet)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .pointerInput(isSaving) {
+                                detectVerticalDragGestures(
+                                    onDragEnd = {
+                                        if (!isSaving && dragOffsetPx >= dismissThresholdPx) {
+                                            onDismiss()
+                                        } else {
+                                            dragOffsetPx = 0f
+                                        }
+                                    },
+                                    onDragCancel = { dragOffsetPx = 0f },
+                                    onVerticalDrag = { _, dragAmount ->
+                                        if (!isSaving) {
+                                            dragOffsetPx = (dragOffsetPx + dragAmount).coerceAtLeast(0f)
                                         }
                                     }
-                                } else {
-                                    permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                                }
-                            },
-                            enabled = !isLocating && !isSaving,
-                            modifier = Modifier
-                                .heightIn(min = 56.dp),
-                            shape = RoundedCornerShape(12.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                        ) {
-                            if (isLocating) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(Modifier.width(4.dp))
-                                Text("GPS", style = MaterialTheme.typography.labelMedium)
+                                )
                             }
-                        }
-                    }
-
-                    if (searchError != null) {
-                        Text(
-                            text = searchError!!,
-                            color = SpeedRed,
-                            style = MaterialTheme.typography.bodySmall
+                            .padding(top = 10.dp, bottom = 4.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(width = 36.dp, height = 4.dp)
+                                .background(
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                    shape = RoundedCornerShape(2.dp)
+                                )
                         )
                     }
 
-                    if (searchResults.isNotEmpty()) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    // 2. Fixed compact header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = if (initialLocation != null) "Edit saved location" else "Add saved location",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        IconButton(
+                            onClick = { if (!isSaving) onDismiss() },
+                            modifier = Modifier.size(36.dp)
                         ) {
-                            Column(modifier = Modifier.padding(8.dp)) {
-                                Text("Select result:", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                                searchResults.forEach { result ->
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    // 3. Independently scrollable form content
+                    Column(
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // Location name
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Location name",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedTextField(
+                                value = nameValue,
+                                onValueChange = {
+                                    nameValue = it
+                                    formError = null
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .onFocusChanged { focusState ->
+                                        if (focusState.isFocused && !hasSelectedNameOnFirstFocus && nameValue.text.isNotEmpty()) {
+                                            hasSelectedNameOnFirstFocus = true
+                                            nameValue = nameValue.copy(selection = TextRange(0, nameValue.text.length))
+                                        }
+                                    },
+                                placeholder = {
+                                    Text(
+                                        "Enter location name",
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                },
+                                textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                        }
+
+                        // Combined searchable, editable Address + compact locate-fixed button
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Address",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedTextField(
+                                    value = address,
+                                    onValueChange = {
+                                        searchJob?.cancel()
+                                        isSearching = false
+                                        address = it
+                                        searchResults = emptyList()
+                                        searchError = null
+                                        formError = null
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    placeholder = {
+                                        Text(
+                                            "Search or enter address",
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        )
+                                    },
+                                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.LocationOn,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (isSearching) {
+                                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        } else {
+                                            IconButton(
+                                                onClick = { triggerAddressSearch() },
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .semantics {
+                                                        role = Role.Button
+                                                        contentDescription = "Search address"
+                                                    }
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Search,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    },
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                    keyboardActions = KeyboardActions(onSearch = { triggerAddressSearch() }),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+
+                                Surface(
+                                    onClick = {
+                                        if (hasLocationPermission(context)) {
+                                            coroutineScope.launch {
+                                                isLocating = true
+                                                try {
+                                                    val res = onGetCurrentLocation()
+                                                    if (res != null) {
+                                                        latitude = res.latitude
+                                                        longitude = res.longitude
+                                                        address = res.formattedAddress ?: address
+                                                        searchResults = emptyList()
+                                                        searchError = null
+                                                    } else {
+                                                        formError = "Unable to determine current location"
+                                                    }
+                                                } catch (e: Exception) {
+                                                    formError = e.localizedMessage ?: "Location lookup failed"
+                                                } finally {
+                                                    isLocating = false
+                                                }
+                                            }
+                                        } else {
+                                            permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                                        }
+                                    },
+                                    enabled = !isLocating && !isSaving,
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, mutedBorder),
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .semantics {
+                                            role = Role.Button
+                                            contentDescription = "Use current GPS location"
+                                        }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        if (isLocating) {
+                                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.MyLocation,
+                                                contentDescription = null,
+                                                tint = SucculentPrimary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (searchError != null) {
+                            Text(
+                                text = searchError!!,
+                                color = SpeedRed,
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        if (searchResults.isNotEmpty()) {
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color = neutralTileBg,
+                                border = BorderStroke(1.dp, mutedBorder)
+                            ) {
+                                Column(modifier = Modifier.padding(6.dp)) {
+                                    searchResults.forEachIndexed { idx, result ->
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    address = result.formattedAddress
+                                                    latitude = result.latitude
+                                                    longitude = result.longitude
+                                                    searchResults = emptyList()
+                                                    searchError = null
+                                                }
+                                                .padding(vertical = 8.dp, horizontal = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Default.Place, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(
+                                                text = result.formattedAddress,
+                                                fontSize = 13.sp,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        if (idx < searchResults.lastIndex) {
+                                            HorizontalDivider(color = mutedBorder.copy(alpha = 0.4f))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Location icon selector
+                        var iconMenuExpanded by remember { mutableStateOf(false) }
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "Location icon",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Box {
                                     Row(
                                         modifier = Modifier
-                                            .fillMaxWidth()
-                                            .defaultMinSize(minHeight = 44.dp)
-                                            .clickable {
-                                                address = result.formattedAddress
-                                                latitude = result.latitude
-                                                longitude = result.longitude
-                                                if (name.isBlank()) {
-                                                    name = "Saved Location"
-                                                }
-                                                searchResults = emptyList()
-                                                searchQuery = ""
-                                            }
-                                            .padding(vertical = 6.dp, horizontal = 6.dp)
-                                            .semantics {
-                                                role = Role.Button
-                                                contentDescription = "Select address ${result.formattedAddress}"
-                                            },
-                                        verticalAlignment = Alignment.CenterVertically
+                                            .clickable { iconMenuExpanded = true }
+                                            .padding(vertical = 4.dp, horizontal = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
-                                        Icon(Icons.Default.Place, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(18.dp))
-                                        Spacer(Modifier.width(8.dp))
-                                        Text(result.formattedAddress, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                        Text(
+                                            text = "All icons",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = SucculentPrimary
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Default.ChevronRight,
+                                            contentDescription = null,
+                                            tint = SucculentPrimary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
                                     }
-                                    HorizontalDivider(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+                                    DropdownMenu(
+                                        expanded = iconMenuExpanded,
+                                        onDismissRequest = { iconMenuExpanded = false }
+                                    ) {
+                                        AVAILABLE_LOCATION_ICONS.forEach { (key, label) ->
+                                            DropdownMenuItem(
+                                                text = { Text(label) },
+                                                leadingIcon = { Icon(getIconForLocation(key), contentDescription = null) },
+                                                onClick = {
+                                                    selectedIcon = key
+                                                    iconMenuExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            val baseIcons = listOf("place", "home", "nursery", "work")
+                            val visibleIcons = if (selectedIcon in baseIcons) {
+                                baseIcons
+                            } else {
+                                listOf("place", "home", "nursery", selectedIcon)
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                visibleIcons.forEach { key ->
+                                    val isSelected = selectedIcon == key
+                                    val label = AVAILABLE_LOCATION_ICONS.firstOrNull { it.first == key }?.second ?: key
+                                    Surface(
+                                        onClick = { selectedIcon = key },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = if (isSelected) sageBg else neutralTileBg,
+                                        border = BorderStroke(
+                                            width = if (isSelected) 1.5.dp else 1.dp,
+                                            color = if (isSelected) SucculentPrimary else mutedBorder.copy(alpha = 0.5f)
+                                        )
+                                    ) {
+                                        Column(
+                                            modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = getIconForLocation(key),
+                                                contentDescription = label,
+                                                tint = if (isSelected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                            Text(
+                                                text = label,
+                                                fontSize = 11.sp,
+                                                fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
+                                                color = if (isSelected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Matching radius
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            val feetValue = (radiusMeters * 3.28084).roundToInt()
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Matching radius",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "$feetValue ft",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = SucculentPrimary
+                                )
+                            }
+                            Slider(
+                                value = radiusMeters,
+                                onValueChange = { radiusMeters = it },
+                                valueRange = 50f..500f,
+                                steps = 8,
+                                thumb = {
+                                    Surface(
+                                        modifier = Modifier.size(18.dp),
+                                        shape = CircleShape,
+                                        color = Color.White,
+                                        border = BorderStroke(2.dp, SucculentPrimary),
+                                        shadowElevation = 2.dp
+                                    ) {}
+                                },
+                                colors = SliderDefaults.colors(
+                                    thumbColor = Color.White,
+                                    activeTrackColor = SucculentPrimary,
+                                    inactiveTrackColor = mutedBorder.copy(alpha = 0.5f)
+                                ),
+                                track = { sliderState ->
+                                    SliderDefaults.Track(
+                                        sliderState = sliderState,
+                                        modifier = Modifier.height(4.dp)
+                                    )
+                                }
+                            )
+                        }
+
+                        // Trip classification
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = "Trip classification",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf("NONE" to "None", "BUSINESS" to "Business", "PERSONAL" to "Personal").forEach { (key, label) ->
+                                    val isSelected = classificationPref == key
+                                    Surface(
+                                        onClick = { classificationPref = key },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = if (isSelected) sageBg else neutralTileBg,
+                                        border = BorderStroke(
+                                            width = if (isSelected) 1.5.dp else 1.dp,
+                                            color = if (isSelected) SucculentPrimary else mutedBorder.copy(alpha = 0.5f)
+                                        )
+                                    ) {
+                                        Box(
+                                            modifier = Modifier.padding(vertical = 10.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = label,
+                                                fontSize = 13.sp,
+                                                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                                color = if (isSelected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (classificationPref == "BUSINESS") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                BusinessEntity.entries.forEach { entity ->
+                                    val isSelected = businessEntity == entity.displayName
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { businessEntity = entity.displayName },
+                                        modifier = Modifier.defaultMinSize(minHeight = 36.dp),
+                                        label = { Text(entity.displayName, fontSize = 12.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = sageBg,
+                                            selectedLabelColor = SucculentPrimary
+                                        ),
+                                        border = FilterChipDefaults.filterChipBorder(
+                                            enabled = true,
+                                            selected = isSelected,
+                                            selectedBorderColor = SucculentPrimary
+                                        )
                                     )
                                 }
                             }
                         }
-                    }
 
-                    // Compact Name Field
-                    OutlinedTextField(
-                        value = name,
-                        onValueChange = {
-                            name = it
-                            formError = null
-                        },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                        label = { Text("Location Name *", style = MaterialTheme.typography.labelMedium) },
-                        placeholder = { Text("e.g. Home, Succulent Nursery, Warehouse", style = MaterialTheme.typography.bodySmall) },
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    // Compact Address Field (resolved)
-                    OutlinedTextField(
-                        value = address,
-                        onValueChange = { address = it },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
-                        label = { Text("Address *", style = MaterialTheme.typography.labelMedium) },
-                        placeholder = { Text("123 Example Street, San Jose, CA", style = MaterialTheme.typography.bodySmall) },
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp)
-                    )
-
-                    if (latitude != 0.0 || longitude != 0.0) {
-                        Text(
-                            text = "Coordinates: ${String.format(java.util.Locale.US, "%.5f", latitude)}, ${String.format(java.util.Locale.US, "%.5f", longitude)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    // Three visible choices; the menu retains every existing icon option.
-                    var iconMenuExpanded by remember { mutableStateOf(false) }
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Location Icon", modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                        Box {
-                            TextButton(onClick = { iconMenuExpanded = true },
-                                modifier = Modifier.defaultMinSize(minHeight = 48.dp)) { Text("All icons") }
-                            DropdownMenu(expanded = iconMenuExpanded,
-                                onDismissRequest = { iconMenuExpanded = false }) {
-                                AVAILABLE_LOCATION_ICONS.forEach { (key, label) ->
-                                    DropdownMenuItem(text = { Text(label) },
-                                        leadingIcon = { Icon(getIconForLocation(key), contentDescription = null) },
-                                        onClick = { selectedIcon = key; iconMenuExpanded = false })
+                        // Collapsed Location details (raw GPS coordinates)
+                        if (latitude != 0.0 || longitude != 0.0) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .clickable { showLocationDetails = !showLocationDetails }
+                                        .padding(vertical = 4.dp, horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = "Location details",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Icon(
+                                        imageVector = if (showLocationDetails) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                AnimatedVisibility(visible = showLocationDetails) {
+                                    Text(
+                                        text = "Coordinates: ${String.format(java.util.Locale.US, "%.5f", latitude)}, ${String.format(java.util.Locale.US, "%.5f", longitude)}",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
                                 }
                             }
                         }
-                    }
-                    val visibleIcons = listOf("place", "home",
-                        selectedIcon.takeIf { it != "place" && it != "home" } ?: "nursery")
-                    SettingsSegmentedOptions(
-                        options = visibleIcons.map { key -> key to (AVAILABLE_LOCATION_ICONS.firstOrNull { it.first == key }?.second ?: key) },
-                        selected = selectedIcon,
-                        onSelect = { selectedIcon = it },
-                        iconFor = ::getIconForLocation
-                    )
 
-                    // Matching Radius Slider in Imperial units (feet)
-                    Column(modifier = Modifier.fillMaxWidth()) {
-                        val feetValue = (radiusMeters * 3.28084).roundToInt()
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("Matching Radius", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                            Text("$feetValue ft", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = SucculentPrimary)
+                        if (formError != null) {
+                            Text(
+                                text = formError!!,
+                                color = SpeedRed,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
                         }
-                        Slider(
-                            value = radiusMeters,
-                            onValueChange = { radiusMeters = it },
-                            valueRange = 50f..500f,
-                            steps = 8,
-                            modifier = Modifier.heightIn(min = 48.dp),
-                            thumb = { Box(Modifier.size(20.dp).background(SucculentPrimary, CircleShape)) },
-                            colors = SliderDefaults.colors(
-                                thumbColor = SucculentPrimary,
-                                activeTrackColor = SucculentPrimary
-                            ),
-                            track = { sliderState ->
-                                SliderDefaults.Track(sliderState = sliderState, modifier = Modifier.height(4.dp))
-                            }
-                        )
                     }
 
-                    Text("Classification Preference", style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold)
-                    SettingsSegmentedOptions(
-                        options = listOf("NONE" to "None", "BUSINESS" to "Business", "PERSONAL" to "Personal"),
-                        selected = classificationPref,
-                        onSelect = { classificationPref = it }
-                    )
-
-                    if (classificationPref == "BUSINESS") {
-                        Text("Business Entity", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    // 4. Fixed Save location footer
+                    HorizontalDivider(color = mutedBorder.copy(alpha = 0.4f))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                if (isSaving) return@Button
+                                val trimmedName = nameValue.text.trim()
+                                if (trimmedName.isBlank()) {
+                                    formError = "Please enter a location name"
+                                    return@Button
+                                }
+                                if (latitude == 0.0 && longitude == 0.0) {
+                                    formError = "Please select an address or use GPS coordinates"
+                                    return@Button
+                                }
+                                isSaving = true
+                                formError = null
+                                onSave(
+                                    initialLocation?.id,
+                                    trimmedName,
+                                    latitude,
+                                    longitude,
+                                    address.ifBlank { trimmedName },
+                                    radiusMeters.toInt(),
+                                    selectedIcon,
+                                    if (classificationPref == "NONE") null else classificationPref,
+                                    if (classificationPref == "BUSINESS") businessEntity else null
+                                ) { error ->
+                                    isSaving = false
+                                    if (error != null) {
+                                        formError = error
+                                    }
+                                }
+                            },
+                            enabled = !isSaving,
+                            colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp)
                         ) {
-                            BusinessEntity.entries.forEach { entity ->
-                                FilterChip(
-                                    selected = businessEntity == entity.displayName,
-                                    onClick = { businessEntity = entity.displayName },
-                                    modifier = Modifier.defaultMinSize(minHeight = 40.dp),
-                                    label = { Text(entity.displayName, style = MaterialTheme.typography.labelMedium) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = SucculentPrimary,
-                                        selectedLabelColor = Color.White
-                                    )
+                            if (isSaving) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                            } else {
+                                Text(
+                                    text = "Save location",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White
                                 )
                             }
                         }
                     }
-
-                    if (formError != null) {
-                        Text(
-                            text = formError!!,
-                            color = SpeedRed,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                // Footer stays outside the scrolling form and above the keyboard.
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Button(
-                        onClick = {
-                            if (isSaving) return@Button
-                            if (name.isBlank()) {
-                                formError = "Please enter a location name"
-                                return@Button
-                            }
-                            if (latitude == 0.0 && longitude == 0.0) {
-                                formError = "Please select an address or use GPS coordinates"
-                                return@Button
-                            }
-                            isSaving = true
-                            formError = null
-                            onSave(
-                                initialLocation?.id,
-                                name.trim(),
-                                latitude,
-                                longitude,
-                                address.ifBlank { name.trim() },
-                                radiusMeters.toInt(),
-                                selectedIcon,
-                                if (classificationPref == "NONE") null else classificationPref,
-                                if (classificationPref == "BUSINESS") businessEntity else null
-                            ) { error ->
-                                isSaving = false
-                                if (error != null) {
-                                    formError = error
-                                }
-                            }
-                        },
-                        enabled = !isSaving,
-                        colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = 52.dp)
-                    ) {
-                        if (isSaving) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Saving...", color = Color.White, fontWeight = FontWeight.Bold)
-                        } else {
-                            Text("Save Location", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
                 }
             }
+        }
     }
 }
 

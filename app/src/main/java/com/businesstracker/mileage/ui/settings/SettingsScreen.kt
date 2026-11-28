@@ -1922,6 +1922,11 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.256",
+                    summary = "Redesign Add/Edit Saved Location bottom sheet with combined address search, compact icon tiles, thin radius slider, Trip classification selector, collapsed Location details, and fixed Save footer.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.255",
                     summary = "Redesign Saved Locations bottom sheet with fixed 75% height, handle-only drag dismissal, search, underline filters, continuous list, and fixed Add location footer.",
                     date = "Nov 27, 2026"
