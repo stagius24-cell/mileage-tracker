@@ -120,7 +120,7 @@ class TrackingPreferencesManager @Inject constructor(
         const val DEFAULT_WORK_START = "08:00"
         const val DEFAULT_WORK_END = "18:00"
 
-        const val DEFAULT_CF_ENDPOINT = "https://app.mysucculentcorner.com/api/expense/mileage"
+        const val DEFAULT_CF_ENDPOINT = "https://mileage-api.mysucculentcorner.com/v1/sync"
     }
 
     val isAutoTrackingEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
