@@ -434,6 +434,8 @@ fun SavedLocationDialog(
             modifier = Modifier
                 .fillMaxSize()
                 .background(scrimColor)
+                .navigationBarsPadding()
+                .imePadding()
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
@@ -1050,7 +1052,7 @@ fun SavedLocationDialog(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                            .padding(start = 16.dp, end = 16.dp, top = 10.dp, bottom = 20.dp)
                     ) {
                         Button(
                             onClick = {

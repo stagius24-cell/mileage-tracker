@@ -1966,6 +1966,11 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.259",
+                    summary = "Move Add/Edit Saved Location sheet above system navigation bar with bottom margin.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.258",
                     summary = "Compact Add/Edit Saved Location inputs, icon-only tiles, and move Save location button up above navigation bar.",
                     date = "Nov 27, 2026"
