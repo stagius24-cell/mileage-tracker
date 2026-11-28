@@ -427,7 +427,7 @@ fun SavedLocationDialog(
         onDismissRequest = { if (!isSaving) onDismiss() },
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
+            decorFitsSystemWindows = true
         )
     ) {
         Box(

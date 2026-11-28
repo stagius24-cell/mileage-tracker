@@ -1966,6 +1966,11 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.260",
+                    summary = "Enable decorFitsSystemWindows on Add/Edit Saved Location dialog so Android insets it above the navigation bar.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.259",
                     summary = "Move Add/Edit Saved Location sheet above system navigation bar with bottom margin.",
                     date = "Nov 27, 2026"
