@@ -1,6 +1,9 @@
 package com.businesstracker.mileage.ui.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import com.businesstracker.mileage.worker.MileageSyncWorker
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.local.entity.VehicleEntity
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
@@ -28,7 +31,8 @@ data class VehicleDirectoryState(
 @HiltViewModel
 class VehicleDirectoryViewModel @Inject constructor(
     private val vehicleRepository: VehicleRepository,
-    private val preferences: TrackingPreferencesManager
+    private val preferences: TrackingPreferencesManager,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
     private val initialized = MutableStateFlow(false)
     val state: StateFlow<VehicleDirectoryState> = combine(
@@ -85,6 +89,7 @@ class VehicleDirectoryViewModel @Inject constructor(
         return runCatching {
             vehicleRepository.save(vehicle)
             selectCurrentVehicle(vehicle.id)
+            MileageSyncWorker.enqueueOneTimeSync(context)
             vehicle
         }.recoverCatching { error ->
             if (error.message?.contains("UNIQUE", ignoreCase = true) == true) {
