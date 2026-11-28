@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalFlorist
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Place
@@ -86,6 +87,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -150,103 +152,135 @@ fun SavedLocationItem(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
+    var menuExpanded by remember { mutableStateOf(false) }
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val iconBg = if (isDark) SucculentPrimary.copy(alpha = 0.16f) else Color(0xFFEDF5F0)
+
+    Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onEdit),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            .clickable(onClick = onEdit)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.Top
     ) {
-        Row(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.Top
+                .padding(top = 2.dp)
+                .size(32.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(iconBg),
+            contentAlignment = Alignment.Center
         ) {
-            Surface(
-                modifier = Modifier
-                    .padding(top = 2.dp)
-                    .size(40.dp),
-                shape = CircleShape,
-                color = SucculentPrimary.copy(alpha = 0.12f)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = getIconForLocation(location.icon),
-                        contentDescription = null,
-                        tint = SucculentPrimary,
-                        modifier = Modifier.size(22.dp)
-                    )
+            Icon(
+                imageVector = getIconForLocation(location.icon),
+                contentDescription = null,
+                tint = SucculentPrimary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        Spacer(Modifier.width(12.dp))
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = location.name,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(Modifier.height(2.dp))
+
+            Text(
+                text = location.address,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Normal,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                lineHeight = 16.sp
+            )
+
+            if (!location.classificationPreference.isNullOrBlank()) {
+                Spacer(Modifier.height(6.dp))
+                val isBiz = location.classificationPreference == "BUSINESS"
+                val chipBg = if (isBiz) {
+                    if (isDark) SucculentPrimary.copy(alpha = 0.18f) else Color(0xFFEDF5F0)
+                } else {
+                    if (isDark) Color(0xFF1E3A8A).copy(alpha = 0.35f) else Color(0xFFEFF6FF)
+                }
+                val chipText = if (isBiz) {
+                    if (isDark) Color(0xFF4ADE80) else Color(0xFF15803D)
+                } else {
+                    if (isDark) Color(0xFF60A5FA) else Color(0xFF2563EB)
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(chipBg)
+                            .padding(horizontal = 8.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = if (isBiz) "Business" else "Personal",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = chipText
+                        )
+                    }
+                    if (isBiz && !location.businessEntity.isNullOrBlank()) {
+                        Text(
+                            text = location.businessEntity,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
+        }
 
-            Spacer(Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                // Top Row: Title of saved location + Edit & Delete action buttons inline
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = location.name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    IconButton(
-                        onClick = onEdit,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .semantics {
-                                role = Role.Button
-                                contentDescription = "Edit saved location ${location.name}"
-                            }
-                    ) {
-                        Icon(Icons.Default.Edit, contentDescription = null, tint = SucculentPrimary, modifier = Modifier.size(19.dp))
+        Box {
+            IconButton(
+                onClick = { menuExpanded = true },
+                modifier = Modifier
+                    .size(32.dp)
+                    .semantics {
+                        role = Role.Button
+                        contentDescription = "More options for ${location.name}"
                     }
-                    IconButton(
-                        onClick = onDelete,
-                        modifier = Modifier
-                            .size(36.dp)
-                            .semantics {
-                                role = Role.Button
-                                contentDescription = "Delete saved location ${location.name}"
-                            }
-                    ) {
-                        Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = SpeedRed, modifier = Modifier.size(19.dp))
-                    }
-                }
-
-                Spacer(Modifier.height(2.dp))
-
-                // Full address displayed at the bottom
-                Text(
-                    text = location.address,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
                 )
-
-                if (!location.classificationPreference.isNullOrBlank()) {
-                    Spacer(Modifier.height(4.dp))
-                    val isBiz = location.classificationPreference == "BUSINESS"
-                    val badgeColor = if (isBiz) SucculentPrimary else Color(0xFF2563EB)
-                    val label = if (isBiz) {
-                        "Suggest: Business" + if (!location.businessEntity.isNullOrBlank()) " (${location.businessEntity})" else ""
-                    } else {
-                        "Suggest: Personal"
+            }
+            DropdownMenu(
+                expanded = menuExpanded,
+                onDismissRequest = { menuExpanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Edit location") },
+                    onClick = {
+                        menuExpanded = false
+                        onEdit()
                     }
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = badgeColor,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
+                )
+                DropdownMenuItem(
+                    text = { Text("Delete location", color = SpeedRed) },
+                    onClick = {
+                        menuExpanded = false
+                        onDelete()
+                    }
+                )
             }
         }
     }

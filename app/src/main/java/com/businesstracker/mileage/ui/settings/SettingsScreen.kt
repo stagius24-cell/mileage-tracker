@@ -156,6 +156,7 @@ import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
 import com.businesstracker.mileage.domain.model.AppThemeMode
 import com.businesstracker.mileage.ui.components.AppConfirmationDialog
 import com.businesstracker.mileage.ui.components.AppFloatingBottomSheet
+import com.businesstracker.mileage.ui.components.FixedManagementBottomSheet
 import com.businesstracker.mileage.ui.components.AppFloatingCard
 import com.businesstracker.mileage.ui.components.AppPrimaryButton
 import com.businesstracker.mileage.ui.components.AppSecondaryButton
@@ -1343,35 +1344,175 @@ fun SettingsScreen(
     }
 
     if (showSavedLocationsList) {
-        AppFloatingBottomSheet(
+        var searchQuery by remember { mutableStateOf("") }
+        var selectedFilter by remember { mutableStateOf("ALL") }
+
+        val filteredLocations = remember(state.savedLocations, searchQuery, selectedFilter) {
+            state.savedLocations.filter { loc ->
+                val matchesFilter = when (selectedFilter) {
+                    "BUSINESS" -> loc.classificationPreference == "BUSINESS"
+                    "PERSONAL" -> loc.classificationPreference == "PERSONAL"
+                    else -> true
+                }
+                val q = searchQuery.trim()
+                val matchesSearch = q.isEmpty() ||
+                    loc.name.contains(q, ignoreCase = true) ||
+                    loc.address.contains(q, ignoreCase = true) ||
+                    (loc.businessEntity?.contains(q, ignoreCase = true) == true)
+                matchesFilter && matchesSearch
+            }
+        }
+
+        FixedManagementBottomSheet(
             onDismissRequest = { showSavedLocationsList = false },
-            title = "Saved Locations",
-            onClose = { showSavedLocationsList = false }
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 16.dp)
-            ) {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = false),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (state.savedLocations.isEmpty()) {
-                        item {
-                            Text(
-                                "No saved locations yet.",
-                                modifier = Modifier.padding(vertical = 16.dp),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+            heightFraction = 0.75f,
+            header = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Title row
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = 20.dp, end = 12.dp, top = 2.dp, bottom = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Saved locations",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        IconButton(
+                            onClick = { showSavedLocationsList = false },
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Close",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
-                    items(state.savedLocations.size) { index ->
-                        val location = state.savedLocations[index]
+
+                    // Compact search field
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = {
+                            Text(
+                                "Search locations",
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(24.dp),
+                        trailingIcon = if (searchQuery.isNotEmpty()) {
+                            {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Clear search",
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        } else null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Minimal underline filters: All, Business, Personal
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp)
+                    ) {
+                        listOf("ALL" to "All", "BUSINESS" to "Business", "PERSONAL" to "Personal").forEach { (key, label) ->
+                            val selected = selectedFilter == key
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { selectedFilter = key },
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 14.sp,
+                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
+                                    color = if (selected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(vertical = 10.dp)
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(2.dp)
+                                        .background(if (selected) SucculentPrimary else Color.Transparent)
+                                )
+                            }
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                }
+            },
+            footer = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                showSavedLocationsList = false
+                                editingLocation = null
+                                showLocationDialog = true
+                            }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                tint = SucculentPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = "Add location",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = SucculentPrimary
+                            )
+                        }
+                    }
+                }
+            }
+        ) {
+            if (filteredLocations.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 20.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = if (state.savedLocations.isEmpty()) "No saved locations yet." else "No matching locations.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(filteredLocations.size, key = { filteredLocations[it].id }) { index ->
+                        val location = filteredLocations[index]
                         SavedLocationItem(
                             location = location,
                             onEdit = {
@@ -1384,6 +1525,12 @@ fun SettingsScreen(
                                 locationPendingDeletion = location
                             }
                         )
+                        if (index < filteredLocations.lastIndex) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 20.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                            )
+                        }
                     }
                 }
             }
@@ -1732,8 +1879,8 @@ fun SettingsScreen(
             listOf(
                 VersionEntry(
                     version = "v1.0.255",
-                    summary = "Automatically back up completed trips to Cloudflare D1 and simplify backup settings.",
-                    date = "Nov 28, 2026"
+                    summary = "Redesign Saved Locations bottom sheet with fixed 75% height, handle-only drag dismissal, search, underline filters, continuous list, and fixed Add location footer.",
+                    date = "Nov 27, 2026"
                 ),
                 VersionEntry(
                     version = "v1.0.254",
