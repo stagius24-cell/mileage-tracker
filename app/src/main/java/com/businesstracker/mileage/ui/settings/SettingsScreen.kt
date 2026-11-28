@@ -65,6 +65,7 @@ import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.CloudUpload
 import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.TableChart
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BatterySaver
@@ -80,6 +81,7 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Layers
@@ -88,6 +90,9 @@ import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material.icons.filled.TableChart
 import android.widget.Toast
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.LocalMinimumInteractiveComponentSize
@@ -568,42 +573,38 @@ fun SettingsScreen(
 
         item {
             var isBackupExpanded by rememberSaveable { mutableStateOf(false) }
+            var accountMenuExpanded by remember { mutableStateOf(false) }
             val isBackingUp = state.isUnifiedBackingUp
             val isRestoring = state.isLoadingRestorePreview || state.isApplyingRestore
             val backupError = state.unifiedBackupError
+            val backupTime = remember(state.cfLastSuccessfulBackupAt) {
+                state.cfLastSuccessfulBackupAt.takeIf { it > 0L }?.let {
+                    java.text.SimpleDateFormat("MMM d, h:mm a", java.util.Locale.getDefault()).format(java.util.Date(it))
+                } ?: "No backup yet."
+            }
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .clickable { isBackupExpanded = !isBackupExpanded },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        VehicleSettingsIcon(Icons.Outlined.CloudUpload)
-                        Spacer(Modifier.width(12.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text("Backup & restore", style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold)
-                            val syncSubtitle = if (state.hasOAuthCredential) {
-                                "Cloudflare D1 · Google sign-in"
-                            } else {
-                                "Connect Google account"
-                            }
-                            Text(
-                                text = syncSubtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Icon(Icons.Outlined.Cloud, contentDescription = null,
+                            tint = SucculentPrimary, modifier = Modifier.size(22.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text("Backup & restore", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                            Text("Cloudflare D1", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         Icon(
                             imageVector = if (isBackupExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -612,58 +613,101 @@ fun SettingsScreen(
                         )
                     }
 
-                    if (!backupError.isNullOrBlank()) {
-                        Text(backupError, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error)
-                    }
-                    else if (!state.unifiedBackupMessage.isNullOrBlank()) {
-                        Text(state.unifiedBackupMessage.orEmpty(), style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary)
-                    }
-
                     if (isBackupExpanded) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Button(onClick = viewModel::backupAllNow,
-                            enabled = !isBackingUp && !isRestoring && state.hasOAuthCredential,
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                            shape = RoundedCornerShape(13.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = SucculentPrimary.copy(alpha = 0.12f),
-                                contentColor = SucculentPrimary,
-                                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
-                            ),
-                            contentPadding = PaddingValues(horizontal = 8.dp)) {
-                            if (isBackingUp) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = SucculentPrimary)
-                            else Icon(Icons.Outlined.CloudUpload, contentDescription = null,
-                                tint = SucculentPrimary, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(if (isBackingUp) "Backing up" else "Back Up", fontWeight = FontWeight.SemiBold)
-                        }
-                        Button(onClick = viewModel::restoreFromCloudflare,
-                            enabled = !isBackingUp && !isRestoring && state.hasOAuthCredential,
-                            modifier = Modifier.weight(1f).heightIn(min = 48.dp),
-                            shape = RoundedCornerShape(13.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                contentColor = MaterialTheme.colorScheme.onSurface),
-                            contentPadding = PaddingValues(horizontal = 8.dp)) {
-                            if (isRestoring) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                            else Icon(Icons.Outlined.CloudDownload, contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(if (isRestoring) "Loading" else "Restore", fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                    }
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFEDF5F0),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
+                                    Text(
+                                        if (state.hasOAuthCredential) "Google account connected" else "Google account not connected",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (state.hasOAuthCredential) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Text(
+                                        if (state.hasOAuthCredential) "Last backup · $backupTime" else backupTime,
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            if (!backupError.isNullOrBlank()) {
+                                Text(backupError, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                            } else if (!state.unifiedBackupMessage.isNullOrBlank()) {
+                                Text(state.unifiedBackupMessage.orEmpty(), style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary)
+                            }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
-                    AccountRow(
-                        connected = state.hasOAuthCredential,
-                        email = state.connectedAccountEmail,
-                        onConnect = { googleSignInLauncher.launch(viewModel.getGoogleSignInClient().signInIntent) },
-                        onDisconnect = { showDisconnectConfirmation = true }
-                    )
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Button(
+                                    onClick = viewModel::backupAllNow,
+                                    enabled = !isBackingUp && !isRestoring && state.hasOAuthCredential,
+                                    modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary,
+                                        contentColor = Color.White),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    if (isBackingUp) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                                    else Icon(Icons.Outlined.CloudUpload, null, Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (isBackingUp) "Backing up" else "Back Up", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                }
+                                OutlinedButton(
+                                    onClick = viewModel::restoreFromCloudflare,
+                                    enabled = !isBackingUp && !isRestoring && state.hasOAuthCredential,
+                                    modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                                ) {
+                                    if (isRestoring) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    else Icon(Icons.Outlined.CloudDownload, null, Modifier.size(16.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (isRestoring) "Restoring" else "Restore", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
+                        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Outlined.AccountCircle, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                                Text("Google account", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text(
+                                    state.connectedAccountEmail?.takeIf { it.isNotBlank() } ?: if (state.hasOAuthCredential) "Connected" else "Not connected",
+                                    style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Box {
+                                IconButton(onClick = { accountMenuExpanded = true }, modifier = Modifier.size(44.dp)) {
+                                    Icon(Icons.Default.MoreVert, contentDescription = "Google account options",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                DropdownMenu(expanded = accountMenuExpanded, onDismissRequest = { accountMenuExpanded = false }) {
+                                    DropdownMenuItem(
+                                        text = { Text(if (state.hasOAuthCredential) "Switch account" else "Connect account") },
+                                        onClick = {
+                                            accountMenuExpanded = false
+                                            googleSignInLauncher.launch(viewModel.getGoogleSignInClient().signInIntent)
+                                        }
+                                    )
+                                    if (state.hasOAuthCredential) DropdownMenuItem(
+                                        text = { Text("Disconnect account", color = MaterialTheme.colorScheme.error) },
+                                        onClick = {
+                                            accountMenuExpanded = false
+                                            showDisconnectConfirmation = true
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

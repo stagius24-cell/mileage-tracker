@@ -84,6 +84,7 @@ class TrackingPreferencesManager @Inject constructor(
         private val KEY_CF_CLIENT_SECRET = stringPreferencesKey("cf_client_secret")
         private val KEY_CF_BEARER_TOKEN = stringPreferencesKey("cf_bearer_token")
         private val KEY_CF_INITIAL_MIGRATION_COMPLETE = booleanPreferencesKey("cf_initial_migration_complete")
+        private val KEY_CF_LAST_SUCCESSFUL_BACKUP_AT = longPreferencesKey("cf_last_successful_backup_at")
         private val KEY_CF_INITIAL_SNAPSHOT_COMPLETE = booleanPreferencesKey("cf_initial_snapshot_complete")
         private val KEY_DEFAULT_VEHICLE = stringPreferencesKey("default_vehicle")
         private val KEY_CUSTOM_CATEGORIES = stringPreferencesKey("custom_categories")
@@ -696,6 +697,22 @@ class TrackingPreferencesManager @Inject constructor(
             prefs.remove(KEY_CF_CLIENT_SECRET)
             prefs.remove(KEY_CF_BEARER_TOKEN)
         }
+    }
+
+    val cfLastSuccessfulBackupAt: Flow<Long> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CF_LAST_SUCCESSFUL_BACKUP_AT] ?: 0L
+    }
+
+    suspend fun setCfLastSuccessfulBackupAt(timestamp: Long) {
+        context.dataStore.edit { prefs -> prefs[KEY_CF_LAST_SUCCESSFUL_BACKUP_AT] = timestamp }
+    }
+
+    val cfLastSuccessfulBackupAt: Flow<Long> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CF_LAST_SUCCESSFUL_BACKUP_AT] ?: 0L
+    }
+
+    suspend fun setCfLastSuccessfulBackupAt(timestamp: Long) {
+        context.dataStore.edit { prefs -> prefs[KEY_CF_LAST_SUCCESSFUL_BACKUP_AT] = timestamp }
     }
 
     val cfInitialSnapshotComplete: Flow<Boolean> = context.dataStore.data.map { prefs ->

@@ -136,6 +136,7 @@ class CloudflareD1BackupService @Inject constructor(
             }
             if (isInitialSnapshot || canCompleteLegacyImport) preferencesManager.setCfInitialSnapshotComplete(true)
             if (canCompleteLegacyImport) preferencesManager.setCfInitialMigrationComplete(true)
+            preferencesManager.setCfLastSuccessfulBackupAt(System.currentTimeMillis())
             CloudflareBackupResult.Success(trips.size, vehicles.size, locations.size)
         } catch (e: IOException) {
             CloudflareBackupResult.Failure("Network error while backing up to Cloudflare: ${e.localizedMessage ?: "connection failed"}", true)

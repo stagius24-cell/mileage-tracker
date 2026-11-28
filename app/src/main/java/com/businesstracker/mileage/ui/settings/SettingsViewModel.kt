@@ -92,13 +92,14 @@ data class SettingsUiState(
     // Unified Backup & Restore State
     val isBackingUpAll: Boolean = false,
     val unifiedBackupMessage: String? = null,
-    val unifiedBackupError: String? = null
+    val unifiedBackupError: String? = null,
+    val cfLastSuccessfulBackupAt: Long = 0L
 ) {
     val isUnifiedBackingUp: Boolean
         get() = isBackingUpAll || isSyncing || isBackingUpSavedLocations
 
     val latestBackupTimestamp: Long
-        get() = maxOf(sheetsLastSyncTime, savedLocationsLastBackupTime)
+        get() = cfLastSuccessfulBackupAt
 
     val totalPendingCount: Int
         get() = pendingTripsCount + savedLocationsPendingBackupCount
@@ -110,7 +111,7 @@ data class SettingsUiState(
             sheetsLastError.isNullOrBlank() &&
             savedLocationsLastBackupError.isNullOrBlank() &&
             unifiedBackupError.isNullOrBlank() &&
-            (sheetsLastSyncTime > 0L || savedLocationsLastBackupTime > 0L)
+            cfLastSuccessfulBackupAt > 0L
 }
 
 sealed interface SavedLocationsRestorePreviewUi {
@@ -163,6 +164,7 @@ private data class SchedulePrefs(
 
 private data class CloudflarePrefs(
     val endpoint: String,
+    val lastBackupAt: Long,
     val clientId: String,
     val clientSecret: String,
     val bearerToken: String
@@ -281,11 +283,12 @@ class SettingsViewModel @Inject constructor(
 
     private val cloudflareFlow = combine(
         preferencesManager.cfEndpoint,
+        preferencesManager.cfLastSuccessfulBackupAt,
         preferencesManager.cfClientId,
         preferencesManager.cfClientSecret,
         preferencesManager.cfBearerToken
-    ) { endpoint, clientId, secret, token ->
-        CloudflarePrefs(endpoint, clientId, secret, token)
+    ) { endpoint, lastBackupAt, clientId, secret, token ->
+        CloudflarePrefs(endpoint, lastBackupAt, clientId, secret, token)
     }
 
     private val sheetsFlow = combine(
@@ -444,6 +447,7 @@ class SettingsViewModel @Inject constructor(
                 pairedBluetoothDevices = pairedDevices,
                 customPurposes = config.general.customPurposes,
                 cfEndpoint = config.cloudflare.endpoint,
+                cfLastSuccessfulBackupAt = config.cloudflare.lastBackupAt,
                 cfClientId = config.cloudflare.clientId,
                 cfClientSecret = config.cloudflare.clientSecret,
                 cfBearerToken = config.cloudflare.bearerToken,
