@@ -74,7 +74,12 @@ class CloudflareD1BackupService @Inject constructor(
                     is GoogleSheetsSyncService.TripRestoreResult.Failed -> false
                 }
             }
-            val trips = tripRepository.getAllTrips().first()
+            val isInitialSnapshot = !preferencesManager.cfInitialSnapshotComplete.first()
+            val trips = if (isInitialSnapshot || canCompleteLegacyImport) {
+                tripRepository.getAllTrips().first()
+            } else {
+                tripRepository.getPendingSyncTrips()
+            }
             val vehicles = vehicleDao.getVehicles()
             val locations = savedLocationRepository.getAllSavedLocations().first()
             val chunks = trips.chunked(50).ifEmpty { listOf(emptyList()) }
@@ -120,7 +125,9 @@ class CloudflareD1BackupService @Inject constructor(
                         "Cloudflare did not confirm every trip; retry is safe.", true
                     )
                 }
+                chunk.forEach { tripRepository.markSynced(it.id, System.currentTimeMillis()) }
             }
+            if (isInitialSnapshot || canCompleteLegacyImport) preferencesManager.setCfInitialSnapshotComplete(true)
             if (canCompleteLegacyImport) preferencesManager.setCfInitialMigrationComplete(true)
             CloudflareBackupResult.Success(trips.size, vehicles.size, locations.size)
         } catch (e: IOException) {
