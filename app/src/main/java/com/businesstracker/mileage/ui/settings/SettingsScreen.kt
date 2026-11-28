@@ -599,7 +599,7 @@ fun SettingsScreen(
                             .clickable { isBackupExpanded = !isBackupExpanded },
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Outlined.Cloud, contentDescription = null,
+                        Icon(Icons.Outlined.CloudUpload, contentDescription = null,
                             tint = SucculentPrimary, modifier = Modifier.size(22.dp))
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -614,24 +614,56 @@ fun SettingsScreen(
                     }
 
                     if (isBackupExpanded) {
+                        val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                        val statusBg = if (isDark) SucculentPrimary.copy(alpha = 0.16f) else Color(0xFFEDF5F0)
+                        val hasConfirmedBackup = !backupTime.isNullOrBlank() &&
+                            !backupTime.equals("Never", ignoreCase = true) &&
+                            !backupTime.equals("No backup yet", ignoreCase = true)
+
                         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
-                                color = Color(0xFFEDF5F0),
+                                color = statusBg,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
-                                    Text(
-                                        if (state.hasOAuthCredential) "Google account connected" else "Google account not connected",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = if (state.hasOAuthCredential) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Text(
-                                        if (state.hasOAuthCredential) "Last backup · $backupTime" else backupTime,
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (state.hasOAuthCredential) Icons.Outlined.CheckCircle else Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = if (state.hasOAuthCredential) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = if (state.hasOAuthCredential) "Account connected" else "Account not connected",
+                                            fontSize = 13.sp,
+                                            color = if (state.hasOAuthCredential) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Last successful backup",
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = if (hasConfirmedBackup) backupTime else "No backup yet",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
                                 }
                             }
                             if (!backupError.isNullOrBlank()) {
@@ -645,7 +677,7 @@ fun SettingsScreen(
                                 Button(
                                     onClick = viewModel::backupAllNow,
                                     enabled = !isBackingUp && !isRestoring && state.hasOAuthCredential,
-                                    modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                                    modifier = Modifier.weight(1f).heightIn(min = 42.dp),
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = SucculentPrimary,
                                         contentColor = Color.White),
@@ -654,28 +686,40 @@ fun SettingsScreen(
                                     if (isBackingUp) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
                                     else Icon(Icons.Outlined.CloudUpload, null, Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text(if (isBackingUp) "Backing up" else "Back Up", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    Text(if (isBackingUp) "Backing up" else "Back up", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                 }
                                 OutlinedButton(
                                     onClick = viewModel::restoreFromCloudflare,
                                     enabled = !isBackingUp && !isRestoring && state.hasOAuthCredential,
-                                    modifier = Modifier.weight(1f).heightIn(min = 44.dp),
+                                    modifier = Modifier.weight(1f).heightIn(min = 42.dp),
                                     shape = RoundedCornerShape(12.dp),
                                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
                                 ) {
                                     if (isRestoring) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                                     else Icon(Icons.Outlined.CloudDownload, null, Modifier.size(16.dp))
                                     Spacer(Modifier.width(6.dp))
-                                    Text(if (isRestoring) "Restoring" else "Restore", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                    Text(if (isRestoring) "Restoring" else "Restore", fontSize = 13.sp, fontWeight = FontWeight.Medium)
                                 }
                             }
                         }
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
-                        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Outlined.AccountCircle, contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
+                        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "G",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                 Text("Google account", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 Text(
@@ -1921,6 +1965,11 @@ fun SettingsScreen(
         )
         val recentUpdates = remember {
             listOf(
+                VersionEntry(
+                    version = "v1.0.257",
+                    summary = "Refine Backup & restore section with sage status panel, compact Back up / Restore buttons, and streamlined Google account row.",
+                    date = "Nov 27, 2026"
+                ),
                 VersionEntry(
                     version = "v1.0.256",
                     summary = "Redesign Add/Edit Saved Location bottom sheet with combined address search, compact icon tiles, thin radius slider, Trip classification selector, collapsed Location details, and fixed Save footer.",

@@ -707,14 +707,6 @@ class TrackingPreferencesManager @Inject constructor(
         context.dataStore.edit { prefs -> prefs[KEY_CF_LAST_SUCCESSFUL_BACKUP_AT] = timestamp }
     }
 
-    val cfLastSuccessfulBackupAt: Flow<Long> = context.dataStore.data.map { prefs ->
-        prefs[KEY_CF_LAST_SUCCESSFUL_BACKUP_AT] ?: 0L
-    }
-
-    suspend fun setCfLastSuccessfulBackupAt(timestamp: Long) {
-        context.dataStore.edit { prefs -> prefs[KEY_CF_LAST_SUCCESSFUL_BACKUP_AT] = timestamp }
-    }
-
     val cfInitialSnapshotComplete: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_CF_INITIAL_SNAPSHOT_COMPLETE] ?: false
     }
