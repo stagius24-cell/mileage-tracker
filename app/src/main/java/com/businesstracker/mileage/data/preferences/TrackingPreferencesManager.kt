@@ -687,6 +687,17 @@ class TrackingPreferencesManager @Inject constructor(
         }
     }
 
+    suspend fun migrateLegacyCloudflareAccessCredentials() {
+        context.dataStore.edit { prefs ->
+            if (prefs[KEY_CF_ENDPOINT] == "https://app.mysucculentcorner.com/api/expense/mileage") {
+                prefs[KEY_CF_ENDPOINT] = DEFAULT_CF_ENDPOINT
+            }
+            prefs.remove(KEY_CF_CLIENT_ID)
+            prefs.remove(KEY_CF_CLIENT_SECRET)
+            prefs.remove(KEY_CF_BEARER_TOKEN)
+        }
+    }
+
     val cfInitialSnapshotComplete: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_CF_INITIAL_SNAPSHOT_COMPLETE] ?: false
     }
