@@ -10,6 +10,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.data.remote.CloudflareBackupResult
+import com.businesstracker.mileage.data.remote.CloudflareD1BackupService
+import com.businesstracker.mileage.data.remote.CloudflareRestoreResult
 import com.businesstracker.mileage.data.remote.CustomPurposesRestoreResult
 import com.businesstracker.mileage.data.remote.CustomPurposesSheetsService
 import com.businesstracker.mileage.data.remote.CustomPurposesSyncResult
@@ -26,7 +29,7 @@ import com.businesstracker.mileage.domain.model.AppThemeMode
 import com.businesstracker.mileage.domain.model.SmartClassificationMode
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.transition.ActivityTransitionManager
-import com.businesstracker.mileage.worker.GoogleSheetsSyncWorker
+import com.businesstracker.mileage.worker.MileageSyncWorker
 import com.businesstracker.mileage.worker.SavedLocationBackupWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -194,6 +197,7 @@ class SettingsViewModel @Inject constructor(
     private val bluetoothArmedDriveMonitor: com.businesstracker.mileage.receiver.BluetoothArmedDriveMonitor,
     private val tripRepository: TripRepository,
     private val sheetsSyncService: GoogleSheetsSyncService,
+    private val cloudflareD1BackupService: CloudflareD1BackupService? = null,
     private val savedLocationsSheetsService: SavedLocationsSheetsService,
     private val secureStorageManager: SecureStorageManager,
     private val googleAuthManager: com.businesstracker.mileage.data.security.GoogleAuthManager,
@@ -688,11 +692,9 @@ class SettingsViewModel @Inject constructor(
             val hasOAuth = secureStorageManager.hasOAuthToken()
             val isConn = (hasOAuth && trimmedId.isNotBlank()) || uiState.value.sheetsWebhookUrl.isNotBlank()
             preferencesManager.setSheetsConnected(isConn)
-            if (hasOAuth && trimmedId.isNotBlank()) {
+            if (hasOAuth) {
                 preferencesManager.setSheetsLastError(null)
-                GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
-                GoogleSheetsSyncWorker.enqueuePeriodicSync(context)
-                SavedLocationBackupWorker.enqueueOneTimeBackup(context)
+                MileageSyncWorker.enqueueOneTimeSync(context)
             }
         }
     }
@@ -712,12 +714,10 @@ class SettingsViewModel @Inject constructor(
             val id = uiState.value.sheetsSpreadsheetId
             val isConn = token.isNotBlank() && id.isNotBlank()
             preferencesManager.setSheetsConnected(isConn)
-            if (isConn) {
-                preferencesManager.setSheetsLastError(null)
-                GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
-                GoogleSheetsSyncWorker.enqueuePeriodicSync(context)
-                SavedLocationBackupWorker.enqueueOneTimeBackup(context)
+            if (token.isNotBlank()) {
+                MileageSyncWorker.enqueueOneTimeSync(context)
             }
+            if (isConn) preferencesManager.setSheetsLastError(null)
         }
     }
 
@@ -741,14 +741,7 @@ class SettingsViewModel @Inject constructor(
     fun handleGoogleSignInResult(data: android.content.Intent?) {
         viewModelScope.launch {
             val result = googleAuthManager.handleSignInResult(data)
-            if (result.isSuccess) {
-                val id = uiState.value.sheetsSpreadsheetId
-                if (id.isNotBlank()) {
-                    GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
-                    GoogleSheetsSyncWorker.enqueuePeriodicSync(context)
-                    SavedLocationBackupWorker.enqueueOneTimeBackup(context)
-                }
-            }
+            if (result.isSuccess) MileageSyncWorker.enqueueOneTimeSync(context)
         }
     }
 
@@ -831,8 +824,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun triggerSyncNow() {
-        com.businesstracker.mileage.worker.MileageSyncWorker.enqueueOneTimeSync(context)
-        syncSheetsNow()
+        MileageSyncWorker.enqueueOneTimeSync(context)
     }
 
     // Saved Locations
@@ -1037,6 +1029,33 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    fun restoreFromCloudflare() {
+        if (_isLoadingRestorePreview.value || _isApplyingRestore.value) return
+        _isLoadingRestorePreview.value = true
+        _unifiedBackupMessage.value = null
+        _unifiedBackupError.value = null
+        viewModelScope.launch {
+            try {
+                val backupService = cloudflareD1BackupService
+                if (backupService == null) {
+                    _unifiedBackupError.value = "Cloudflare D1 backup is not configured in this build."
+                    return@launch
+                }
+                when (val result = backupService.restoreAll()) {
+                    is CloudflareRestoreResult.Success -> {
+                        _unifiedBackupMessage.value =
+                            "Restored ${result.trips} trips, ${result.vehicles} vehicles, and ${result.savedLocations} saved locations from Cloudflare D1."
+                    }
+                    is CloudflareRestoreResult.Failure -> {
+                        _unifiedBackupError.value = result.message
+                    }
+                }
+            } finally {
+                _isLoadingRestorePreview.value = false
+            }
+        }
+    }
+
     fun toggleRestoreCandidateSelection(locationId: String) {
         val current = _restorePreviewState.value as? SavedLocationsRestorePreviewUi.Loaded ?: return
         val candidate = current.preview.candidates.firstOrNull { it.cloudLocation.id == locationId } ?: return
@@ -1095,6 +1114,33 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun backupAllNow() {
+        val backupService = cloudflareD1BackupService
+        if (backupService == null) {
+            backupAllNowLegacySheets()
+            return
+        }
+        if (_isBackingUpAll.value || _isSyncing.value || _isBackingUpSavedLocations.value) return
+        _isBackingUpAll.value = true
+        _unifiedBackupMessage.value = null
+        _unifiedBackupError.value = null
+        viewModelScope.launch {
+            try {
+                when (val result = backupService.backupAll()) {
+                    is CloudflareBackupResult.Success -> {
+                        _unifiedBackupMessage.value =
+                            "Backed up ${result.trips} trips, ${result.vehicles} vehicles, and ${result.savedLocations} saved locations to Cloudflare D1."
+                    }
+                    is CloudflareBackupResult.Failure -> {
+                        _unifiedBackupError.value = result.message
+                    }
+                }
+            } finally {
+                _isBackingUpAll.value = false
+            }
+        }
+    }
+
+    private fun backupAllNowLegacySheets() {
         if (_isBackingUpAll.value || _isSyncing.value || _isBackingUpSavedLocations.value) return
         _isBackingUpAll.value = true
         _unifiedBackupMessage.value = null

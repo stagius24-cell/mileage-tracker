@@ -571,15 +571,12 @@ fun SettingsScreen(
         }
 
         item {
-            val timeFormat = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
-            val lastBackupTime = state.latestBackupTimestamp.takeIf { it > 0L }
             var isBackupExpanded by rememberSaveable { mutableStateOf(false) }
             var isAdvancedExpanded by rememberSaveable { mutableStateOf(false) }
             val clipboardManager = LocalClipboardManager.current
             val isBackingUp = state.isUnifiedBackingUp
             val isRestoring = state.isLoadingRestorePreview || state.isApplyingRestore
-            val backupError = state.unifiedBackupError ?: state.savedLocationsLastBackupError ?: state.sheetsLastError
-            val backupCurrent = state.isAllDataBackedUp && backupError.isNullOrBlank() && !isBackingUp
+            val backupError = state.unifiedBackupError
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -603,10 +600,10 @@ fun SettingsScreen(
                         Column(Modifier.weight(1f)) {
                             Text("Backup & restore", style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.SemiBold)
-                            val syncSubtitle = if (state.isSheetsConnected) {
-                                lastBackupTime?.let { "Last synced ${timeFormat.format(Date(it))}" } ?: "Connected"
+                            val syncSubtitle = if (state.hasOAuthCredential) {
+                                "Cloudflare D1 · Google sign-in"
                             } else {
-                                "Disconnected"
+                                "Connect Google account"
                             }
                             Text(
                                 text = syncSubtitle,
@@ -625,11 +622,15 @@ fun SettingsScreen(
                         Text(backupError, style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error)
                     }
+                    else if (!state.unifiedBackupMessage.isNullOrBlank()) {
+                        Text(state.unifiedBackupMessage.orEmpty(), style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary)
+                    }
 
                     if (isBackupExpanded) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(onClick = viewModel::backupAllNow,
-                            enabled = !isBackingUp && !isRestoring && state.isSheetsConnected,
+                            enabled = !isBackingUp && !isRestoring && state.hasOAuthCredential,
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                             shape = RoundedCornerShape(13.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -645,7 +646,7 @@ fun SettingsScreen(
                             Spacer(Modifier.width(6.dp))
                             Text(if (isBackingUp) "Backing up" else "Back Up", fontWeight = FontWeight.SemiBold)
                         }
-                        Button(onClick = viewModel::restoreSavedLocationsFromSheets,
+                        Button(onClick = viewModel::restoreFromCloudflare,
                             enabled = !isBackingUp && !isRestoring && state.isSheetsConnected,
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                             shape = RoundedCornerShape(13.dp),
@@ -723,7 +724,7 @@ fun SettingsScreen(
                                 Column(Modifier.weight(1f)) {
                                     Text("Last sync", style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(if (state.sheetsLastSyncTime > 0L) timeFormat.format(Date(state.sheetsLastSyncTime)) else "Never",
+                                    Text(if (state.sheetsLastSyncTime > 0L) SimpleDateFormat("MMM d, h:mm a", java.util.Locale.getDefault()).format(Date(state.sheetsLastSyncTime)) else "Never",
                                         style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                                 }
                                 Column(horizontalAlignment = Alignment.End) {

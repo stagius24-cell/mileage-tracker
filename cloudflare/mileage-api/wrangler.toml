@@ -1,0 +1,9 @@
+name = "business-mileage-api"
+main = "src/index.js"
+compatibility_date = "2026-11-28"
+workers_dev = true
+
+[[d1_databases]]
+binding = "DB"
+database_name = "business-mileage-tracker"
+database_id = "db9ba473-3383-4ca9-b13b-cbee9bc93f7d"
