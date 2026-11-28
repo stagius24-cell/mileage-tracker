@@ -231,14 +231,13 @@ class TripDebounceWorker @AssistedInject constructor(
                 reason = "trigger=$trigger via=${if (finalizedTrip != null) "recovery_finalized" else "recovery_discarded"}"
             )
 
+            if (finalizedTrip != null) MileageSyncWorker.enqueueOneTimeSync(context)
             if (finalizedTrip != null && !finalizeTripUseCase.isSmartRecognitionAttached()) {
                 if (finalizedTrip.classification == TripClassification.UNREVIEWED.value) {
                     notificationHelper.showTripDetectedNotification(
                         finalizedTrip.id,
                         finalizedTrip.totalDistanceMiles
                     )
-                } else {
-                    GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
                 }
             }
 

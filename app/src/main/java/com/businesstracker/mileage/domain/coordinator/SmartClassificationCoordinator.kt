@@ -12,7 +12,7 @@ import com.businesstracker.mileage.domain.model.TripClassification
 import com.businesstracker.mileage.domain.model.TripPurpose
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.service.NotificationHelper
-import com.businesstracker.mileage.worker.GoogleSheetsSyncWorker
+import com.businesstracker.mileage.worker.MileageSyncWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
@@ -158,7 +158,7 @@ class SmartClassificationCoordinator @Inject constructor(
                     )
 
                     if (updated) {
-                        GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
+                        MileageSyncWorker.enqueueOneTimeSync(context)
                         notificationHelper.showAutoClassifiedNotification(
                             tripId = trip.id,
                             distanceMiles = trip.totalDistanceMiles,

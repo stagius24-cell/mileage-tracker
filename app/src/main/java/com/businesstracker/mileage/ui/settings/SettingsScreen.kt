@@ -84,8 +84,6 @@ import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material.icons.filled.TableChart
-import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.text.AnnotatedString
 import android.widget.Toast
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -164,8 +162,6 @@ import com.businesstracker.mileage.ui.theme.AppShapes
 import com.businesstracker.mileage.ui.theme.AppSpacing
 import com.businesstracker.mileage.ui.theme.SpeedRed
 import com.businesstracker.mileage.ui.theme.SucculentPrimary
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -218,9 +214,6 @@ fun SettingsScreen(
     var isSavingBluetoothDevice by remember { mutableStateOf(false) }
     var bluetoothPickerError by remember { mutableStateOf<String?>(null) }
     var isScheduleExpanded by rememberSaveable { mutableStateOf(false) }
-    var showSpreadsheetIdEditor by rememberSaveable { mutableStateOf(false) }
-    var spreadsheetIdInput by rememberSaveable { mutableStateOf("") }
-    var spreadsheetIdError by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
@@ -572,8 +565,6 @@ fun SettingsScreen(
 
         item {
             var isBackupExpanded by rememberSaveable { mutableStateOf(false) }
-            var isAdvancedExpanded by rememberSaveable { mutableStateOf(false) }
-            val clipboardManager = LocalClipboardManager.current
             val isBackingUp = state.isUnifiedBackingUp
             val isRestoring = state.isLoadingRestorePreview || state.isApplyingRestore
             val backupError = state.unifiedBackupError
@@ -647,7 +638,7 @@ fun SettingsScreen(
                             Text(if (isBackingUp) "Backing up" else "Back Up", fontWeight = FontWeight.SemiBold)
                         }
                         Button(onClick = viewModel::restoreFromCloudflare,
-                            enabled = !isBackingUp && !isRestoring && state.isSheetsConnected,
+                            enabled = !isBackingUp && !isRestoring && state.hasOAuthCredential,
                             modifier = Modifier.weight(1f).heightIn(min = 48.dp),
                             shape = RoundedCornerShape(13.dp),
                             colors = ButtonDefaults.buttonColors(
@@ -664,79 +655,12 @@ fun SettingsScreen(
                     }
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
-                    Column(Modifier.fillMaxWidth().animateContentSize(animationSpec = tween(180))) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
-                                .clip(RoundedCornerShape(12.dp))
-                                .clickable { isAdvancedExpanded = !isAdvancedExpanded }
-                                .semantics {
-                                    contentDescription = if (isAdvancedExpanded) "Collapse Google Sheets settings" else "Expand Google Sheets settings"
-                                },
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            VehicleSettingsIcon(Icons.Outlined.TableChart)
-                            Spacer(Modifier.width(12.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text("Google Sheets settings", style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold)
-                                Text("Account, spreadsheet & sync", style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Icon(if (isAdvancedExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        if (isAdvancedExpanded) {
-                            Spacer(Modifier.height(12.dp))
-                            AccountRow(
-                                connected = state.hasOAuthCredential,
-                                email = state.connectedAccountEmail,
-                                onConnect = { googleSignInLauncher.launch(viewModel.getGoogleSignInClient().signInIntent) },
-                                onDisconnect = { showDisconnectConfirmation = true }
-                            )
-                            HorizontalDivider(Modifier.padding(vertical = 12.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .45f))
-                            Text("Spreadsheet ID", style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text(state.sheetsSpreadsheetId.ifBlank { "No spreadsheet ID set" },
-                                    modifier = Modifier.weight(1f), maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodyMedium)
-                                IconButton(onClick = {
-                                    spreadsheetIdInput = state.sheetsSpreadsheetId
-                                    spreadsheetIdError = false
-                                    showSpreadsheetIdEditor = true
-                                }, modifier = Modifier.size(48.dp)) {
-                                    Icon(Icons.Default.Edit, contentDescription = "Edit Spreadsheet ID",
-                                        modifier = Modifier.size(18.dp))
-                                }
-                                if (state.sheetsSpreadsheetId.isNotBlank()) IconButton(
-                                    onClick = {
-                                        clipboardManager.setText(AnnotatedString(state.sheetsSpreadsheetId))
-                                        Toast.makeText(context, "Spreadsheet ID copied", Toast.LENGTH_SHORT).show()
-                                    }, modifier = Modifier.size(48.dp)) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy Spreadsheet ID",
-                                        modifier = Modifier.size(18.dp))
-                                }
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Column(Modifier.weight(1f)) {
-                                    Text("Last sync", style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(if (state.sheetsLastSyncTime > 0L) SimpleDateFormat("MMM d, h:mm a", java.util.Locale.getDefault()).format(Date(state.sheetsLastSyncTime)) else "Never",
-                                        style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text("Pending", style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text("${state.pendingTripsCount} trips · ${state.savedLocationsPendingBackupCount} places",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = if (state.totalPendingCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                                }
-                            }
-                        }
-                    }
+                    AccountRow(
+                        connected = state.hasOAuthCredential,
+                        email = state.connectedAccountEmail,
+                        onConnect = { googleSignInLauncher.launch(viewModel.getGoogleSignInClient().signInIntent) },
+                        onDisconnect = { showDisconnectConfirmation = true }
+                    )
                 }
             }
         }
@@ -1133,74 +1057,10 @@ fun SettingsScreen(
         }
     }
 
-    if (showSpreadsheetIdEditor) {
-        val sheetFocusRequester = remember { FocusRequester() }
-        AppFloatingBottomSheet(
-            onDismissRequest = { showSpreadsheetIdEditor = false },
-            title = "Spreadsheet ID",
-            onClose = { showSpreadsheetIdEditor = false }
-        ) {
-            LaunchedEffect(Unit) { sheetFocusRequester.requestFocus() }
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .padding(bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
-            ) {
-                Text(
-                    text = "Paste the ID or the full Google Sheets link.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                OutlinedTextField(
-                    value = spreadsheetIdInput,
-                    onValueChange = { spreadsheetIdInput = it; spreadsheetIdError = false },
-                    label = { Text("Spreadsheet ID or link") },
-                    isError = spreadsheetIdError,
-                    supportingText = if (spreadsheetIdError) {
-                        { Text("Enter a valid Google Sheets ID or link", color = MaterialTheme.colorScheme.error) }
-                    } else null,
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 56.dp)
-                        .focusRequester(sheetFocusRequester),
-                    shape = RoundedCornerShape(12.dp)
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    AppSecondaryButton(
-                        text = "Cancel",
-                        onClick = { showSpreadsheetIdEditor = false },
-                        modifier = Modifier.weight(1f)
-                    )
-                    AppPrimaryButton(
-                        text = "Save",
-                        onClick = {
-                            val entered = spreadsheetIdInput.trim()
-                            val id = if (entered.startsWith("https://")) {
-                                Regex("^https://docs\\.google\\.com/spreadsheets/d/([A-Za-z0-9_-]+)")
-                                    .find(entered)?.groupValues?.get(1).orEmpty()
-                            } else entered
-                            if (id.matches(Regex("[A-Za-z0-9_-]+"))) {
-                                viewModel.setSheetsSpreadsheetId(id)
-                                showSpreadsheetIdEditor = false
-                            } else spreadsheetIdError = true
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
-    }
-
     if (showDisconnectConfirmation) {
         AppFloatingBottomSheet(
             onDismissRequest = { showDisconnectConfirmation = false },
-            title = "Disconnect Google Sheets?",
+            title = "Disconnect Google account?",
             onClose = { showDisconnectConfirmation = false }
         ) {
             Column(
@@ -1868,6 +1728,11 @@ fun SettingsScreen(
         )
         val recentUpdates = remember {
             listOf(
+                VersionEntry(
+                    version = "v1.0.255",
+                    summary = "Automatically back up completed trips to Cloudflare D1 and simplify backup settings.",
+                    date = "Nov 28, 2026"
+                ),
                 VersionEntry(
                     version = "v1.0.254",
                     summary = "Evenly space Trip Details route rows and use outline Edit icon.",

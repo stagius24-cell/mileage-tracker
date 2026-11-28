@@ -1540,13 +1540,11 @@ class LocationTrackingService : Service() {
                         reason = "distanceMeters=$totalMeters"
                     )
                     val finalizedTrip = tripFinalizationCoordinator.finalizeTrip(currentTripId, trackingMethod)
+                    if (finalizedTrip != null) MileageSyncWorker.enqueueOneTimeSync(applicationContext)
                     if (!tripFinalizationCoordinator.isSmartRecognitionAttached()) {
                         finalizedTrip?.let { trip ->
                             if (trip.classification == com.businesstracker.mileage.domain.model.TripClassification.UNREVIEWED.value) {
                                 notificationHelper.showTripDetectedNotification(trip.id, trip.totalDistanceMiles)
-                            } else {
-                                // Auto-classified trip (e.g. from Saved Location), sync immediately to Google Sheets
-                                MileageSyncWorker.enqueueOneTimeSync(applicationContext)
                             }
                         }
                     }
