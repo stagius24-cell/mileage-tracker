@@ -1869,6 +1869,11 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.253",
+                    summary = "Start the migration of full-detail mileage backup and restore to a dedicated Cloudflare D1 database using Google sign-in for identity.",
+                    date = "Nov 28, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.252",
                     summary = "Show realistic vehicle thumbnail in Active Drive Tracking card.",
                     date = "Nov 27, 2026"
