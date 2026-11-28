@@ -62,6 +62,7 @@ class MileageTrackerApp : Application(), Configuration.Provider {
         // Stop any previously scheduled automatic Sheets mileage uploads; manual legacy
         // Sheets tools remain available during the migration period.
         appScope.launch {
+            preferencesManager.migrateLegacyCloudflareAccessCredentials()
             val workManager = WorkManager.getInstance(applicationContext)
             workManager.cancelUniqueWork(com.businesstracker.mileage.worker.GoogleSheetsSyncWorker.UNIQUE_SHEETS_PERIODIC)
             workManager.cancelUniqueWork(com.businesstracker.mileage.worker.GoogleSheetsSyncWorker.UNIQUE_SHEETS_ONE_TIME)
