@@ -1966,6 +1966,11 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.262",
+                    summary = "Clear auto-generated location names (Start Location, End Location, etc.) when opening Saved Location editor.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.261",
                     summary = "Add explicit 48dp bottom margin to Add/Edit Saved Location sheet so Save location sits cleanly above the gesture bar.",
                     date = "Nov 27, 2026"

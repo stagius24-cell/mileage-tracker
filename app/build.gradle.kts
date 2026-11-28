@@ -14,8 +14,8 @@ android {
         applicationId = "com.businesstracker.mileage"
         minSdk = 26
         targetSdk = 35
-        versionCode = 261
-        versionName = "1.0.261"
+        versionCode = 262
+        versionName = "1.0.262"
         buildConfigField("String", "VERSION_UPDATE_NOTE", "\"Add multi-month reporting period picker, Monthly comparison line chart, and compact Trip Details layout.\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
