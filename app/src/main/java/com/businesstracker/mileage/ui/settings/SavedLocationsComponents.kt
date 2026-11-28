@@ -446,6 +446,7 @@ fun SavedLocationDialog(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .padding(bottom = 48.dp)
                     .heightIn(max = maxSheetHeight)
                     .offset { IntOffset(0, dragOffsetPx.roundToInt().coerceAtLeast(0)) }
                     .clickable(
