@@ -1114,11 +1114,11 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun backupAllNow() {
-        if (cloudflareD1BackupService == null) {
+        val backupService = cloudflareD1BackupService
+        if (backupService == null) {
             backupAllNowLegacySheets()
             return
         }
-        val backupService = cloudflareD1BackupService
         if (_isBackingUpAll.value || _isSyncing.value || _isBackingUpSavedLocations.value) return
         _isBackingUpAll.value = true
         _unifiedBackupMessage.value = null
