@@ -623,7 +623,7 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.error)
                     }
                     else if (!state.unifiedBackupMessage.isNullOrBlank()) {
-                        Text(state.unifiedBackupMessage, style = MaterialTheme.typography.bodySmall,
+                        Text(state.unifiedBackupMessage.orEmpty(), style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.primary)
                     }
 
@@ -724,7 +724,7 @@ fun SettingsScreen(
                                 Column(Modifier.weight(1f)) {
                                     Text("Last sync", style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Text(if (state.sheetsLastSyncTime > 0L) timeFormat.format(Date(state.sheetsLastSyncTime)) else "Never",
+                                    Text(if (state.sheetsLastSyncTime > 0L) SimpleDateFormat("MMM d, h:mm a", java.util.Locale.getDefault()).format(Date(state.sheetsLastSyncTime)) else "Never",
                                         style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium)
                                 }
                                 Column(horizontalAlignment = Alignment.End) {

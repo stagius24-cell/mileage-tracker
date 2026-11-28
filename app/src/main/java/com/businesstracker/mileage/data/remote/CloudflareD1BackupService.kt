@@ -25,13 +25,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 sealed interface CloudflareBackupResult {
-    data class Success(val trips: Int, val vehicles: Int, val savedLocations: Int) : CloudflareBackupResult()
-    data class Failure(val message: String, val retryable: Boolean) : CloudflareBackupResult()
+    data class Success(val trips: Int, val vehicles: Int, val savedLocations: Int) : CloudflareBackupResult
+    data class Failure(val message: String, val retryable: Boolean) : CloudflareBackupResult
 }
 
 sealed interface CloudflareRestoreResult {
-    data class Success(val trips: Int, val vehicles: Int, val savedLocations: Int) : CloudflareRestoreResult()
-    data class Failure(val message: String) : CloudflareRestoreResult()
+    data class Success(val trips: Int, val vehicles: Int, val savedLocations: Int) : CloudflareRestoreResult
+    data class Failure(val message: String) : CloudflareRestoreResult
 }
 
 /**
@@ -120,7 +120,7 @@ class CloudflareD1BackupService @Inject constructor(
                 }
                 val ack = gson.fromJson(responseText, JsonObject::class.java)
                     ?: return@withContext CloudflareBackupResult.Failure("Invalid Cloudflare response.", true)
-                if (chunk.isNotEmpty() && ack.getAsJsonArray("syncedTripIds")?.size() != chunk.size()) {
+                if (chunk.isNotEmpty() && ack.getAsJsonArray("syncedTripIds")?.size() != chunk.size) {
                     return@withContext CloudflareBackupResult.Failure(
                         "Cloudflare did not confirm every trip; retry is safe.", true
                     )
