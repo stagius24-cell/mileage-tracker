@@ -46,6 +46,7 @@ class CloudflareD1BackupService @Inject constructor(
     private val vehicleDao: VehicleDao,
     private val secureStorageManager: SecureStorageManager,
     private val googleAuthManager: GoogleAuthManager,
+    private val sheetsSyncService: GoogleSheetsSyncService,
     private val gson: Gson
 ) {
     private val client = OkHttpClient.Builder()
@@ -62,6 +63,17 @@ class CloudflareD1BackupService @Inject constructor(
                 "Connect your Google account before backing up to Cloudflare.", false
             )
         try {
+            var canCompleteLegacyImport = false
+            if (!preferencesManager.cfInitialMigrationComplete.first() &&
+                preferencesManager.isSheetsConnected.first()
+            ) {
+                // Import trips that exist only in the old sheet before the first D1 snapshot.
+                canCompleteLegacyImport = when (sheetsSyncService.restoreTripsFromSheets()) {
+                    is GoogleSheetsSyncService.TripRestoreResult.Success,
+                    is GoogleSheetsSyncService.TripRestoreResult.Empty -> true
+                    is GoogleSheetsSyncService.TripRestoreResult.Failed -> false
+                }
+            }
             val trips = tripRepository.getAllTrips().first()
             val vehicles = vehicleDao.getVehicles()
             val locations = savedLocationRepository.getAllSavedLocations().first()
@@ -109,6 +121,7 @@ class CloudflareD1BackupService @Inject constructor(
                     )
                 }
             }
+            if (canCompleteLegacyImport) preferencesManager.setCfInitialMigrationComplete(true)
             CloudflareBackupResult.Success(trips.size, vehicles.size, locations.size)
         } catch (e: IOException) {
             CloudflareBackupResult.Failure("Network error while backing up to Cloudflare: ${e.localizedMessage ?: "connection failed"}", true)
@@ -168,6 +181,7 @@ class CloudflareD1BackupService @Inject constructor(
                 if (vehicleDao.getVehicle(vehicle.id) == null) vehicleDao.insert(vehicle)
                 else vehicleDao.update(vehicle)
             }
+            preferencesManager.setCfInitialMigrationComplete(true)
             CloudflareRestoreResult.Success(restoredTrips.size, restoredVehicles.size, restoredLocations.size)
         } catch (e: IOException) {
             CloudflareRestoreResult.Failure("Network error while restoring from Cloudflare: ${e.localizedMessage ?: "connection failed"}")
