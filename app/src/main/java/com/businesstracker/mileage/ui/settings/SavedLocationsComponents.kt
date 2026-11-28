@@ -33,6 +33,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -97,6 +98,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -417,7 +419,7 @@ fun SavedLocationDialog(
         }
     }
 
-    val maxSheetHeight = (configuration.screenHeightDp * 0.90f).dp
+    val maxSheetHeight = (configuration.screenHeightDp * 0.85f).dp
     val dismissThresholdPx = with(density) { 80.dp.toPx() }
     var dragOffsetPx by remember { mutableFloatStateOf(0f) }
 
@@ -529,10 +531,10 @@ fun SavedLocationDialog(
                             .fillMaxWidth()
                             .verticalScroll(rememberScrollState())
                             .padding(horizontal = 16.dp)
-                            .padding(bottom = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                            .padding(bottom = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        // Location name
+                        // Location name (compact 44dp)
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
                                 text = "Location name",
@@ -540,34 +542,55 @@ fun SavedLocationDialog(
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            OutlinedTextField(
-                                value = nameValue,
-                                onValueChange = {
-                                    nameValue = it
-                                    formError = null
-                                },
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surface,
+                                border = BorderStroke(1.dp, mutedBorder),
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .onFocusChanged { focusState ->
-                                        if (focusState.isFocused && !hasSelectedNameOnFirstFocus && nameValue.text.isNotEmpty()) {
-                                            hasSelectedNameOnFirstFocus = true
-                                            nameValue = nameValue.copy(selection = TextRange(0, nameValue.text.length))
-                                        }
-                                    },
-                                placeholder = {
-                                    Text(
-                                        "Enter location name",
-                                        fontSize = 14.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    .height(44.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(horizontal = 12.dp),
+                                    contentAlignment = Alignment.CenterStart
+                                ) {
+                                    if (nameValue.text.isEmpty()) {
+                                        Text(
+                                            text = "Enter location name",
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    BasicTextField(
+                                        value = nameValue,
+                                        onValueChange = {
+                                            nameValue = it
+                                            formError = null
+                                        },
+                                        singleLine = true,
+                                        textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                            fontSize = 14.sp,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        ),
+                                        cursorBrush = SolidColor(SucculentPrimary),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .onFocusChanged { focusState ->
+                                                if (focusState.isFocused && !hasSelectedNameOnFirstFocus && nameValue.text.isNotEmpty()) {
+                                                    hasSelectedNameOnFirstFocus = true
+                                                    nameValue = nameValue.copy(selection = TextRange(0, nameValue.text.length))
+                                                }
+                                            }
                                     )
-                                },
-                                textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp)
-                            )
+                                }
+                            }
                         }
 
-                        // Combined searchable, editable Address + compact locate-fixed button
+                        // Combined searchable, editable Address + compact locate-fixed button (44dp)
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
                                 text = "Address",
@@ -580,36 +603,68 @@ fun SavedLocationDialog(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                OutlinedTextField(
-                                    value = address,
-                                    onValueChange = {
-                                        searchJob?.cancel()
-                                        isSearching = false
-                                        address = it
-                                        searchResults = emptyList()
-                                        searchError = null
-                                        formError = null
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    placeholder = {
-                                        Text(
-                                            "Search or enter address",
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                        )
-                                    },
-                                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                                    leadingIcon = {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = MaterialTheme.colorScheme.surface,
+                                    border = BorderStroke(1.dp, mutedBorder),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(start = 10.dp, end = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Icon(
                                             imageVector = Icons.Default.LocationOn,
                                             contentDescription = null,
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(18.dp)
                                         )
-                                    },
-                                    trailingIcon = {
+                                        Spacer(Modifier.width(8.dp))
+                                        Box(
+                                            modifier = Modifier.weight(1f),
+                                            contentAlignment = Alignment.CenterStart
+                                        ) {
+                                            if (address.isEmpty()) {
+                                                Text(
+                                                    text = "Search or enter address",
+                                                    fontSize = 14.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            BasicTextField(
+                                                value = address,
+                                                onValueChange = {
+                                                    searchJob?.cancel()
+                                                    isSearching = false
+                                                    address = it
+                                                    searchResults = emptyList()
+                                                    searchError = null
+                                                    formError = null
+                                                },
+                                                singleLine = true,
+                                                textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                                    fontSize = 14.sp,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                ),
+                                                cursorBrush = SolidColor(SucculentPrimary),
+                                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                                                keyboardActions = KeyboardActions(onSearch = { triggerAddressSearch() }),
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
                                         if (isSearching) {
-                                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                            CircularProgressIndicator(
+                                                modifier = Modifier
+                                                    .padding(horizontal = 8.dp)
+                                                    .size(16.dp),
+                                                strokeWidth = 2.dp
+                                            )
                                         } else {
                                             IconButton(
                                                 onClick = { triggerAddressSearch() },
@@ -628,12 +683,8 @@ fun SavedLocationDialog(
                                                 )
                                             }
                                         }
-                                    },
-                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                                    keyboardActions = KeyboardActions(onSearch = { triggerAddressSearch() }),
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(12.dp)
-                                )
+                                    }
+                                }
 
                                 Surface(
                                     onClick = {
@@ -666,7 +717,7 @@ fun SavedLocationDialog(
                                     color = MaterialTheme.colorScheme.surface,
                                     border = BorderStroke(1.dp, mutedBorder),
                                     modifier = Modifier
-                                        .size(48.dp)
+                                        .size(44.dp)
                                         .semantics {
                                             role = Role.Button
                                             contentDescription = "Use current GPS location"
@@ -811,24 +862,15 @@ fun SavedLocationDialog(
                                             color = if (isSelected) SucculentPrimary else mutedBorder.copy(alpha = 0.5f)
                                         )
                                     ) {
-                                        Column(
-                                            modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
-                                            horizontalAlignment = Alignment.CenterHorizontally,
-                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        Box(
+                                            modifier = Modifier.padding(vertical = 9.dp),
+                                            contentAlignment = Alignment.Center
                                         ) {
                                             Icon(
                                                 imageVector = getIconForLocation(key),
                                                 contentDescription = label,
                                                 tint = if (isSelected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                                 modifier = Modifier.size(20.dp)
-                                            )
-                                            Text(
-                                                text = label,
-                                                fontSize = 11.sp,
-                                                fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                                                color = if (isSelected) SucculentPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
                                             )
                                         }
                                     }
@@ -1008,7 +1050,7 @@ fun SavedLocationDialog(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
                     ) {
                         Button(
                             onClick = {
@@ -1046,7 +1088,7 @@ fun SavedLocationDialog(
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(48.dp)
+                                .height(44.dp)
                         ) {
                             if (isSaving) {
                                 CircularProgressIndicator(

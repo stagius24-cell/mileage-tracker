@@ -1966,6 +1966,11 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.258",
+                    summary = "Compact Add/Edit Saved Location inputs, icon-only tiles, and move Save location button up above navigation bar.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.257",
                     summary = "Refine Backup & restore section with sage status panel, compact Back up / Restore buttons, and streamlined Google account row.",
                     date = "Nov 27, 2026"
