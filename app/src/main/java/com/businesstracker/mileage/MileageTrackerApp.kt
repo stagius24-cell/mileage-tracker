@@ -4,6 +4,8 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.data.security.SecureStorageManager
+import androidx.work.WorkManager
 import com.businesstracker.mileage.domain.tracking.TrackingDiagnostics
 import com.businesstracker.mileage.receiver.BluetoothArmedDriveMonitor
 import com.businesstracker.mileage.service.NotificationHelper
@@ -27,6 +29,7 @@ class MileageTrackerApp : Application(), Configuration.Provider {
     @Inject lateinit var activityTransitionManager: ActivityTransitionManager
     @Inject lateinit var bluetoothArmedDriveMonitor: BluetoothArmedDriveMonitor
     @Inject lateinit var preferencesManager: TrackingPreferencesManager
+    @Inject lateinit var secureStorageManager: SecureStorageManager
 
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -55,12 +58,16 @@ class MileageTrackerApp : Application(), Configuration.Provider {
             }
         }
 
-        // Schedule periodic & one-time sync if Google Sheets is connected
+        // Mileage records are backed up to the dedicated Cloudflare D1 service.
+        // Stop any previously scheduled automatic Sheets mileage uploads; manual legacy
+        // Sheets tools remain available during the migration period.
         appScope.launch {
-            val isSheetsConn = preferencesManager.isSheetsConnected.first()
-            if (isSheetsConn) {
-                com.businesstracker.mileage.worker.GoogleSheetsSyncWorker.enqueuePeriodicSync(applicationContext)
-                com.businesstracker.mileage.worker.GoogleSheetsSyncWorker.enqueueOneTimeSync(applicationContext)
+            val workManager = WorkManager.getInstance(applicationContext)
+            workManager.cancelUniqueWork(com.businesstracker.mileage.worker.GoogleSheetsSyncWorker.UNIQUE_SHEETS_PERIODIC)
+            workManager.cancelUniqueWork(com.businesstracker.mileage.worker.GoogleSheetsSyncWorker.UNIQUE_SHEETS_ONE_TIME)
+            if (secureStorageManager.hasOAuthToken()) {
+                com.businesstracker.mileage.worker.MileageSyncWorker.enqueuePeriodicSync(applicationContext)
+                com.businesstracker.mileage.worker.MileageSyncWorker.enqueueOneTimeSync(applicationContext)
             }
         }
     }
