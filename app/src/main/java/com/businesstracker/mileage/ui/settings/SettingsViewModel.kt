@@ -10,6 +10,9 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.businesstracker.mileage.data.preferences.TrackingPreferencesManager
+import com.businesstracker.mileage.data.remote.CloudflareBackupResult
+import com.businesstracker.mileage.data.remote.CloudflareD1BackupService
+import com.businesstracker.mileage.data.remote.CloudflareRestoreResult
 import com.businesstracker.mileage.data.remote.CustomPurposesRestoreResult
 import com.businesstracker.mileage.data.remote.CustomPurposesSheetsService
 import com.businesstracker.mileage.data.remote.CustomPurposesSyncResult
@@ -27,6 +30,7 @@ import com.businesstracker.mileage.domain.model.SmartClassificationMode
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.transition.ActivityTransitionManager
 import com.businesstracker.mileage.worker.GoogleSheetsSyncWorker
+import com.businesstracker.mileage.worker.MileageSyncWorker
 import com.businesstracker.mileage.worker.SavedLocationBackupWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -194,6 +198,7 @@ class SettingsViewModel @Inject constructor(
     private val bluetoothArmedDriveMonitor: com.businesstracker.mileage.receiver.BluetoothArmedDriveMonitor,
     private val tripRepository: TripRepository,
     private val sheetsSyncService: GoogleSheetsSyncService,
+    private val cloudflareD1BackupService: CloudflareD1BackupService,
     private val savedLocationsSheetsService: SavedLocationsSheetsService,
     private val secureStorageManager: SecureStorageManager,
     private val googleAuthManager: com.businesstracker.mileage.data.security.GoogleAuthManager,
@@ -831,8 +836,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun triggerSyncNow() {
-        com.businesstracker.mileage.worker.MileageSyncWorker.enqueueOneTimeSync(context)
-        syncSheetsNow()
+        MileageSyncWorker.enqueueOneTimeSync(context)
     }
 
     // Saved Locations
@@ -946,89 +950,20 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun restoreSavedLocationsFromSheets() {
+    fun restoreFromCloudflare() {
         if (_isLoadingRestorePreview.value || _isApplyingRestore.value) return
         _isLoadingRestorePreview.value = true
-        _savedLocationsBackupMessage.value = null
+        _unifiedBackupMessage.value = null
+        _unifiedBackupError.value = null
         viewModelScope.launch {
             try {
-                val tripRestoreResult = sheetsSyncService.restoreTripsFromSheets()
-                val locResult = savedLocationsSheetsService.previewRestoreFromSheets()
-                val purpRestoreResult = activeCustomPurposesService.restoreCustomPurposes()
-
-                val tripsRestored = if (tripRestoreResult is GoogleSheetsSyncService.TripRestoreResult.Success) {
-                    tripRestoreResult.importedCount
-                } else 0
-                val tripsExisting = if (tripRestoreResult is GoogleSheetsSyncService.TripRestoreResult.Success) {
-                    tripRestoreResult.existingCount
-                } else 0
-
-                val purpRestored = if (purpRestoreResult is CustomPurposesRestoreResult.Success) {
-                    purpRestoreResult.addedCount
-                } else 0
-                val purpCloudTotal = if (purpRestoreResult is CustomPurposesRestoreResult.Success) {
-                    purpRestoreResult.totalCloudCount
-                } else 0
-
-                val tripSummary = when (tripRestoreResult) {
-                    is GoogleSheetsSyncService.TripRestoreResult.Success ->
-                        if (tripsRestored > 0) "Restored $tripsRestored trips from Sheet1 ($tripsExisting already present)."
-                        else "All $tripsExisting trips on Sheet1 are already up to date locally."
-                    is GoogleSheetsSyncService.TripRestoreResult.Empty -> "No trips found on Sheet1."
-                    is GoogleSheetsSyncService.TripRestoreResult.Failed -> "Trips restore: ${tripRestoreResult.message}"
-                }
-
-                val purpSummary = when (purpRestoreResult) {
-                    is CustomPurposesRestoreResult.Success ->
-                        if (purpRestored > 0) "Restored $purpRestored new custom purposes ($purpCloudTotal on sheet)."
-                        else "All $purpCloudTotal custom purposes are already up to date locally."
-                    is CustomPurposesRestoreResult.Empty -> "No custom purposes found on Google Sheets."
-                    is CustomPurposesRestoreResult.Failure -> "Purposes restore: ${purpRestoreResult.message}"
-                    is CustomPurposesRestoreResult.NotConfigured -> ""
-                }
-
-                when (locResult) {
-                    is RestorePreviewResult.Success -> {
-                        val defaultSelected = locResult.preview.candidates
-                            .filter { it.selectedByDefault }
-                            .map { it.cloudLocation.id }
-                            .toSet()
-                        _restorePreviewState.value = SavedLocationsRestorePreviewUi.Loaded(
-                            preview = locResult.preview,
-                            selectedIds = defaultSelected,
-                            approvedConflictIds = emptySet(),
-                            tripsRestoredCount = tripsRestored,
-                            purposesRestoredCount = purpRestored
-                        )
+                when (val result = cloudflareD1BackupService.restoreAll()) {
+                    is CloudflareRestoreResult.Success -> {
+                        _unifiedBackupMessage.value =
+                            "Restored ${result.trips} trips, ${result.vehicles} vehicles, and ${result.savedLocations} saved locations from Cloudflare D1."
                     }
-                    is RestorePreviewResult.EmptyCloudSheet -> {
-                        val combinedSummary = listOfNotNull(
-                            tripSummary.takeIf { it.isNotBlank() },
-                            purpSummary.takeIf { it.isNotBlank() },
-                            "No saved locations found on Google Sheets."
-                        ).joinToString("\n\n")
-                        _restorePreviewState.value = SavedLocationsRestorePreviewUi.Empty(
-                            localCount = locResult.localCount,
-                            message = combinedSummary
-                        )
-                    }
-                    is RestorePreviewResult.Error -> {
-                        if ((tripRestoreResult is GoogleSheetsSyncService.TripRestoreResult.Success && tripsRestored > 0) ||
-                            (purpRestoreResult is CustomPurposesRestoreResult.Success && purpRestored > 0)) {
-                            val combinedSummary = listOfNotNull(
-                                tripSummary.takeIf { it.isNotBlank() },
-                                purpSummary.takeIf { it.isNotBlank() },
-                                "Saved Locations: ${locResult.failure.toMessage()}"
-                            ).joinToString("\n\n")
-                            _restorePreviewState.value = SavedLocationsRestorePreviewUi.Empty(
-                                localCount = 0,
-                                message = combinedSummary
-                            )
-                        } else {
-                            _restorePreviewState.value = SavedLocationsRestorePreviewUi.Failure(
-                                message = locResult.failure.toMessage()
-                            )
-                        }
+                    is CloudflareRestoreResult.Failure -> {
+                        _unifiedBackupError.value = result.message
                     }
                 }
             } finally {
@@ -1101,55 +1036,14 @@ class SettingsViewModel @Inject constructor(
         _unifiedBackupError.value = null
         viewModelScope.launch {
             try {
-                // Ensure all historical classified trips are pending for Google Sheets sync
-                tripRepository.markAllClassifiedTripsPending()
-                // 1. Sync pending trips to Google Sheets
-                val tripResult = sheetsSyncService.syncPendingTrips()
-                // 2. Back up all Saved Locations (full snapshot)
-                val locResult = savedLocationsSheetsService.backupSavedLocations(fullSnapshot = true)
-                // 3. Back up all Custom Business Purposes
-                val purpResult = activeCustomPurposesService.backupCustomPurposes()
-
-                val tripSuccess = tripResult is SheetsSyncResult.Success
-                val locSuccess = locResult is SavedLocationsSyncResult.Success
-                val purpSuccess = purpResult is CustomPurposesSyncResult.Success
-
-                if (tripSuccess && locSuccess && purpSuccess) {
-                    _unifiedBackupMessage.value = "All data backed up"
-                    _unifiedBackupError.value = null
-                } else if (tripSuccess && locSuccess && !purpSuccess) {
-                    _unifiedBackupError.value = "Trips & Locations backed up, but Custom Purposes failed: ${purpResult.toMessage()}"
-                } else if (tripSuccess && !locSuccess) {
-                    val purpSuffix = if (!purpSuccess) " (and Custom Purposes failed: ${purpResult.toMessage()})" else ""
-                    _unifiedBackupError.value = "Trips up to date, but Saved Locations backup failed: ${locResult.toMessage()}$purpSuffix"
-                } else if (!tripSuccess && locSuccess) {
-                    val tripMsg = when (tripResult) {
-                        is SheetsSyncResult.PartialSuccess -> "Trips partially synced (${tripResult.successCount} succeeded, ${tripResult.failedCount} failed)"
-                        is SheetsSyncResult.NotConfigured -> "Google Sheets not configured"
-                        is SheetsSyncResult.TokenExpired -> tripResult.message
-                        is SheetsSyncResult.AccessDenied -> tripResult.message
-                        is SheetsSyncResult.NotFound -> tripResult.message
-                        is SheetsSyncResult.RateLimited -> tripResult.message
-                        is SheetsSyncResult.ServerError -> tripResult.message
-                        is SheetsSyncResult.HttpError -> tripResult.message
-                        is SheetsSyncResult.NetworkError -> tripResult.message
-                        is SheetsSyncResult.InvalidConfiguration -> tripResult.message
-                        is SheetsSyncResult.UnexpectedError -> tripResult.exception.localizedMessage ?: "Trips sync error"
-                        is SheetsSyncResult.Success -> ""
+                when (val result = cloudflareD1BackupService.backupAll()) {
+                    is CloudflareBackupResult.Success -> {
+                        _unifiedBackupMessage.value =
+                            "Backed up ${result.trips} trips, ${result.vehicles} vehicles, and ${result.savedLocations} saved locations to Cloudflare D1."
                     }
-                    val purpSuffix = if (!purpSuccess) " (and Custom Purposes failed: ${purpResult?.toMessage()})" else ""
-                    _unifiedBackupError.value = "Saved Locations backed up, but trips failed: $tripMsg$purpSuffix"
-                } else {
-                    val tripMsg = when (tripResult) {
-                        is SheetsSyncResult.NotConfigured -> "Google Sheets not configured"
-                        is SheetsSyncResult.TokenExpired -> tripResult.message
-                        is SheetsSyncResult.AccessDenied -> tripResult.message
-                        is SheetsSyncResult.NetworkError -> tripResult.message
-                        is SheetsSyncResult.UnexpectedError -> tripResult.exception.localizedMessage ?: "Sync error"
-                        else -> "Trips sync failed"
+                    is CloudflareBackupResult.Failure -> {
+                        _unifiedBackupError.value = result.message
                     }
-                    val purpSuffix = if (!purpSuccess) "; Custom Purposes: ${purpResult?.toMessage()}" else ""
-                    _unifiedBackupError.value = "Backup failed: $tripMsg; ${locResult.toMessage()}$purpSuffix"
                 }
             } finally {
                 _isBackingUpAll.value = false
