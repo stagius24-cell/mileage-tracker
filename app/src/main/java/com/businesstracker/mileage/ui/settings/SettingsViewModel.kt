@@ -29,7 +29,6 @@ import com.businesstracker.mileage.domain.model.AppThemeMode
 import com.businesstracker.mileage.domain.model.SmartClassificationMode
 import com.businesstracker.mileage.domain.repository.TripRepository
 import com.businesstracker.mileage.transition.ActivityTransitionManager
-import com.businesstracker.mileage.worker.GoogleSheetsSyncWorker
 import com.businesstracker.mileage.worker.MileageSyncWorker
 import com.businesstracker.mileage.worker.SavedLocationBackupWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -693,11 +692,9 @@ class SettingsViewModel @Inject constructor(
             val hasOAuth = secureStorageManager.hasOAuthToken()
             val isConn = (hasOAuth && trimmedId.isNotBlank()) || uiState.value.sheetsWebhookUrl.isNotBlank()
             preferencesManager.setSheetsConnected(isConn)
-            if (hasOAuth && trimmedId.isNotBlank()) {
+            if (hasOAuth) {
                 preferencesManager.setSheetsLastError(null)
-                GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
-                GoogleSheetsSyncWorker.enqueuePeriodicSync(context)
-                SavedLocationBackupWorker.enqueueOneTimeBackup(context)
+                MileageSyncWorker.enqueueOneTimeSync(context)
             }
         }
     }
@@ -717,12 +714,10 @@ class SettingsViewModel @Inject constructor(
             val id = uiState.value.sheetsSpreadsheetId
             val isConn = token.isNotBlank() && id.isNotBlank()
             preferencesManager.setSheetsConnected(isConn)
-            if (isConn) {
-                preferencesManager.setSheetsLastError(null)
-                GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
-                GoogleSheetsSyncWorker.enqueuePeriodicSync(context)
-                SavedLocationBackupWorker.enqueueOneTimeBackup(context)
+            if (token.isNotBlank()) {
+                MileageSyncWorker.enqueueOneTimeSync(context)
             }
+            if (isConn) preferencesManager.setSheetsLastError(null)
         }
     }
 
@@ -746,14 +741,7 @@ class SettingsViewModel @Inject constructor(
     fun handleGoogleSignInResult(data: android.content.Intent?) {
         viewModelScope.launch {
             val result = googleAuthManager.handleSignInResult(data)
-            if (result.isSuccess) {
-                val id = uiState.value.sheetsSpreadsheetId
-                if (id.isNotBlank()) {
-                    GoogleSheetsSyncWorker.enqueueOneTimeSync(context)
-                    GoogleSheetsSyncWorker.enqueuePeriodicSync(context)
-                    SavedLocationBackupWorker.enqueueOneTimeBackup(context)
-                }
-            }
+            if (result.isSuccess) MileageSyncWorker.enqueueOneTimeSync(context)
         }
     }
 
