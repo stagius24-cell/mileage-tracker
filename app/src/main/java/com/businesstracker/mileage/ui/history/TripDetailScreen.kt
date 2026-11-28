@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Route
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.DropdownMenu
@@ -389,12 +390,22 @@ fun TripDetailScreen(
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Row 1: Distance (left) | Current Classification (center) | Circular Vehicle Button (right)
+                    // Row 1: Distance + inline Classification chip (left) | Circular Vehicle Button (right)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val chipBg = when (trip.classification) {
+                            TripClassification.BUSINESS.value -> if (isDark) SucculentPrimary.copy(alpha = 0.16f) else Color(0xFFEDF5F0)
+                            TripClassification.PERSONAL.value -> if (isDark) Color(0xFF3B82F6).copy(alpha = 0.16f) else Color(0xFFEFF6FF)
+                            else -> if (isDark) Color(0xFFF59E0B).copy(alpha = 0.16f) else Color(0xFFFEF3C7)
+                        }
+                        val chipText = when (trip.classification) {
+                            TripClassification.BUSINESS.value -> emeraldAccent
+                            TripClassification.PERSONAL.value -> if (isDark) Color(0xFF93C5FD) else Color(0xFF2563EB)
+                            else -> if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
+                        }
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
                                 text = "Trip distance",
@@ -402,116 +413,104 @@ fun TripDetailScreen(
                                 color = mutedText
                             )
                             Row(
-                                verticalAlignment = Alignment.Bottom,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text(
-                                    text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
-                                    style = MaterialTheme.typography.headlineMedium.copy(
-                                        fontSize = 28.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontFeatureSettings = "tnum"
-                                    ),
-                                    color = primaryText
-                                )
-                                Text(
-                                    text = "mi",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = mutedText,
-                                    modifier = Modifier.padding(bottom = 4.dp)
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.Bottom,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = String.format(Locale.US, "%.1f", trip.totalDistanceMiles),
+                                        style = MaterialTheme.typography.headlineMedium.copy(
+                                            fontSize = 28.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontFeatureSettings = "tnum"
+                                        ),
+                                        color = primaryText
+                                    )
+                                    Text(
+                                        text = "mi",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = mutedText,
+                                        modifier = Modifier.padding(bottom = 4.dp)
+                                    )
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(7.dp),
+                                    color = chipBg,
+                                    modifier = Modifier.height(22.dp)
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.padding(horizontal = 9.dp)
+                                    ) {
+                                        Text(
+                                            text = classificationLabel,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = chipText
+                                        )
+                                    }
+                                }
                             }
                         }
 
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        // Circular Vehicle Button (44dp, ContentScale.Fit) with lower-right chevron overlay
+                        val vehicleDrawable = when {
+                            tripVehicleName.contains("Model 3", ignoreCase = true) -> R.drawable.vehicle_tesla_model_3
+                            tripVehicleName.contains("Model Y", ignoreCase = true) -> R.drawable.vehicle_tesla_model_y
+                            else -> null
+                        }
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .semantics { contentDescription = "Vehicle: $tripVehicleName" }
+                                .clickable { showVehiclePicker = true },
+                            contentAlignment = Alignment.Center
                         ) {
-                            // Single read-only status chip for current saved classification
-                            val chipBg = when (trip.classification) {
-                                TripClassification.BUSINESS.value -> if (isDark) SucculentPrimary.copy(alpha = 0.16f) else Color(0xFFEDF5F0)
-                                TripClassification.PERSONAL.value -> if (isDark) Color(0xFF3B82F6).copy(alpha = 0.16f) else Color(0xFFEFF6FF)
-                                else -> if (isDark) Color(0xFFF59E0B).copy(alpha = 0.16f) else Color(0xFFFEF3C7)
-                            }
-                            val chipText = when (trip.classification) {
-                                TripClassification.BUSINESS.value -> emeraldAccent
-                                TripClassification.PERSONAL.value -> if (isDark) Color(0xFF93C5FD) else Color(0xFF2563EB)
-                                else -> if (isDark) Color(0xFFFCD34D) else Color(0xFFB45309)
-                            }
                             Surface(
-                                shape = RoundedCornerShape(7.dp),
-                                color = chipBg,
-                                modifier = Modifier.height(22.dp)
+                                modifier = Modifier.size(44.dp),
+                                shape = CircleShape,
+                                color = if (vehicleDrawable != null) Color.White else if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF8FAFC),
+                                border = BorderStroke(1.dp, dividerColor)
                             ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier.padding(horizontal = 9.dp)
-                                ) {
-                                    Text(
-                                        text = classificationLabel,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = chipText
-                                    )
-                                }
-                            }
-
-                            // Circular Vehicle Button (44dp, ContentScale.Fit) with lower-right chevron overlay
-                            val vehicleDrawable = when {
-                                tripVehicleName.contains("Model 3", ignoreCase = true) -> R.drawable.vehicle_tesla_model_3
-                                tripVehicleName.contains("Model Y", ignoreCase = true) -> R.drawable.vehicle_tesla_model_y
-                                else -> null
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .semantics { contentDescription = "Vehicle: $tripVehicleName" }
-                                    .clickable { showVehiclePicker = true },
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Surface(
-                                    modifier = Modifier.size(44.dp),
-                                    shape = CircleShape,
-                                    color = if (vehicleDrawable != null) Color.White else if (isDark) MaterialTheme.colorScheme.surfaceVariant else Color(0xFFF8FAFC),
-                                    border = BorderStroke(1.dp, dividerColor)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        if (vehicleDrawable != null) {
-                                            Image(
-                                                painter = painterResource(id = vehicleDrawable),
-                                                contentDescription = null,
-                                                contentScale = ContentScale.Fit,
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .padding(2.dp)
-                                            )
-                                        } else {
-                                            Icon(
-                                                imageVector = Icons.Outlined.DirectionsCar,
-                                                contentDescription = null,
-                                                tint = primaryText,
-                                                modifier = Modifier.size(20.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                                Surface(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .size(16.dp),
-                                    shape = CircleShape,
-                                    color = cardBackground,
-                                    border = BorderStroke(1.dp, dividerColor)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.KeyboardArrowDown,
+                                Box(contentAlignment = Alignment.Center) {
+                                    if (vehicleDrawable != null) {
+                                        Image(
+                                            painter = painterResource(id = vehicleDrawable),
                                             contentDescription = null,
-                                            tint = mutedText,
-                                            modifier = Modifier.size(12.dp)
+                                            contentScale = ContentScale.Fit,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(2.dp)
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = Icons.Outlined.DirectionsCar,
+                                            contentDescription = null,
+                                            tint = primaryText,
+                                            modifier = Modifier.size(20.dp)
                                         )
                                     }
+                                }
+                            }
+                            Surface(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(16.dp),
+                                shape = CircleShape,
+                                color = cardBackground,
+                                border = BorderStroke(1.dp, dividerColor)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = mutedText,
+                                        modifier = Modifier.size(12.dp)
+                                    )
                                 }
                             }
                         }
@@ -769,39 +768,54 @@ fun TripDetailScreen(
                 } else null
             )
 
-            HorizontalDivider(color = dividerColor.copy(alpha = 0.7f))
+                }
+            }
 
-            // 5. Expandable Additional Trip Information
+            // Discreet centered "More details" link below the route card
             var isAdditionalInfoExpanded by remember(trip.id) { mutableStateOf(false) }
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { isAdditionalInfoExpanded = !isAdditionalInfoExpanded }
-                    .padding(vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(top = 2.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Info,
-                    contentDescription = null,
-                    tint = mutedText,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = "Additional trip information",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = primaryText,
-                    modifier = Modifier.weight(1f)
-                )
-                Icon(
-                    imageVector = if (isAdditionalInfoExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (isAdditionalInfoExpanded) "Collapse" else "Expand",
-                    tint = mutedText,
-                    modifier = Modifier.size(18.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { isAdditionalInfoExpanded = !isAdditionalInfoExpanded }
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null,
+                        tint = mutedText,
+                        modifier = Modifier.size(15.dp)
+                    )
+                    Text(
+                        text = if (isAdditionalInfoExpanded) "Less details" else "More details",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = mutedText
+                    )
+                    Icon(
+                        imageVector = if (isAdditionalInfoExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = if (isAdditionalInfoExpanded) "Collapse details" else "Expand details",
+                        tint = mutedText,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
             }
-                    AnimatedVisibility(visible = isAdditionalInfoExpanded) {
+
+            AnimatedVisibility(visible = isAdditionalInfoExpanded) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = cardBackground,
+                    border = BorderStroke(1.dp, dividerColor)
+                ) {
+                    Box(modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
                         TripStatusTab(
                             trip = trip,
                             durationMinutes = durationMinutes,

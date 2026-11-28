@@ -1868,8 +1868,14 @@ fun SettingsScreen(
         val recentUpdates = remember {
             listOf(
                 VersionEntry(
+                    version = "v1.0.253",
+                    summary = "Place Trip Details classification chip beside mileage and replace Additional trip information row with discreet More details link.",
+                    date = "Nov 27, 2026"
+                ),
+                VersionEntry(
                     version = "v1.0.252",
                     summary = "Show realistic vehicle thumbnail in Active Drive Tracking card.",
+                    commitHash = "62fd2b3",
                     date = "Nov 27, 2026"
                 ),
                 VersionEntry(
